@@ -211,3 +211,23 @@ test('a card that was undone says so instead of looking forgotten', () => {
 	assert.strictEqual(undoableTurn(key), undefined);
 	assert.strictEqual(wasUndone(key), true);
 });
+
+test('two turns running at once keep their own ledgers, and both snapshots stay servable', async () => {
+	const { TurnEditLedger } = await import('../src/chat-edits.ts');
+	const disk = new Map<string, string>([['/a/x.ts', 'a1\n'], ['/b/y.ts', 'b1\n']]);
+	const read = async (p: string) => disk.get(p);
+	const first = new TurnEditLedger();
+	const second = new TurnEditLedger();
+	first.snapshotBefore('/a/x.ts', read);
+	second.snapshotBefore('/b/y.ts', read);
+	await Promise.all([first.whenSettled(), second.whenSettled()]);
+	disk.set('/a/x.ts', 'a2\n');
+	disk.set('/b/y.ts', 'b2\nb3\n');
+	first.recordAfter('/a/x.ts', read);
+	second.recordAfter('/b/y.ts', read);
+	await Promise.all([first.whenSettled(), second.whenSettled()]);
+	assert.deepStrictEqual(first.edits().map(e => e.path), ['/a/x.ts']);
+	assert.deepStrictEqual(second.edits().map(e => e.path), ['/b/y.ts']);
+	assert.strictEqual(beforeContentFor('/a/x.ts'), 'a1\n');
+	assert.strictEqual(beforeContentFor('/b/y.ts'), 'b1\n');
+});

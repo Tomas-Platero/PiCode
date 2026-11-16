@@ -40,19 +40,15 @@ import { TODO_TOOL_NAME, TodoTracker, todoFromResult, type TodoBoard } from './a
 import { BackgroundJobTracker, backgroundJobRows, finishedJobRows, backgroundJobStartOf, gentleJobEndedBy, gentleJobOfToolResult, type BackgroundJobCompletion } from './background-jobs';
 import {
 	beforeUriPathOf,
-	clearTurnEdits,
+	TurnEditLedger,
 	forgetUndoableTurn,
 	isFileMutationTool,
 	mutatedPathOf,
 	PICODE_BEFORE_SCHEME,
-	recordAfter,
 	rememberTurnForUndo,
-	snapshotBefore,
-	turnFileEdits,
 	undoableTurn,
 	undoEdits,
 	wasUndone,
-	whenEditsSettled,
 } from './chat-edits';
 import {
 	BACKGROUND_TOOL,
@@ -526,13 +522,13 @@ function toLedgerPath(reported: string, sessionCwd: string): string {
  * Snapshots the file a mutating tool is about to write. Called from `tool_execution_start`,
  * where the "before" still exists on disk — by the time the result arrives, it does not.
  */
-function snapshotToolTarget(toolName: string, args: unknown, sessionCwd: string): void {
+function snapshotToolTarget(ledger: TurnEditLedger, toolName: string, args: unknown, sessionCwd: string): void {
 	if (!isFileMutationTool(toolName)) {
 		return;
 	}
 	const reported = mutatedPathOf(args);
 	if (reported !== undefined) {
-		snapshotBefore(toLedgerPath(reported, sessionCwd), readLedgerFile);
+		ledger.snapshotBefore(toLedgerPath(reported, sessionCwd), readLedgerFile);
 	}
 }
 
@@ -540,13 +536,13 @@ function snapshotToolTarget(toolName: string, args: unknown, sessionCwd: string)
  * Records the file a mutating tool has written, when the tool succeeded — a failed tool
  * did not change the file, and the card never says it did.
  */
-function recordToolResult(toolName: string, args: unknown, isError: boolean | undefined, sessionCwd: string): void {
+function recordToolResult(ledger: TurnEditLedger, toolName: string, args: unknown, isError: boolean | undefined, sessionCwd: string): void {
 	if (!isFileMutationTool(toolName) || isError === true) {
 		return;
 	}
 	const reported = mutatedPathOf(args);
 	if (reported !== undefined) {
-		recordAfter(toLedgerPath(reported, sessionCwd), readLedgerFile);
+		ledger.recordAfter(toLedgerPath(reported, sessionCwd), readLedgerFile);
 	}
 }
 
@@ -614,10 +610,10 @@ export async function undoTurnEditsCommand(key: unknown): Promise<boolean> {
  * the turn must not die with it — the card is a window onto the work, and losing the
  * window is reported, not fatal (the same posture as the other cards).
  */
-async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: string) => void): Promise<void> {
+async function pushTurnEditsCard(ledger: TurnEditLedger, stream: vscode.ChatResponseStream, log: (line: string) => void): Promise<void> {
 	try {
-		await whenEditsSettled();
-		const edits = turnFileEdits();
+		await ledger.whenSettled();
+		const edits = ledger.edits();
 		if (edits.length === 0 || typeof vscode.ChatResponseMultiDiffPart !== 'function') {
 			return;
 		}
@@ -654,10 +650,10 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
 /** How long a slash command that began no agent run is given before its turn is ended, in milliseconds. */
 const COMMAND_GRACE_MS = 1_500;
 
-export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string, images: readonly PiImage[] = []): Promise<string> {
-	// One ledger per turn: the card says what THIS answer changed, and the queue above
-	// (`turnChain`) guarantees two turns never overlap.
-	clearTurnEdits();
+export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string, images: readonly PiImage[] = [], turn: TurnHolder = turnContext): Promise<string> {
+	// One ledger per turn: the card says what THIS answer changed, even while another chat's turn
+	// is changing other files at the same time.
+	const ledger = new TurnEditLedger();
 	// The answer's own text, as it streamed.
 	let answer = '';
 	sessionsInChatTurn.add(session);
@@ -669,7 +665,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 		const subscription = session.subscribe(event => {
 			if (event.type === 'agent_start') {
 				agentRunBegan = true;
-				noteCommandShown();
+				noteCommandShown(turn);
 			}
 			if (event.type === 'message_update') {
 				const delta = event.assistantMessageEvent;
@@ -715,7 +711,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				}
 				// A file this tool is about to write is snapshotted now — this is where the "before"
 				// still exists on disk; by the tool's end it does not.
-				snapshotToolTarget(event.toolName, event.args, sessionCwd);
+				snapshotToolTarget(ledger, event.toolName, event.args, sessionCwd);
 				// Any other tool keeps a row of its own in the transcript: the pill's line is
 				// gone the moment it ends, and the answer should still say what was run.
 				if (!hasOwnToolCard(event.toolName, event.args) && typeof event.toolCallId === 'string') {
@@ -728,7 +724,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				toolCallArgs.delete(event.toolCallId);
 				// A file this tool has written lands in the ledger — when the tool succeeded;
 				// a failed tool did not change the file, and the card never says it did.
-				recordToolResult(event.toolName, endArgs, event.isError, sessionCwd);
+				recordToolResult(ledger, event.toolName, endArgs, event.isError, sessionCwd);
 				// The call's own row, now with what the tool answered.
 				const memory = memoryCard(event.toolName, endArgs);
 				if (memory !== undefined) {
@@ -785,7 +781,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 					const shown = displayedCustomText(message);
 					if (shown !== undefined) {
 						stream.markdown(`\n\n${shown}\n`);
-						noteCommandShown();
+						noteCommandShown(turn);
 					}
 				}
 				if (message?.role === 'assistant' && typeof message.errorMessage === 'string' && message.errorMessage.length > 0) {
@@ -806,7 +802,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// The change card comes last, once the ledger's reads have settled: the turn ends
 				// with it, so "what changed" is the last thing the transcript says — never a card
 				// missing the file whose read was still in flight.
-				void pushTurnEditsCard(stream, log).then(resolve, () => resolve());
+				void pushTurnEditsCard(ledger, stream, log).then(resolve, () => resolve());
 			}
 		});
 
@@ -877,9 +873,9 @@ interface TurnContext {
 }
 
 /** Something an extension command did reached the person. */
-function noteCommandShown(): void {
-	if (turnContext.current?.command !== undefined) {
-		turnContext.current.command.shown = true;
+function noteCommandShown(turn: TurnHolder): void {
+	if (turn.current?.command !== undefined) {
+		turn.current.command.shown = true;
 	}
 }
 
@@ -906,8 +902,13 @@ export function isLearnedTerminalOnly(command: PiCommand): boolean {
 	return learnedCommands?.has(command.name, command.source) === true;
 }
 
-/** The request in flight, which is where a pi tool call gets its stream and its level. */
-const turnContext: { current?: TurnContext } = {};
+/** Where a pi session finds the request in flight: each chat has its own, so two chats' turns never answer into each other. */
+export interface TurnHolder {
+	current?: TurnContext;
+}
+
+/** The holder of the conversations reopened from the Sessions list (one turn at a time there). */
+const turnContext: TurnHolder = {};
 
 /** The longest stretch of a command or path shown in the permission question. */
 const PERMISSION_DETAIL_LIMIT = 160;
@@ -958,16 +959,16 @@ function permissionQuestion(toolName: string, input: unknown): vscode.ChatQuesti
  * worse defect than one that misses some gates. What the owner does explicitly — Escape,
  * a skip, a Deny — is honored and blocks, never opened.
  */
-function permissionExtension(log: (line: string) => void): PiInlineExtension {
+function permissionExtension(log: (line: string) => void, turn: TurnHolder): PiInlineExtension {
 	return {
 		name: 'picode-permissions',
 		hidden: true,
 		factory: pi => {
 			void pi.on('tool_call', async event => {
-				if (!shouldAsk(turnContext.current?.level, event.toolName) || isReadOnlyShellCommand(event.toolName, event.input)) {
+				if (!shouldAsk(turn.current?.level, event.toolName) || isReadOnlyShellCommand(event.toolName, event.input)) {
 					return undefined;
 				}
-				const stream = turnContext.current?.stream;
+				const stream = turn.current?.stream;
 				if (stream === undefined || typeof stream.questionCarousel !== 'function') {
 					return undefined;
 				}
@@ -1086,18 +1087,19 @@ function styledExtensionNotice(message: string): string {
  * this bridge reads that as "not approved"/"cancelled", which is the safe direction.
  */
 async function askExtensionInChat(
+	turn: TurnHolder,
 	kind: 'text' | 'select',
 	title: string,
 	message: string | undefined,
 	options: readonly string[] | undefined,
 	log: (line: string) => void,
 ): Promise<unknown> {
-	const stream = turnContext.current?.stream;
+	const stream = turn.current?.stream;
 	if (stream === undefined || typeof stream.questionCarousel !== 'function') {
 		log(`extension asked a ${kind} question outside a chat turn: ${title}`);
 		return undefined;
 	}
-	noteCommandShown();
+	noteCommandShown(turn);
 	const question = new vscode.ChatQuestion(
 		EXTENSION_UI_QUESTION_ID,
 		kind === 'text' ? vscode.ChatQuestionType.Text : vscode.ChatQuestionType.SingleSelect,
@@ -1224,26 +1226,26 @@ function putInChatInput(text: string): void {
 /** The MCP notices this window already showed (`McpNotice.key`), so a new chat does not repeat one. */
 const shownMcpNotices = new Set<string>();
 
-function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
+function extensionUiContext(log: (line: string) => void, turn: TurnHolder): PiExtensionUiContext {
 	const noop = (): void => { /* the chat owns this surface */ };
 	return {
 		confirm: async (title: string, message: string): Promise<boolean> =>
-			(await askExtensionInChat('select', title, message, [ALLOW_ANSWER, DENY_ANSWER], log)) === ALLOW_ANSWER,
+			(await askExtensionInChat(turn, 'select', title, message, [ALLOW_ANSWER, DENY_ANSWER], log)) === ALLOW_ANSWER,
 		select: async (title: string, options: string[]): Promise<string | undefined> => {
-			const answer = await askExtensionInChat('select', title, undefined, options, log);
+			const answer = await askExtensionInChat(turn, 'select', title, undefined, options, log);
 			return typeof answer === 'string' ? answer : undefined;
 		},
 		input: async (title: string, placeholder?: string): Promise<string | undefined> => {
-			const answer = await askExtensionInChat('text', title, placeholder, undefined, log);
+			const answer = await askExtensionInChat(turn, 'text', title, placeholder, undefined, log);
 			return typeof answer === 'string' ? answer : undefined;
 		},
 		notify: (message: string, type?: 'info' | 'warning' | 'error'): void => {
-			const stream = turnContext.current?.stream;
+			const stream = turn.current?.stream;
 			if (stream === undefined || typeof message !== 'string' || message.trim() === '') {
 				return;
 			}
-			turnContext.current?.command?.notices.push(message);
-			noteCommandShown();
+			turn.current?.command?.notices.push(message);
+			noteCommandShown(turn);
 			// Expected by the product, and written in terms of files and variables: not shown. Nor is
 			// gentle-pi's start-up housekeeping report, which nobody asked about and nobody acts on.
 			if (isExpectedHelperNotice(message) || isStartupHousekeepingNotice(message)) {
@@ -1293,13 +1295,13 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 		// A terminal panel cannot be used here, but what it shows can: it is drawn once and its text
 		// goes into the answer (`/cache-stats`). The caller still sees the panel closed with no choice.
 		custom: async (factory?: unknown): Promise<undefined> => {
-			const stream = turnContext.current?.stream;
+			const stream = turn.current?.stream;
 			if (stream !== undefined) {
 				try {
 					const text = await panelSnapshot(factory);
 					if (text !== undefined) {
 						stream.markdown(`\n\`\`\`text\n${text}\n\`\`\`\n`);
-						noteCommandShown();
+						noteCommandShown(turn);
 					}
 				} catch (error) {
 					log(`an extension panel could not be drawn: ${error instanceof Error ? error.message : String(error)}`);
@@ -1382,7 +1384,7 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * interactive confirmation". `onError` is bound so a broken extension is said and the turn
  * still runs.
  */
-export async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
+export async function bindSessionExtensions(session: PiSession, log: (line: string) => void, turn: TurnHolder = turnContext): Promise<void> {
 	watchAgentWork(session);
 	if (typeof session.bindExtensions !== 'function') {
 		return;
@@ -1400,7 +1402,7 @@ export async function bindSessionExtensions(session: PiSession, log: (line: stri
 				// extension here observes. pi's published type is generic (`custom<T>(): Promise<T>`);
 				// the carousel has no typed widget results beyond that, so this assertion states the
 				// contract it actually honours, not pi's generic.
-				uiContext: extensionUiContext(log) as unknown as OfficialUiContext,
+				uiContext: extensionUiContext(log, turn) as unknown as OfficialUiContext,
 				mode: 'rpc',
 				onError: error => log(`extension error (${error.extensionPath ?? 'unknown'}) on ${error.event ?? 'unknown'}: ${error.error ?? 'no message'}`),
 			}),
@@ -1656,7 +1658,7 @@ const LATE_TURN_COMMAND = 'picode.chat.addLateTurn';
 export function currentTodos(): TodoBoard | undefined {
 	const board = agentTodos.current(Date.now());
 	const activity = agentActivity ?? lateTurnActivity;
-	return board === undefined ? undefined : { ...board, working: agentRunning || lateTurnsRunning > 0, ...(activity === undefined ? {} : { activity }) };
+	return board === undefined ? undefined : { ...board, working: runningTurns > 0 || lateTurnsRunning > 0, ...(activity === undefined ? {} : { activity }) };
 }
 
 const agentWorkChanged = new vscode.EventEmitter<void>();
@@ -1776,8 +1778,8 @@ function watchAgentWork(session: PiSession): void {
 
 /** The arguments of the tool calls that have started and not ended yet, by call id: pi's end event does not repeat them. */
 const toolCallArgs = new Map<string, unknown>();
-/** Whether a turn is in flight in this window. */
-let agentRunning = false;
+/** How many chats have a turn in flight (or waiting in their own queue) in this window. */
+let runningTurns = 0;
 
 /**
  * The turns waiting for their slot, each with the way out: dropping one makes its request
@@ -1797,7 +1799,7 @@ const notifyAgentStatus = (): void => {
 	agentWorkChanged.fire();
 	const status: AgentStatusPush = {
 		backgroundJobs: runningBackgroundJobs(),
-		running: agentRunning,
+		running: runningTurns > 0,
 		...(agentActivity === undefined ? {} : { activity: agentActivity }),
 		queued: waitingTurns.size,
 	};
@@ -1812,7 +1814,7 @@ const notifyAgentStatus = (): void => {
 export function currentAgentStatus(): AgentStatusPush {
 	return {
 		backgroundJobs: runningBackgroundJobs(),
-		running: agentRunning,
+		running: runningTurns > 0,
 		...(agentActivity === undefined ? {} : { activity: agentActivity }),
 		queued: waitingTurns.size,
 	};
@@ -1876,6 +1878,14 @@ interface ChatPi {
 	/** The disabled tools the session was built with, so a change rebuilds it. */
 	disabledToolsKey: string;
 	lastUsed: number;
+	/** The request in flight in this chat: where its permission questions and extension prompts go. */
+	readonly turn: TurnHolder;
+	/** This chat's request in flight, which is where its editor MCP calls get their invocation token. */
+	readonly toolToken: ToolTokenHolder;
+	/** This chat's turns, one at a time (other chats run theirs at the same time). */
+	turnChain: Promise<void>;
+	/** This chat's turns started and not finished, the running one included. */
+	turnsWaiting: number;
 	/** The worktree this chat works in, on its own branch (`session-worktree.ts`); the window's folder otherwise. */
 	worktree?: string;
 	/** The chat already said which branch it works on. */
@@ -1993,7 +2003,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		const key = (request as { sessionResource?: vscode.Uri }).sessionResource?.toString() ?? 'window';
 		let chat = chats.get(key);
 		if (chat === undefined) {
-			chat = { key, mcpSignature: '', disabledToolsKey: '', lastUsed: 0 };
+			chat = { key, mcpSignature: '', disabledToolsKey: '', lastUsed: 0, turn: {}, toolToken: {}, turnChain: Promise.resolve(), turnsWaiting: 0 };
 			const kept = context.workspaceState.get<Record<string, string>>(WORKTREES_KEY)?.[key];
 			if (kept !== undefined) {
 				chat.worktree = kept;
@@ -2070,36 +2080,29 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		}
 	};
 
-	/**
-	 * The turns of this window, one at a time, and how many are waiting for their slot.
+	/*
+	 * Turns run per chat: two chats answer at the same time (each in its own pi session, often on its
+	 * own branch), while the messages of ONE chat still take turns. Each chat has its own permission
+	 * holder (`chat.turn`), MCP invocation token (`chat.toolToken`) and change ledger (one per turn,
+	 * in `runTurn`), so a question never lands in another chat's answer.
 	 *
-	 * Each chat has its own pi session (see `chats` above), but their turns still take turns: the
-	 * permission gate answers into the stream of the turn in flight (`turnContext`) and an editor MCP
-	 * call takes that turn's invocation token (`toolToken`), and both are the window's. Two turns at
-	 * once would ask the owner's questions in the wrong chat.
-	 *
-	 * Queued **here**, not through pi's `streamingBehavior`: `followUp` would hand the second message
-	 * to pi to run after the current turn, and the event that ends a turn (`agent_settled`) would then
-	 * fire for the *first* one while the second request was still waiting for its answer — the second
-	 * tab would stream nothing and end early, which is worse than the error. Waiting one's turn keeps
-	 * the turn and its ending paired, and the second tab's own stream shows its own answer.
+	 * Within a chat the queue is **here**, not pi's `streamingBehavior`: `followUp` would hand the
+	 * second message to pi to run after the current turn, and the event that ends a turn
+	 * (`agent_settled`) would then fire for the *first* one while the second request was still
+	 * waiting for its answer. Waiting one's turn keeps the turn and its ending paired.
 	 */
-	let turnChain: Promise<void> = Promise.resolve();
-	let turnsWaiting = 0;
 
 	/** What the editor offers pi right now (its MCP servers' tools and the browser's), as a signature to compare. */
 	const currentEditorToolsSignature = () => toolSetSignature(editorTools(vscode.lm.tools as readonly EditorToolInfo[], { mcp: mcpEnabled() }));
 	/** Whether the owner wants pi to have the editor's MCP tools at all (`picode.mcp.enabled`). */
 	const mcpEnabled = () => readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).mcpEnabled;
-	/** The chat request in flight, which is where an MCP call gets its invocation token. */
-	const toolToken: ToolTokenHolder = {};
 
 const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
 		const chat = chatFor(request);
-		toolToken.current = request.toolInvocationToken;
+		chat.toolToken.current = request.toolInvocationToken;
 		// The four level names the host has shipped; see `permissions.ts`. The setting covers a
 		// request that arrives without a level.
-		turnContext.current = {
+		chat.turn.current = {
 				stream,
 				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
 		};
@@ -2177,7 +2180,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					...(agentDir === undefined ? {} : { agentDir }),
 					...settingsForFolder(loaded.sdk, cwd, agentDir),
 					resourceLoaderOptions: {
-						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log, chat.turn), usageHeadersExtension(), chatModelExtension()],
 						// PiCode's own skills (`skills/`), next to the profile's; `out/` is one level down.
 						additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
 					},
@@ -2235,7 +2238,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// because a server added a minute ago has to be there on the next message.
 					// The owner's earlier conversations ride along, read only (see `past-conversations.ts`).
 					customTools: [
-						...piToolsFromEditor(toolToken, { mcp: mcpEnabled() }),
+						...piToolsFromEditor(chat.toolToken, { mcp: mcpEnabled() }),
 						...asPiCustomTools(windowPastConversationTools(agentDir, () => chat.sessionManager?.getSessionFile())),
 					],
 					...(disabledTools.length === 0 ? {} : { excludeTools: [...disabledTools] }),
@@ -2244,7 +2247,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// The session exists and its extensions are loaded; this is what starts them. Called
 				// before the first turn, because `session_start` is where they do their startup work.
 				watchLateTurns(chat.session, chat.key, deps.log);
-				await bindSessionExtensions(chat.session, deps.log);
+				await bindSessionExtensions(chat.session, deps.log, chat.turn);
 				chat.sessionFolder = cwd;
 				chat.sessionScopeKey = scopeKey;
 				chat.sessionAgentDir = agentDir;
@@ -2295,23 +2298,23 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			}
 
 			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references, settings.contextMode) : undefined;
-			// One turn at a time in this window: the next one waits for the turn in flight to end, so
-			// a second chat session cannot prompt an agent that is still answering. See `turnChain`.
-			const previousTurn = turnChain;
+			// One turn at a time in THIS chat: its next message waits for its answer in flight to end.
+			// Other chats are not held: they run their own turns at the same time.
+			const previousTurn = chat.turnChain;
 			let releaseTurn!: () => void;
-			turnChain = new Promise<void>(resolve => { releaseTurn = resolve; });
-			turnsWaiting++;
+			chat.turnChain = new Promise<void>(resolve => { releaseTurn = resolve; });
+			chat.turnsWaiting++;
 			// The way out while waiting: dropping the request makes it return at once, without
 			// waiting for the running turn to end first — that is what "Cancel queued" means.
 			let dropWaiting!: () => void;
 			const droppedWhileWaiting = new Promise<void>(resolve => { dropWaiting = resolve; });
 			const waitingTurn: WaitingTurn = { drop: dropWaiting };
 			waitingTurns.add(waitingTurn);
-			agentRunning = true;
+			runningTurns++;
 			notifyAgentStatus();
 			try {
-				if (turnsWaiting > 1) {
-					stream.progress(vscode.l10n.t('PiCode is finishing the turn already running in this window…'));
+				if (chat.turnsWaiting > 1) {
+					stream.progress(vscode.l10n.t('PiCode is finishing the answer already running in this chat…'));
 				}
 				await Promise.race([previousTurn.catch(() => undefined), droppedWhileWaiting]);
 				if (token.isCancellationRequested) {
@@ -2333,8 +2336,8 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				const watched = slash !== undefined && route?.kind === 'pi' && slashContextOf(chat.session).extensionCommands.has(slash.name)
 					? { notices: [], shown: false }
 					: undefined;
-				if (turnContext.current !== undefined) {
-					turnContext.current.command = watched;
+				if (chat.turn.current !== undefined) {
+					chat.turn.current.command = watched;
 				}
 				// Pasted or attached images travel as images, whole or not at all: a cut-off one would make the
 				// provider refuse every later turn of the conversation.
@@ -2355,16 +2358,18 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 `);
 					}
 				}
-				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd, attached.images);
+				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd, attached.images, chat.turn);
 				if (watched !== undefined && slash !== undefined && !token.isCancellationRequested
 					&& await judgeCommandRun(chat.session, slash.name, slash.args, watched, stream)) {
 					sessionChangedEmitter.fire();
 				}
 			} finally {
 				waitingTurns.delete(waitingTurn);
-				turnsWaiting--;
-				agentRunning = false;
-				agentActivity = undefined;
+				chat.turnsWaiting--;
+				runningTurns--;
+				if (runningTurns === 0) {
+					agentActivity = undefined;
+				}
 				notifyAgentStatus();
 				releaseTurn();
 			}

@@ -7,6 +7,7 @@ import { settingsForFolder } from './folder-trust';
 import * as os from 'node:os';
 import {
 	bindSessionExtensions,
+	type TurnHolder,
 	loadSdk,
 	pinAgentDir,
 	runTurn,
@@ -80,7 +81,7 @@ interface ResumedSession {
 const resumed = new Map<string, ResumedSession>();
 
 /** The turn in flight on a resumed session, which is where its permission gate reads. */
-const resumeTurnContext: { current?: { stream: vscode.ChatResponseStream; level: string | undefined } } = {};
+const resumeTurnContext: TurnHolder = {};
 
 /**
  * The permission gate of a resumed session — the same contract as the live chat's
@@ -177,7 +178,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 		],
 		...(settings.disabledTools.length === 0 ? {} : { excludeTools: [...settings.disabledTools] }),
 	});
-	await bindSessionExtensions(created.session, deps.log);
+	await bindSessionExtensions(created.session, deps.log, resumeTurnContext);
 	const entry: ResumedSession = {
 		session: created.session,
 		sdk: loaded.sdk,
@@ -235,7 +236,7 @@ export function piResumeRequestHandler(file: string, deps: AgentDeps): vscode.Ch
 				if (token.isCancellationRequested) {
 					return {};
 				}
-				await runTurn(resumedSession.session, framed, response, token, settings.showReasoning, deps.log, resumedSession.cwd);
+				await runTurn(resumedSession.session, framed, response, token, settings.showReasoning, deps.log, resumedSession.cwd, [], resumeTurnContext);
 			} finally {
 				release();
 			}
