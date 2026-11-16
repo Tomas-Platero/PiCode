@@ -11,13 +11,19 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { adoptWorktreeInNextChat } from './agent';
+import * as fs from 'node:fs';
+import { bindChatToWorktree, worktreeOfChat } from './agent';
+import { worktreeOfSession } from './session-git';
 import { resolveProjectScope } from './runtime';
 import { resolveSessionCwd } from './session-cwd';
 import { isPicodeWorktree, listBranches, listWorktrees, openWorktree, removeWorktree, repoRootOf, type OpenWorktreeResult } from './session-worktree';
 
 export const NEW_SESSION_ON_BRANCH_COMMAND = 'picode.session.newOnBranch';
 export const REMOVE_BRANCH_COPY_COMMAND = 'picode.session.removeBranchCopy';
+/** The editor's side: opens a new chat and binds it to the worktree (`picodeAgentSessionsView.ts`). */
+const OPEN_CHAT_ON_WORKTREE_COMMAND = 'picode.agent.newChatOnWorktree';
+/** Called back by the editor with the new chat's id. */
+const BIND_WORKTREE_COMMAND = 'picode.session.bindWorktree';
 
 async function windowRepoRoot(): Promise<string | undefined> {
 	const scope = resolveProjectScope();
@@ -91,10 +97,12 @@ async function newSessionOnBranch(): Promise<void> {
 		return;
 	}
 	// The project's own branch needs no copy: the new chat simply works in the project folder.
-	if (path.resolve(result.path) !== path.resolve(root)) {
-		adoptWorktreeInNextChat(result.path, branch!.trim());
+	if (path.resolve(result.path) === path.resolve(root)) {
+		await vscode.commands.executeCommand('workbench.action.chat.newChat');
+		return;
 	}
-	await vscode.commands.executeCommand('workbench.action.chat.newChat');
+	// The editor opens the new chat and hands its id back to `picode.session.bindWorktree`.
+	await vscode.commands.executeCommand(OPEN_CHAT_ON_WORKTREE_COMMAND, result.path, branch!.trim());
 }
 
 interface CopyPick extends vscode.QuickPickItem {
@@ -140,9 +148,22 @@ async function removeBranchCopy(): Promise<void> {
 	}
 }
 
+/**
+ * The worktree of a chat, by the resource the editor knows it by: a live chat's own, or for a
+ * conversation reopened from the list (`pi:/<id>`) the one it ran in. Undefined when it works in
+ * the project folder, or its worktree is gone.
+ */
+export function worktreeOfChatKey(key: string): string | undefined {
+	const live = worktreeOfChat(key);
+	const folder = live ?? (key.startsWith('pi:') ? worktreeOfSession(key.split('/').pop() ?? '') : undefined);
+	return folder !== undefined && isPicodeWorktree(folder) && fs.existsSync(folder) ? folder : undefined;
+}
+
 export function registerSessionBranchCommands(): vscode.Disposable {
 	return vscode.Disposable.from(
 		vscode.commands.registerCommand(NEW_SESSION_ON_BRANCH_COMMAND, newSessionOnBranch),
 		vscode.commands.registerCommand(REMOVE_BRANCH_COPY_COMMAND, removeBranchCopy),
+		vscode.commands.registerCommand(BIND_WORKTREE_COMMAND, (key: unknown, folder: unknown, branch: unknown) =>
+			typeof key === 'string' && typeof folder === 'string' && typeof branch === 'string' && isPicodeWorktree(folder) && bindChatToWorktree(key, folder, branch)),
 	);
 }

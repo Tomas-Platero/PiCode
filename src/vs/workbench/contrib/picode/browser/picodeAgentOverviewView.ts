@@ -266,8 +266,9 @@ export class PicodeAgentOverview extends Disposable {
 		this._register(this.scmService.onDidRemoveRepository(() => this.paint()));
 		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => {
 			this.paint();
-			// Another chat in front: its context, not the previous one's.
+			// Another chat in front: its context and its branch, not the previous one's.
 			void this.read('context', () => this.readContext());
+			void this.read('worktree', () => this.readWorktree());
 		}));
 		// A section hidden, shown, folded or unfolded, here or in the other Status of the window.
 		this._register(onDidChangePicodeStatusSections(() => this.paint()));
@@ -309,9 +310,7 @@ export class PicodeAgentOverview extends Disposable {
 		if (!isStatusSectionHidden(this.storageService, 'context')) {
 			void this.read('context', () => this.readContext());
 		}
-		void this.read('worktree', async () => {
-			knownWorktree = await this.commandService.executeCommand<typeof knownWorktree>('picode.git.activeWorktree') ?? undefined;
-		});
+		void this.read('worktree', () => this.readWorktree());
 		// Only counted where it is drawn: with no changed file the column shows no lines at all.
 		if (knownWorktree === undefined && this.changedFiles() > 0 && (this.diffStale || Date.now() - this.diffReadAt > DIFF_SAFETY_MS)) {
 			void this.read('diff', async () => {
@@ -610,6 +609,12 @@ export class PicodeAgentOverview extends Disposable {
 	/** The chat the person last looked at, as the connector keys its conversations. */
 	private focusedChatKey(): string | undefined {
 		return this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString();
+	}
+
+	/** The branch copy of the chat in front, if it works in one (a session on its own branch). */
+	private async readWorktree(): Promise<void> {
+		knownWorktree = await this.commandService.executeCommand<typeof knownWorktree>('picode.git.activeWorktree', this.focusedChatKey()) ?? undefined;
+		this.publish();
 	}
 
 	private async readContext(): Promise<void> {

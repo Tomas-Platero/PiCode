@@ -89,7 +89,7 @@ import { locateNpmCli } from './npm-run';
 import { diffStat, DIFF_STAT_COMMAND } from './diff-stat';
 import { recordTiming, timed, timingReport } from './perf-timings';
 import { modelPricing, type PiModelCost } from './model-info';
-import { activeWorktreeFolder } from './session-worktree';
+import { worktreeOfChatKey } from './session-branch-commands';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -1127,8 +1127,9 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// The `+N −M` under Changes in the Agent layout's status column, for the folder the editor asks about.
 	disposables.push(vscode.commands.registerCommand(DIFF_STAT_COMMAND, (folder: unknown) => typeof folder === 'string' ? timed('status: lines changed', () => diffStat(folder)) : undefined));
 	// The active chat's own branch copy, when it has one: Status shows its branch and changes instead of the window's.
-	disposables.push(vscode.commands.registerCommand('picode.git.activeWorktree', async () => {
-		const folder = activeWorktreeFolder();
+	// The chat is the one the person is looking at (its resource, from the editor), so switching sessions switches the branch.
+	disposables.push(vscode.commands.registerCommand('picode.git.activeWorktree', async (chatKey: unknown) => {
+		const folder = typeof chatKey === 'string' ? worktreeOfChatKey(chatKey) : undefined;
 		if (folder === undefined) {
 			return undefined;
 		}

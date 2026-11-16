@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { withContext } from './context';
 import { currentBranch, noteTurnBranch } from './session-git';
+import { writeNamedTranscript } from './session-transcript';
 import { setActiveChatFolder } from './session-worktree';
 import { contextBlockFor } from './editor-context';
 import { imagesOf, type PiImage } from './chat-images';
@@ -1896,14 +1897,25 @@ interface ChatPi {
 	worktreeAnnounced?: boolean;
 }
 
-/** A worktree the next new chat adopts: set by "New Session on a Branch…" just before it opens one. */
-let pendingWorktree: { readonly path: string; readonly branch: string; readonly at: number } | undefined;
-/** How long a pending worktree waits for its chat before it is dropped. */
-const PENDING_WORKTREE_MS = 5 * 60_000;
+/** Set by the participant: binds a chat to a worktree, and reads a chat's worktree. */
+let chatWorktrees: { bind(key: string, folder: string, branch: string): void; of(key: string): string | undefined } | undefined;
 
-/** The next chat that starts works in `folder`, on `branch`. */
-export function adoptWorktreeInNextChat(folder: string, branch: string): void {
-	pendingWorktree = { path: folder, branch, at: Date.now() };
+/**
+ * The chat `key` (a new one, just opened by "New Session on a Branch…") works in `folder` on
+ * `branch`. Its transcript is written at once, named after the branch, so the session is in the list
+ * before its first message.
+ */
+export function bindChatToWorktree(key: string, folder: string, branch: string): boolean {
+	if (chatWorktrees === undefined) {
+		return false;
+	}
+	chatWorktrees.bind(key, folder, branch);
+	return true;
+}
+
+/** The worktree a live chat works in, if it has one. */
+export function worktreeOfChat(key: string): string | undefined {
+	return chatWorktrees?.of(key);
 }
 
 
@@ -2000,6 +2012,34 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			void context.workspaceState.update(TRANSCRIPTS_KEY, { ...known, [key]: file });
 		}
 	};
+	chatWorktrees = {
+		bind: (key, folder, branch) => {
+			let chat = chats.get(key);
+			if (chat === undefined) {
+				chat = { key, mcpSignature: '', disabledToolsKey: '', lastUsed: Date.now(), turn: {}, toolToken: {}, turnChain: Promise.resolve(), turnsWaiting: 0 };
+				chats.set(key, chat);
+			}
+			chat.worktree = folder;
+			chat.worktreeAnnounced = false;
+			rememberWorktree(key, folder);
+			// The transcript now, under the window's project like every conversation, named after the
+			// branch: the first message opens it and the first prompt names the row.
+			const agentDir = chatAgentDir(deps.distributionRoot);
+			if (agentDir === undefined || transcriptOf(key) !== undefined) {
+				return;
+			}
+			const scope = resolveProjectScope();
+			const picked = resolveSessionCwd(scope.folders, os.homedir());
+			try {
+				const written = writeNamedTranscript(path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(picked.cwd)), folder, branch);
+				rememberTranscript(key, written.file);
+				noteTurnBranch(written.id, folder);
+			} catch (error) {
+				deps.log(`the transcript of a session on ${branch} could not be written: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		},
+		of: key => chats.get(key)?.worktree ?? context.workspaceState.get<Record<string, string>>(WORKTREES_KEY)?.[key],
+	};
 	/** The chat a request belongs to, made on its first message. */
 	const chatFor = (request: vscode.ChatRequest): ChatPi => {
 		// SAFETY: `sessionResource` is the proposed chatParticipantPrivate field this manifest enables;
@@ -2012,13 +2052,6 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			if (kept !== undefined) {
 				chat.worktree = kept;
 				chat.worktreeAnnounced = true;
-			} else if (pendingWorktree !== undefined && transcriptOf(key) === undefined && Date.now() - pendingWorktree.at < PENDING_WORKTREE_MS) {
-				// The chat "New Session on a Branch…" just opened.
-				chat.worktree = pendingWorktree.path;
-				rememberWorktree(key, pendingWorktree.path);
-			}
-			if (pendingWorktree !== undefined && transcriptOf(key) === undefined) {
-				pendingWorktree = undefined;
 			}
 			chats.set(key, chat);
 		}

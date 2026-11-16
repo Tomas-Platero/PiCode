@@ -9,7 +9,8 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { MenuWorkbenchToolBar } from '../../../../platform/actions/browser/toolbar.js';
 import { MenuId } from '../../../../platform/actions/common/actions.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IChatWidgetService } from '../../chat/browser/chat.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
@@ -230,3 +231,20 @@ Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
 	// Only the Agent layout has a sessions column; the Editor layout keeps the list inside the chat.
 	when: ContextKeyExpr.equals(`config.${PICODE_LAYOUT_SETTING}`, 'agent'),
 }], container);
+
+/**
+ * "New Session on a Branch…", the editor's half: open a new chat and tell the connector which chat it
+ * is, so that chat (and only it) works in the branch's worktree and is listed under the branch at once.
+ */
+CommandsRegistry.registerCommand('picode.agent.newChatOnWorktree', async (accessor, folder: unknown, branch: unknown) => {
+	const commandService = accessor.get(ICommandService);
+	const chatWidgetService = accessor.get(IChatWidgetService);
+	if (typeof folder !== 'string' || typeof branch !== 'string') {
+		return;
+	}
+	await commandService.executeCommand(ACTION_ID_NEW_CHAT);
+	const resource = chatWidgetService.lastFocusedWidget?.viewModel?.sessionResource;
+	if (resource) {
+		await commandService.executeCommand('picode.session.bindWorktree', resource.toString(), folder, branch);
+	}
+});

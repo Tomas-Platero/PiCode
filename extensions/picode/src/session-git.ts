@@ -207,6 +207,13 @@ export function noteTurnBranch(sessionId: string, cwd: string): void {
 	}, () => undefined);
 }
 
+/** The worktree a conversation ran in, from its records; undefined when it ran in the project folder. */
+export function worktreeOfSession(sessionId: string): string | undefined {
+	const profileDir = profileOfRecords?.();
+	const record = profileDir === undefined ? undefined : readSessionGitStore(profileDir)[sessionId];
+	return record?.worktree ? record.cwd : undefined;
+}
+
 let cached: { mtime: number; store: SessionGitStore } | undefined;
 
 export function readSessionGitStore(profileDir: string): SessionGitStore {
