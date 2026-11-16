@@ -59,6 +59,8 @@ export interface IMenuOptions {
 	expandDirection?: IMenuDirection;
 	useEventAsContext?: boolean;
 	submenuIds?: Set<string>;
+	/** PiCode: draw each item's icon (its `class`) before its label. Menus have none by default. */
+	showIcons?: boolean;
 }
 
 export interface IMenuStyles {
@@ -420,6 +422,7 @@ export class Menu extends ActionBar {
 				enableMnemonics: options.enableMnemonics,
 				useEventAsContext: options.useEventAsContext,
 				keybinding: keybindingLabel,
+				...(options.showIcons ? { icon: true } : {}),
 			};
 
 			const menuActionViewItem = new BaseMenuActionViewItem(options.context, action, menuItemOptions, this.menuStyles);

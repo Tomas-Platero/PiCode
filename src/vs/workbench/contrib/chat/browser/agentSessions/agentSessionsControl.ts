@@ -736,6 +736,7 @@ export class AgentSessionsControl extends Disposable implements IAgentSessionsCo
 			getAnchor: () => anchor,
 			getActionsContext: () => marshalledContext,
 			getMenuClassName: () => 'picode-session-menu',
+			showMenuIcons: true,
 		});
 
 		menu.dispose();
