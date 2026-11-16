@@ -1864,3 +1864,32 @@ usuario; la App da lectura de issues y solo en los repos que el usuario elija al
 **Adenda 12 (2026-11-09) — conectar Jira ya no depende del enlace del navegador.** *"no conecta jira"*, *"Sí, arréglalo"*. La vuelta de Atlassian al editor iba por `picode://`: Edge no lo abría al pulsar *Open PiCode* (causa sin averiguar; el mismo enlace lanzado desde Windows sí funciona) y además otra copia de PiCode podía quedarse con el enlace. Ahora el servidor abre un intento para la cuenta, y el editor pregunta cada 2,5 s cómo va, como ya hacía GitHub. **El riesgo nuevo:** si el código se entrega a quien tenga el `state`, alguien podría abrir un intento con su cuenta, mandar el enlace de aprobación a otra persona y recibir el Jira de esa persona. Por eso la página de vuelta enseña a qué cuenta de PiCode se conectará, con la dirección entera y solo si está verificada (una dirección tapada se confunde con otra parecida), y pide confirmar (sin scripts y sin poder meterla en un marco), y el servidor canjea el código en ese momento: nunca se guarda ni llega al editor. **Alternativa descartada:** guardar el código y que lo recogiera el editor, sin confirmación, porque deja abierto ese robo. **Coste:** un clic más. El `state` se guarda solo como hash; los intentos caducan a los 10 minutos y `expireAt` queda listo para una regla TTL de Firestore que borre los abandonados. Las versiones publicadas siguen funcionando con su página y `connect/token`, hasta que se puedan retirar; los `state` del servidor empiezan por `att-`, así que su código nunca sale por `picode://`, ni siquiera con el intento caducado.
 
 **Adenda 11 (2026-11-08) — los tokens de GitHub y Jira pasan al servidor.** *"protégelo anti hacks"*, *"Sí, en el servidor"*. El editor llamaba directo a GitHub y Jira con un token guardado en el equipo, así que cualquier comprobación de Pro se podía quitar parcheando el código. Ahora el servidor guarda los tokens cifrados y hace cada llamada, comprobando el plan cada vez y solo para las llamadas de una lista cerrada. **Alternativa descartada por el dueño:** dejarlos en el equipo, sin credenciales ajenas que custodiar, a costa de que parchear la app permitiera ver las propias issues. **Coste:** responsabilidad sobre credenciales de terceros, más tráfico de servidor y ninguna lectura sin conexión. Se quitan las rutas que devolvían tokens: ninguna release publicada las usaba.
+
+## ADR-043 — Sesiones con su rama: una copia del proyecto por rama y turnos a la vez
+
+> *"En la vista agéntica me gustaría ver en las sesiones como haces aquí, ver si se han creado ramas y tal"* — 2026-11-16
+>
+> *"Quiero poder actuar como multiagente. Osea, quiero poder usar una sesión en una rama y otro en otra rama"* → *"A la vez"* — 2026-11-16
+
+**Qué se decide.**
+- **La rama de cada conversación se guarda al terminar cada turno**, en `session-git.json` dentro del perfil (`extensions/picode/src/session-git.ts`). pi guarda la carpeta de la conversación pero no la rama, y leer la rama actual de la carpeta mentiría en todas las filas antiguas.
+  - La fila de la columna de sesiones de *Agent* lleva la rama como insignia, solo cuando no es la principal del repositorio (`origin/HEAD`; sin él, `main` y `master`) o cuando la sesión tiene copia propia.
+  - Al pasar el ratón sale una tarjeta con las ramas por las que pasó y, con GitHub conectado (Pro), los PRs de la rama actual. El servidor admite para eso una llamada más, de solo lectura: `GET /repos/{o}/{r}/pulls`.
+- **Una sesión en su propia rama trabaja en una copia del proyecto**, un *worktree* de git (`session-worktree.ts`) que vive al lado del repositorio, en `<padre>/.picode-worktrees/<repo>/<rama>`, nunca dentro. Así las herramientas y búsquedas del proyecto no lo ven.
+  - Se abre con *New Session on a Branch…*, desde la paleta o la fila *Session on a branch* de la columna.
+  - Una rama que ya está en alguna copia (también la del propio proyecto) reutiliza esa copia, porque git no deja tener la misma rama en dos sitios.
+  - El chat recuerda su copia entre arranques (`picode.chatWorktrees`), y una conversación reabierta desde la lista sigue en su copia mientras exista.
+  - La conversación se archiva bajo el proyecto de la ventana, no bajo la copia, para que siga saliendo en la lista.
+  - *Estado* enseña la rama y los cambios de la copia del chat activo.
+  - *Remove a Branch Copy…* quita una copia solo si no tiene nada sin commit. La rama y sus commits se quedan.
+- **Los chats responden a la vez.** Cada chat tiene su propio contexto de permisos, su token de herramientas del editor y su cola, y cada turno su propio registro de cambios (`TurnEditLedger`). Los mensajes de un mismo chat siguen yendo uno detrás de otro. Sustituye a la regla «los turnos van de uno en uno» del ADR-033, adenda 1.
+
+**Alternativas descartadas.**
+- **Una ventana por rama:** era lo más barato, pero pierde la vista única de todas las sesiones.
+- **Cambiar de rama la carpeta del proyecto:** dos sesiones a la vez se pisarían los ficheros.
+- **Copias dentro del repositorio:** las verían el buscador, git y las herramientas del proyecto.
+
+**Consecuencias.**
+- **Para los PRs**, la GitHub App necesita el permiso *Pull requests: Read-only* y el servidor nuevo desplegado. Sin eso la tarjeta no enseña PRs, y la rama sale igual.
+- **El panel *Changes* de una copia no tiene botón *Review*:** el control de código del editor enseña la carpeta de la ventana.
+- **El estado del indicador de trabajo es uno para la ventana**, con la última acción de cualquier chat.
