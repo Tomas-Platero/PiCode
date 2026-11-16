@@ -8,7 +8,7 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
 export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser';
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'usageAlerts',
+			since: '2.2.9',
+			plan: 'free',
+			icon: Codicon.bell,
+			title: localize('picodeWhatsNew.usageAlerts.title', "Alerts for your plan's limits"),
+			summary: localize('picodeWhatsNew.usageAlerts.summary', "Set alerts on each model in Usage limits, like alarms on a phone: PiCode tells you when a window passes the percentage you chose."),
+			points: [
+				localize('picodeWhatsNew.usageAlerts.point1', "Add as many as you want to each model, each with its own percentage."),
+				localize('picodeWhatsNew.usageAlerts.point2', "A mark on the bars shows where each alert will go off; switch one off without removing it."),
+				localize('picodeWhatsNew.usageAlerts.point3', "Each alert goes off once per window, and also as a system notification when PiCode is in the background."),
+			],
+			preview: 'usageAlerts',
+			action: 'showUsageLimits',
+		},
 		{
 			id: 'browser',
 			since: '2.2.8',
