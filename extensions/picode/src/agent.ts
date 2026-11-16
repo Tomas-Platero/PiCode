@@ -5,7 +5,8 @@
 
 import * as vscode from 'vscode';
 import { withContext } from './context';
-import { noteTurnBranch } from './session-git';
+import { currentBranch, noteTurnBranch } from './session-git';
+import { setActiveChatFolder } from './session-worktree';
 import { contextBlockFor } from './editor-context';
 import { imagesOf, type PiImage } from './chat-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
@@ -1875,7 +1876,22 @@ interface ChatPi {
 	/** The disabled tools the session was built with, so a change rebuilds it. */
 	disabledToolsKey: string;
 	lastUsed: number;
+	/** The worktree this chat works in, on its own branch (`session-worktree.ts`); the window's folder otherwise. */
+	worktree?: string;
+	/** The chat already said which branch it works on. */
+	worktreeAnnounced?: boolean;
 }
+
+/** A worktree the next new chat adopts: set by "New Session on a Branch…" just before it opens one. */
+let pendingWorktree: { readonly path: string; readonly branch: string; readonly at: number } | undefined;
+/** How long a pending worktree waits for its chat before it is dropped. */
+const PENDING_WORKTREE_MS = 5 * 60_000;
+
+/** The next chat that starts works in `folder`, on `branch`. */
+export function adoptWorktreeInNextChat(folder: string, branch: string): void {
+	pendingWorktree = { path: folder, branch, at: Date.now() };
+}
+
 
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
 	learnedCommands = new LearnedCommands(context.globalState, commandFingerprint);
@@ -1953,6 +1969,14 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	/** Which transcript each chat writes, so a chat the editor restores goes on where it was. */
 	const TRANSCRIPTS_KEY = 'picode.chatTranscripts';
 	const transcriptOf = (key: string): string | undefined => context.workspaceState.get<Record<string, string>>(TRANSCRIPTS_KEY)?.[key];
+	/** Which worktree each chat works in, so a chat the editor restores stays on its branch. */
+	const WORKTREES_KEY = 'picode.chatWorktrees';
+	const rememberWorktree = (key: string, folder: string): void => {
+		const known = context.workspaceState.get<Record<string, string>>(WORKTREES_KEY) ?? {};
+		if (known[key] !== folder) {
+			void context.workspaceState.update(WORKTREES_KEY, { ...known, [key]: folder });
+		}
+	};
 	const rememberTranscript = (key: string, file: string | undefined): void => {
 		if (file === undefined) {
 			return;
@@ -1970,6 +1994,18 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		let chat = chats.get(key);
 		if (chat === undefined) {
 			chat = { key, mcpSignature: '', disabledToolsKey: '', lastUsed: 0 };
+			const kept = context.workspaceState.get<Record<string, string>>(WORKTREES_KEY)?.[key];
+			if (kept !== undefined) {
+				chat.worktree = kept;
+				chat.worktreeAnnounced = true;
+			} else if (pendingWorktree !== undefined && transcriptOf(key) === undefined && Date.now() - pendingWorktree.at < PENDING_WORKTREE_MS) {
+				// The chat "New Session on a Branch…" just opened.
+				chat.worktree = pendingWorktree.path;
+				rememberWorktree(key, pendingWorktree.path);
+			}
+			if (pendingWorktree !== undefined && transcriptOf(key) === undefined) {
+				pendingWorktree = undefined;
+			}
 			chats.set(key, chat);
 		}
 		chat.lastUsed = Date.now();
@@ -2089,7 +2125,9 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		for (const missing of picked.missing) {
 			deps.log(`the workspace folder "${missing}" does not exist on disk — pi runs in "${picked.cwd}" instead`);
 		}
-		const cwd = picked.cwd;
+		// A chat on its own branch works in its worktree, while that worktree is there.
+		const cwd = chat.worktree !== undefined && fs.existsSync(chat.worktree) ? chat.worktree : picked.cwd;
+		setActiveChatFolder(cwd);
 		const config = vscode.workspace.getConfiguration('picode');
 		const settings = readPiChatSettings(key => config.get(key));
 
@@ -2172,7 +2210,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// could only ever replay the CLI's older transcripts. Filing under the project
 					// slug puts the chat's sessions where pi's own live, and the listing — and the
 					// click that replays one — sees them.
-					const sessionDir = agentDir === undefined ? undefined : path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(cwd));
+					const sessionDir = agentDir === undefined ? undefined : path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(picked.cwd));
 					// A chat the editor restored after a reload goes on in its own transcript, when it is
 					// still where this scope files them; anything else starts a new one.
 					const known = chat.sessionManager === undefined ? transcriptOf(chat.key) : undefined;
@@ -2307,6 +2345,15 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					stream.markdown(`${vscode.l10n.t('Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.', attached.skipped.join(', '))}
 
 `);
+				}
+				if (chat.worktree === cwd && !chat.worktreeAnnounced) {
+					chat.worktreeAnnounced = true;
+					const branch = await currentBranch(cwd);
+					if (branch !== undefined) {
+						stream.markdown(`${vscode.l10n.t('🌿 This session works on branch **{0}**, in its own copy of the project.', branch)}
+
+`);
+					}
 				}
 				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd, attached.images);
 				if (watched !== undefined && slash !== undefined && !token.isCancellationRequested

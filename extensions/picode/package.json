@@ -142,6 +142,17 @@
 				"icon": "$(folder-opened)"
 			},
 			{
+				"command": "picode.session.newOnBranch",
+				"title": "%command.session.newOnBranch%",
+				"category": "PiCode",
+				"icon": "$(git-branch)"
+			},
+			{
+				"command": "picode.session.removeBranchCopy",
+				"title": "%command.session.removeBranchCopy%",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.compareModels",
 				"title": "%command.compareModels%",
 				"category": "PiCode",

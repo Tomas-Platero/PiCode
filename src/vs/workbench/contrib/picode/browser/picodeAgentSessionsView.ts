@@ -88,6 +88,8 @@ class PicodeAgentSessionsView extends ViewPane {
 			this._register(addDisposableListener(button, EventType.CLICK, () => void run()));
 		};
 		row(Codicon.add, localize('picode.sessions.new', "New session"), createNewChat);
+		// A session that works on its own branch, in its own copy of the project (the connector's `session-branch-commands.ts`).
+		row(Codicon.gitBranch, localize('picode.sessions.newOnBranch', "Session on a branch"), () => this.commandService.executeCommand('picode.session.newOnBranch'));
 		row(PICODE_AGENT_SEARCH_ICON, localize('picode.sessions.search', "Search"), () => this.commandService.executeCommand(PICODE_AGENT_SEARCH_COMMAND_ID));
 		row(PICODE_CUSTOMIZATION_ICON, localize('picode.sessions.customization', "Customization"), () => this.commandService.executeCommand(PICODE_CUSTOMIZATION_COMMAND_ID));
 

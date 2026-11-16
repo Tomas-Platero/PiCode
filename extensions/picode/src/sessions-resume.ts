@@ -24,7 +24,9 @@ import { readPiChatSettings } from './piConfig';
 import { chatAgentDir, internalProfileDir, piRuntimeRoot, resolveProjectScope } from './runtime';
 import { resolveSessionCwd } from './session-cwd';
 import { lostFolderOf } from './session-folder';
-import { piProjectSlug } from './sessions-provider';
+import { piProjectSlug, sessionHeader } from './sessions-provider';
+import { isPicodeWorktree } from './session-worktree';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
@@ -66,6 +68,8 @@ interface ResumedSession {
 	/** The pieces the session was built against: a change rebuilds, exactly as the live chat does. */
 	readonly agentDir: string | undefined;
 	readonly scopeKey: string;
+	/** Where the conversation runs: its own branch copy when it had one, the window's folder otherwise. */
+	readonly cwd: string;
 	/** The MCP tool holder this session's tools read; set per turn, never shared with the live chat. */
 	readonly toolToken: ToolTokenHolder;
 	/** One turn at a time on this transcript, for the same reason the live chat queues. */
@@ -118,12 +122,24 @@ function resumePermissionExtension(log: (line: string) => void): PiInlineExtensi
 	};
 }
 
+/** The branch copy a conversation ran in, when it is a PiCode worktree that is still there. */
+function worktreeOfTranscript(file: string): string | undefined {
+	try {
+		const firstLine = fs.readFileSync(file, 'utf8').split(/\r?\n/, 1)[0];
+		const cwd = sessionHeader(firstLine)?.['cwd'];
+		return typeof cwd === 'string' && isPicodeWorktree(cwd) && fs.existsSync(cwd) ? cwd : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** The session of one transcript, built once and rebuilt when what it binds to moved. */
 async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedSession> {
 	const scope = resolveProjectScope();
 	const picked = resolveSessionCwd(scope.folders, os.homedir());
+	const cwd = worktreeOfTranscript(file) ?? picked.cwd;
 	const agentDir = chatAgentDir(deps.distributionRoot);
-	const scopeKey = `${scope.mode}\u0000${picked.cwd}\u0000${scope.folders.join('\u0000')}\u0000${scope.area?.slug ?? ''}`;
+	const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}\u0000${scope.area?.slug ?? ''}`;
 	const existing = resumed.get(file);
 	if (existing !== undefined && existing.scopeKey === scopeKey && existing.agentDir === agentDir) {
 		return existing;
@@ -139,9 +155,9 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 	pinAgentDir(agentDir);
 	const toolToken: ToolTokenHolder = {};
 	const services = await loaded.sdk.createAgentSessionServices({
-		cwd: picked.cwd,
+		cwd,
 		...(agentDir === undefined ? {} : { agentDir }),
-		...settingsForFolder(loaded.sdk, picked.cwd, agentDir),
+		...settingsForFolder(loaded.sdk, cwd, agentDir),
 		resourceLoaderOptions: {
 			extensionFactories: [...loaded.builtins, resumePermissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
 			additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
@@ -150,7 +166,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 	// The transcript carries its own model and thinking level in its header; pi restores them
 	// (and reports a fallback when the saved model is gone). The editor's MCP servers ride along
 	// as custom tools, exactly as the live chat gives them.
-	const sessionManager = loaded.sdk.SessionManager.open(file, undefined, picked.cwd);
+	const sessionManager = loaded.sdk.SessionManager.open(file, undefined, cwd);
 	const settings = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key));
 	const created = await loaded.sdk.createAgentSessionFromServices({
 		services,
@@ -169,6 +185,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 		sessionManager,
 		agentDir,
 		scopeKey,
+		cwd,
 		toolToken,
 		chain: Promise.resolve(),
 	};
@@ -218,7 +235,7 @@ export function piResumeRequestHandler(file: string, deps: AgentDeps): vscode.Ch
 				if (token.isCancellationRequested) {
 					return {};
 				}
-				await runTurn(resumedSession.session, framed, response, token, settings.showReasoning, deps.log, picked.cwd);
+				await runTurn(resumedSession.session, framed, response, token, settings.showReasoning, deps.log, resumedSession.cwd);
 			} finally {
 				release();
 			}

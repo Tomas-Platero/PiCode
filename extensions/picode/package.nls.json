@@ -5,6 +5,8 @@
 	"command.backupSessions": "Back up pi sessions to the cloud",
 	"command.cancelQueuedTurns": "Cancel Queued Turns",
 	"command.compareModels": "Compare Models",
+	"command.session.newOnBranch": "New Session on a Branch…",
+	"command.session.removeBranchCopy": "Remove a Branch Copy…",
 	"command.connectProvider": "Connect a subscription",
 	"command.importExternalSessions": "Import pi sessions from the external pi",
 	"command.memory.check": "Check memory",

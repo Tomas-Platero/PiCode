@@ -15,6 +15,7 @@
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isPicodeWorktree } from './session-worktree';
 
 export interface SessionGitRecord {
 	readonly cwd: string;
@@ -192,12 +193,12 @@ export function setSessionGitProfile(profileDir: () => string): void {
 }
 
 /** After a turn: note the branch of the folder the turn ran in. Fire-and-forget, never throws. */
-export function noteTurnBranch(sessionId: string, cwd: string, worktree?: boolean): void {
+export function noteTurnBranch(sessionId: string, cwd: string): void {
 	const profileDir = profileOfRecords?.();
 	if (profileDir === undefined) {
 		return;
 	}
-	void recordSessionBranch(profileDir, sessionId, cwd, worktree).then(changed => {
+	void recordSessionBranch(profileDir, sessionId, cwd, isPicodeWorktree(cwd) || undefined).then(changed => {
 		if (changed) {
 			for (const listener of listeners) {
 				listener();

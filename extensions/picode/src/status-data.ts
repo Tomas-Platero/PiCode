@@ -22,6 +22,7 @@ import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
 import type { VoiceStatus } from './voice-controller';
 import { firstNanProvider, getCachedNanUsage, type CachedNanUsage, matchedNanProvider, NAN_PROVIDER_ID, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
 import { ANTHROPIC_PROVIDER, CODEX_PROVIDER, codexSignIn, getCachedCodexUsage, newestUsage, usageFromResponses, type ProviderUsage } from './subscription-usage';
+import { activeWorktreeFolder } from './session-worktree';
 
 /**
  * The data behind PiCode's status surface.
@@ -233,7 +234,7 @@ function sumNumstat(output: string): { insertions: number; deletions: number } {
 }
 
 /** The project's branch, pending files and diff totals, or `undefined` for each fact git cannot give. */
-async function readGit(folder: string | undefined): Promise<{ branch?: string; changes?: number; insertions?: number; deletions?: number }> {
+export async function readGit(folder: string | undefined): Promise<{ branch?: string; changes?: number; insertions?: number; deletions?: number }> {
 	if (folder === undefined) {
 		return {};
 	}
@@ -507,7 +508,8 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 				...(await readGit(folder)),
 			})))
 		: undefined;
-	const gitInfo = projects === undefined ? await readGit(scope.cwd) : {};
+	// A chat on its own branch shows that branch and its changes (`session-worktree.ts`).
+	const gitInfo = projects === undefined ? await readGit(activeWorktreeFolder() ?? scope.cwd) : {};
 
 	return {
 		runtime,
