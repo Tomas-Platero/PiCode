@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.2.8-experimental",
+			"notes": "### ✨ New\n\n- **pi checks your pages on its own.** pi can now use the editor's built-in browser: open a page, read it, click, type and take screenshots, and the screenshots reach the model as images. After changing anything a browser shows, it starts your project if needed, opens the page, tries what it changed and fixes what is off before telling you it is done. Ask it to look at or debug any page, `localhost` included. It follows the editor's own browser setting, not the MCP switch.\n- **What's New has a page for it**, with a demo you can play and a button that opens the browser.\n\n### 🛠️ Fixes\n\n- **The plan-limits ring follows the model you pick** in the chat box, instead of the one the conversation started with."
+		},
+		{
 			"version": "2.2.7-experimental",
 			"notes": "### ✨ New\n\n- **Your plan's limits, beside the chat.** A small ring next to the thinking level fills up as you use your ChatGPT, Claude or NaN plan. It turns orange at 80% and red at 95%; point at it to see each limit and when it resets, click it to open Usage limits. It shows up a couple of seconds after PiCode opens.\n- **Provider cards read in full.** Once a provider is connected, its card shows the logo, the full name, its state and buttons with words.\n\n### 🐛 Fixed\n\n- **The memory engine closes with PiCode.** Opening and closing PiCode quickly could leave the memory engine running on its own, keeping files busy and blocking updates. The last window now always stops it, and PiCode does too when it quits; the chats' message helper closes as well.\n- **Status is tidier.** The cards line up in rows, the Updates card no longer shows up empty (checking again is a button on its tile), and every colour follows your theme.\n- **The update notice speaks your language.** It said \"memory engine\" in English.\n\n### 🧩 Under the hood\n\n- Gentle AI pieces updated: gentle-pi 4.8.0, gentle-engram 0.8.0 and the memory engine 3.7.2. Your memory is not migrated."
 		},
