@@ -1893,3 +1893,25 @@ usuario; la App da lectura de issues y solo en los repos que el usuario elija al
 - **Para los PRs**, la GitHub App necesita el permiso *Pull requests: Read-only* y el servidor nuevo desplegado. Sin eso la tarjeta no enseña PRs, y la rama sale igual.
 - **El panel *Changes* de una copia no tiene botón *Review*:** el control de código del editor enseña la carpeta de la ventana.
 - **El estado del indicador de trabajo es uno para la ventana**, con la última acción de cualquier chat.
+
+
+**Adenda 1 (2026-11-16) — la copia es una opción de la sesión, no una rama que se elige antes.** *"Cuando cree la rama crea la sesión con un nombre por defecto"*, *"cuando cambio de sesión la rama a la derecha de \"entorno\" ha de cambiar también"*, *"Dale una pensada, está bien este sistema? es funcional y bueno para el usuario piensa como lo hacen otros editores"* → *"dale"*.
+- **Nueva sesión, en una copia aparte.** Bajo *New session* hay un interruptor *In a separate copy*, que se guarda con el perfil.
+  - Encendido, la sesión nace en su propia copia, en una rama provisional (`picode/new-xxxx`).
+  - Con el primer mensaje, la rama pasa a llamarse por sus primeras palabras (`picode/arregla-el-login`); si ese nombre ya existe, se le añade un número.
+  - La fila sale en la lista al momento como *New session*. PiCode escribe el fichero de la conversación en el formato de pi (cabecera y `session_info`), y pi lo abre y sigue escribiendo en él (`session-transcript.ts`).
+  - Elegir una rama que ya existe sigue en la paleta, con *New Session on a Branch…*.
+- **El chat nuevo se ata a su copia por su identificador, no por adivinanza.** El editor abre el chat y le pasa al conector el identificador de ese chat (`picode.agent.newChatOnWorktree` → `picode.session.bindWorktree`). Sustituye a «el próximo chat que empiece se queda la copia».
+- **El menú de la fila** de una sesión de pi añade:
+  - *Rename…*: el nombre se guarda en `session-git.json`, no dentro de la conversación;
+  - y, si la sesión tiene copia: *Review Changes*, *Create Pull Request*, *Merge into Main Branch…* y *Open Copy in New Window*.
+  - Las acciones de rama solo salen en las filas con copia, gracias a la marca `picodeSessionHasCopy` que la fila añade a su menú.
+- **Qué hace cada acción:**
+  - **Revisar:** abre el comparador de varios ficheros con lo que la copia cambió desde que salió de la rama principal, commits y cambios sin commit juntos.
+  - **Crear PR:** sube la rama y abre la página de GitHub para crearlo. Usa el git del usuario: no necesita Pro ni permisos nuevos en la App.
+  - **Fusionar:** solo si la copia no tiene nada sin commit y la carpeta del proyecto está en la rama principal y limpia. Si hay conflicto, se deshace y no cambia nada.
+- **Archivar una sesión con copia ofrece quitar la copia.** Una copia con cambios sin commit no se quita nunca.
+- **Se ve dónde trabaja cada sesión:**
+  - *Entorno* lee la rama del chat que tienes delante, no la del último en el que escribiste.
+  - La barra del chat enseña la rama y sus +/- junto al anillo de consumo. Pulsarla abre la revisión de los cambios.
+- **Fuera la fila *Sesión en una rama*.**
