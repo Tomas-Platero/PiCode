@@ -795,7 +795,9 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 			}
 			if (event.type === 'agent_settled' && !settled) {
 				settled = true;
-				agentActivity = undefined;
+				if (runningTurns <= 1) {
+					agentActivity = undefined;
+				}
 				notifyAgentStatus();
 				// What `subscribe` returns is the unsubscribe function itself, not a disposable.
 				subscription();
@@ -839,7 +841,9 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 					return;
 				}
 				settled = true;
-				agentActivity = undefined;
+				if (runningTurns <= 1) {
+					agentActivity = undefined;
+				}
 				notifyAgentStatus();
 				subscription();
 				resolve();
@@ -907,7 +911,7 @@ export interface TurnHolder {
 	current?: TurnContext;
 }
 
-/** The holder of the conversations reopened from the Sessions list (one turn at a time there). */
+/** The default holder: nothing sets it, so a prompt from a session bound to it (slash-command discovery) has no chat turn to land in. */
 const turnContext: TurnHolder = {};
 
 /** The longest stretch of a command or path shown in the permission question. */
@@ -2099,13 +2103,19 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 
 const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
 		const chat = chatFor(request);
-		chat.toolToken.current = request.toolInvocationToken;
 		// The four level names the host has shipped; see `permissions.ts`. The setting covers a
 		// request that arrives without a level.
-		chat.turn.current = {
-				stream,
-				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
+		const thisTurn: TurnContext = {
+			stream,
+			level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
 		};
+		const claimTurn = () => {
+			chat.toolToken.current = request.toolInvocationToken;
+			chat.turn.current = thisTurn;
+		};
+		if (chat.turnsWaiting === 0) {
+			claimTurn();
+		}
 		// Gentle's terminal panel for the agents' models cannot be drawn here, so the editor answers
 		// the command with its own pickers.
 		if (deps.chooseAgentModels !== undefined && isAgentModelsCommand(request.prompt)) {
@@ -2321,6 +2331,8 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// Cancelled while waiting: the turn this request would have run must not start.
 					return {};
 				}
+				// This chat's previous answer is over: its questions and editor tools are this request's now.
+				claimTurn();
 				// A conversation is called by what it was opened with, as the Sessions list calls it: that is
 				// the name another session addresses it by through pi-intercom.
 				if (chat.sessionManager?.getSessionName() === undefined) {
