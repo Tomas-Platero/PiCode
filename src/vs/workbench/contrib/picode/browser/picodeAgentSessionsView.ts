@@ -30,6 +30,8 @@ import { AgentSessionsFilter, AgentSessionsGrouping } from '../../chat/browser/a
 import { PICODE_LAYOUT_SETTING } from './picodeLayoutStyle.js';
 import { PICODE_AGENT_SEARCH_COMMAND_ID, PICODE_AGENT_SEARCH_ICON, PICODE_CUSTOMIZATION_COMMAND_ID, PICODE_CUSTOMIZATION_ICON } from './picodeAgentSearch.js';
 import { PicodeAgentProjects } from './picodeAgentProjects.js';
+import { setupSessionBranchHover } from './picodeSessionBranchHover.js';
+import { IPicodeConnectorService } from './account/issues/picodeConnectorService.js';
 import { IAuthenticationService } from '../../../services/authentication/common/authentication.js';
 import { PICODE_AUTH_PROVIDER_ID, PICODE_EMAIL_STORAGE_KEY, PICODE_PLAN_STORAGE_KEY } from './picodeAccountProvider.js';
 import { GlobalCompositeBar } from '../../../browser/parts/globalCompositeBar.js';
@@ -66,6 +68,7 @@ class PicodeAgentSessionsView extends ViewPane {
 		@ICommandService private readonly commandService: ICommandService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IStorageService private readonly storageService: IStorageService,
+		@IPicodeConnectorService private readonly connectorService: IPicodeConnectorService,
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
 	}
@@ -113,6 +116,8 @@ class PicodeAgentSessionsView extends ViewPane {
 			createNewChat,
 			getHoverPosition: () => HoverPosition.RIGHT,
 			trackActiveEditorSession: () => true,
+			// The branch a conversation worked on, and its pull requests (`picodeSessionBranchHover.ts`).
+			badgeHover: (session, target) => setupSessionBranchHover(session, target, this.hoverService, this.connectorService, this.openerService),
 		}));
 		toolbar.context = control;
 		this._register(this.onDidChangeBodyVisibility(visible => control.setVisible(visible)));

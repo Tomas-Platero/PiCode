@@ -53,6 +53,7 @@ import { registerPiCommandPromptFiles } from './commands';
 import { listModels, registerWizardModelCommands } from './wizard-models';
 import { AGENT_MODELS_COMMAND, chooseAgentModels, registerAgentModelsStateCommands } from './gentle-models-ui';
 import { registerPiSessionsProvider } from './sessions-register';
+import { setSessionGitProfile } from './session-git';
 import { applyProductEnv, pointChildPiAtThisPi, subagentInjectionEnv } from './product-env';
 import { explainTaskFailure } from './subagent-failure';
 import { applyIntercomBroker } from './intercom-config';
@@ -2668,6 +2669,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// pi's own conversations, in the editor's Sessions panel: the one list. The transcripts pi
 	// writes under the profile's `sessions/` folder are listed here, opened as history, and
 	// continued in place; the import fires it when a tree of transcripts lands.
+	setSessionGitProfile(profileInForce);
 	const piSessions = registerPiSessionsProvider({
 		participant: piParticipant,
 		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => console.error(`[pi] ${line}`) },

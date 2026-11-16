@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { withContext } from './context';
+import { noteTurnBranch } from './session-git';
 import { contextBlockFor } from './editor-context';
 import { imagesOf, type PiImage } from './chat-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
@@ -848,7 +849,11 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 			}, COMMAND_GRACE_MS);
 		}, reject);
 		void cancellation;
-	}).finally(() => sessionsInChatTurn.delete(session));
+	}).finally(() => {
+		sessionsInChatTurn.delete(session);
+		// The session row shows the branch this conversation worked on (`session-git.ts`).
+		noteTurnBranch(session.sessionId, sessionCwd);
+	});
 	return answer;
 }
 

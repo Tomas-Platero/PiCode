@@ -58,6 +58,9 @@ export interface IAgentSessionsControlOptions {
 	readonly itemHeight?: number;
 	readonly sectionHeight?: number;
 
+	/** PiCode: see `IAgentSessionRendererOptions.badgeHover`. */
+	badgeHover?(session: IAgentSession, target: HTMLElement): IDisposable | undefined;
+
 	createNewChat(): void;
 	getHoverPosition(): HoverPosition;
 	trackActiveEditorSession(): boolean;

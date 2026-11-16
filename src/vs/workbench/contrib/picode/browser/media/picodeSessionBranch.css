@@ -1,0 +1,97 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.  Licensed under the MIT License.
+ *  See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The branch badge on a session row, and the card over it. */
+
+.picode-sessions-list .agent-session-badge.has-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	min-width: 0;
+}
+
+.picode-sessions-list .agent-session-badge-icon {
+	font-size: 12px;
+	flex: none;
+}
+
+.picode-branch-card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 220px;
+	max-width: 340px;
+}
+
+.picode-branch-card-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+}
+
+.picode-branch-card-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-branch-card-earlier,
+.picode-branch-card-loading,
+.picode-branch-card-none {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-branch-card-pulls {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	border-top: 1px solid var(--vscode-widget-border, transparent);
+	padding-top: 6px;
+}
+
+.picode-branch-pull {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 4px 6px;
+	border-radius: 6px;
+	color: inherit;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.picode-branch-pull:hover,
+.picode-branch-pull:focus-visible {
+	background: var(--vscode-list-hoverBackground);
+	outline: none;
+}
+
+.picode-branch-pull-icon {
+	margin-top: 2px;
+	flex: none;
+}
+
+.picode-branch-pull.is-open .picode-branch-pull-icon { color: var(--vscode-charts-green); }
+.picode-branch-pull.is-merged .picode-branch-pull-icon { color: var(--vscode-charts-purple); }
+.picode-branch-pull.is-closed .picode-branch-pull-icon { color: var(--vscode-charts-red); }
+.picode-branch-pull.is-draft .picode-branch-pull-icon { color: var(--vscode-descriptionForeground); }
+
+.picode-branch-pull-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.picode-branch-pull-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-branch-pull-meta {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}

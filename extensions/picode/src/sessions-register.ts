@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { AgentDeps } from './agent';
 import { piResumeRequestHandler, transcriptAfterLostFolderQuestion } from './sessions-resume';
+import { defaultBranchNow, githubRepoNow, onSessionGitChanged, readSessionGitStore, rowGitFor } from './session-git';
 import { restoreListingCache, serializeListingCache, takeListingCacheChange, areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionHeader, sessionTurns } from './sessions-provider';
 import { projectSlugsOfWindow, resolveProjectScope, windowSessionScope } from './runtime';
 import { coarseMinute, transcriptDigest } from './sessions-digest';
@@ -84,15 +85,22 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 				? areaConversationsReport(sessionsDir(), scope.slugs[0])
 				: conversationsReport(sessionsDir(), scope.slugs);
 			saveListingCacheSoon();
-			const built = report.files.map(file => ({
-				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
-				label: file.label,
-				iconPath: vscode.ThemeIcon.File,
-				// A transcript is only ever appended to, so its mtime is both the created and the
-				// last-activity marker; without one the panel dates every row 1970. Rounded to the
-				// minute, the grain the panel shows, so a row that only grew is the same row to it.
-				timing: { created: coarseMinute(file.mtime), lastRequestEnded: coarseMinute(file.mtime) },
-			}));
+			const gitRecords = readSessionGitStore(options.profileDir());
+			const built: vscode.ChatSessionItem[] = report.files.map(file => {
+				const record = gitRecords[file.id];
+				const git = record === undefined ? undefined : rowGitFor(record, defaultBranchNow(record.cwd, () => changed.fire()));
+				return {
+					resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
+					label: file.label,
+					iconPath: vscode.ThemeIcon.File,
+					// A transcript is only ever appended to, so its mtime is both the created and the
+					// last-activity marker; without one the panel dates every row 1970. Rounded to the
+					// minute, the grain the panel shows, so a row that only grew is the same row to it.
+					timing: { created: coarseMinute(file.mtime), lastRequestEnded: coarseMinute(file.mtime) },
+					// The branch the conversation worked on, when it is not the default one (`session-git.ts`).
+					...(git === undefined ? {} : { badge: git.badge, metadata: { picodeGit: { branches: git.branches, repo: githubRepoNow(record!.cwd, () => changed.fire()) } } }),
+				};
+			});
 			// Rows nobody touched come back as the objects the panel already has, so the list does
 			// not republish and blink on every refresh.
 			const reusable = reuseRows(
@@ -100,6 +108,8 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 				built,
 				row => row.resource.toString(),
 				(before, after) => before.label === after.label
+					&& before.badge === after.badge
+					&& JSON.stringify(before.metadata) === JSON.stringify(after.metadata)
 					&& before.timing?.created === after.timing?.created
 					&& before.timing?.lastRequestEnded === after.timing?.lastRequestEnded,
 			);
@@ -188,6 +198,8 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 	// The listing is filtered by the folders this window has open, so a window whose folders
 	// arrive after the first ask is asked again.
 	const folders = vscode.workspace.onDidChangeWorkspaceFolders(() => changed.fire());
+	// A turn that moved the conversation to another branch repaints its row.
+	const branches = onSessionGitChanged(() => changed.fire());
 	const contentRegistration = vscode.chat.registerChatSessionContentProvider(PI_SESSION_SCHEME, provider, options.participant);
 	return {
 		fireChanged: () => changed.fire(),
@@ -200,6 +212,7 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 			}
 			watcher?.close();
 			folders.dispose();
+			branches.dispose();
 			contentRegistration.dispose();
 			registration.dispose();
 			changed.dispose();
