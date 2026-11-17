@@ -368,3 +368,284 @@
 	font-size: 12px;
 	margin-bottom: 6px;
 }
+
+/* --------------------------------------------------------- alerts (per model) */
+
+.picode-limits-bar {
+	position: relative;
+}
+
+/* Where each alert of the model sits on the bar. */
+.picode-limits-bar-mark {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	margin-left: -1px;
+	background: var(--vscode-foreground);
+	opacity: 0.75;
+	pointer-events: none;
+}
+
+.picode-limits-bar-mark.off {
+	opacity: 0.25;
+}
+
+.picode-limits-alerts {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: auto -14px -12px;
+	padding: 10px 14px 12px;
+	border-top: 1px solid var(--picode-limits-border);
+	border-radius: 0 0 6px 6px;
+	background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
+}
+
+.picode-limits-alerts-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 22px;
+	font-size: 12px;
+}
+
+.picode-limits-alerts-head .grow {
+	flex: 1 1 auto;
+}
+
+.picode-limits-alerts-icon {
+	display: inline-flex;
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-limits-alerts-title {
+	font-weight: 600;
+}
+
+.picode-limits-alerts-count {
+	min-width: 16px;
+	padding: 0 5px;
+	border-radius: 8px;
+	font-size: 10px;
+	line-height: 16px;
+	text-align: center;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+}
+
+.picode-limits-alerts-list,
+.picode-limits-alert-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.picode-limits-alerts button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: inherit;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.picode-limits-alerts button:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+/* An alert: bell, percentage and an on/off switch; the remove cross shows on hover. */
+.picode-limits-alert {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	height: 28px;
+	padding: 0 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-textLink-foreground) 45%, transparent);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-textLink-foreground) 10%, transparent);
+	transition: background 120ms ease, border-color 120ms ease;
+}
+
+.picode-limits-alert:hover {
+	border-color: var(--vscode-textLink-foreground);
+}
+
+.picode-limits-alert-toggle .codicon {
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-limits-alert-percent {
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.picode-limits-alert-switch {
+	position: relative;
+	width: 24px;
+	height: 14px;
+	border-radius: 7px;
+	background: var(--vscode-textLink-foreground);
+	transition: background 120ms ease;
+}
+
+.picode-limits-alert-switch::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 12px;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	transition: left 120ms ease;
+}
+
+.picode-limits-alert.off {
+	border-color: var(--picode-limits-border);
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-limits-alert.off .picode-limits-alert-toggle .codicon {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-limits-alert.off .picode-limits-alert-switch {
+	background: color-mix(in srgb, var(--vscode-foreground) 25%, transparent);
+}
+
+.picode-limits-alert.off .picode-limits-alert-switch::after {
+	left: 2px;
+}
+
+.picode-limits-alerts .picode-limits-alert-remove {
+	position: absolute;
+	top: -7px;
+	right: -7px;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border: 1px solid var(--picode-limits-border);
+	border-radius: 50%;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+	color: var(--vscode-descriptionForeground);
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.picode-limits-alerts .picode-limits-alert-remove .codicon {
+	font-size: 10px;
+}
+
+.picode-limits-alert:hover .picode-limits-alert-remove,
+.picode-limits-alert:focus-within .picode-limits-alert-remove {
+	opacity: 1;
+}
+
+.picode-limits-alerts .picode-limits-alert-remove:hover {
+	color: var(--picode-limits-danger);
+	border-color: var(--picode-limits-danger);
+}
+
+.picode-limits-alert-lead {
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-limits-alerts .picode-limits-alert-add {
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-limits-alerts .picode-limits-alert-add:hover {
+	color: var(--vscode-textLink-activeForeground);
+}
+
+.picode-limits-alerts .picode-limits-alert-preset {
+	gap: 3px;
+	height: 26px;
+	padding: 0 9px;
+	border: 1px dashed var(--picode-limits-border);
+	border-radius: 8px;
+	font-variant-numeric: tabular-nums;
+}
+
+.picode-limits-alerts .picode-limits-alert-preset:hover {
+	border-style: solid;
+	border-color: var(--vscode-textLink-foreground);
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-limits-alerts .picode-limits-alert-preset .codicon {
+	font-size: 11px;
+}
+
+.picode-limits-alert-field {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	height: 26px;
+	padding: 0 8px;
+	border: 1px solid var(--vscode-input-border, var(--picode-limits-border));
+	border-radius: 8px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-size: 12px;
+}
+
+.picode-limits-alert-field:focus-within {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-limits-alert-field input {
+	width: 42px;
+	border: none;
+	outline: none;
+	background: none;
+	color: inherit;
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+	-moz-appearance: textfield;
+}
+
+.picode-limits-alert-field input::-webkit-inner-spin-button,
+.picode-limits-alert-field input::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.picode-limits-alerts .picode-limits-alert-save {
+	height: 26px;
+	padding: 0 12px;
+	border-radius: 8px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-limits-alerts .picode-limits-alert-save:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.picode-limits-alerts .picode-limits-alert-cancel {
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 6px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-limits-alerts .picode-limits-alert-cancel:hover {
+	background: var(--vscode-toolbar-hoverBackground);
+	color: var(--vscode-foreground);
+}
+
+.picode-limits-alert-error {
+	font-size: 11px;
+	color: var(--picode-limits-danger);
+}

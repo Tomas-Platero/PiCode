@@ -39,6 +39,8 @@ export interface IContextMenuDelegate {
 	getActionsContext?(event?: IContextMenuEvent): unknown;
 	getKeyBinding?(action: IAction): ResolvedKeybinding | undefined;
 	getMenuClassName?(): string;
+	/** PiCode: show the actions' icons in this menu. */
+	showMenuIcons?: boolean;
 	onHide?(didCancel: boolean): void;
 	closeAnimation?: IContextViewCloseAnimation;
 	actionRunner?: IActionRunner;

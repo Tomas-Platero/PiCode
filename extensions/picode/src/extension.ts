@@ -47,12 +47,15 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { answeringChatRows, BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { listModels, registerWizardModelCommands } from './wizard-models';
 import { AGENT_MODELS_COMMAND, chooseAgentModels, registerAgentModelsStateCommands } from './gentle-models-ui';
 import { registerPiSessionsProvider } from './sessions-register';
+import { setSessionGitProfile } from './session-git';
+import { registerSessionBranchCommands } from './session-branch-commands';
+import { registerSessionActions } from './session-actions';
 import { applyProductEnv, pointChildPiAtThisPi, subagentInjectionEnv } from './product-env';
 import { explainTaskFailure } from './subagent-failure';
 import { applyIntercomBroker } from './intercom-config';
@@ -66,7 +69,7 @@ import { ensureProfilePackages } from './packages-install';
 import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
 import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from './product-packages';
 import { fetchLatestRelease, probeEngineVersion, updateEngine } from './memory-update';
-import { readDefaultModel, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
+import { readDefaultModel, readGit, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND, VOICE_CANCEL_COMMAND, VOICE_DOWNLOAD_COMMAND, VOICE_FINISH_COMMAND, VOICE_LISTEN_COMMAND, VOICE_POLL_COMMAND, VOICE_REMOVE_COMMAND } from './status-contract';
 import { shouldDownloadOnStart, VoiceController } from './voice-controller';
@@ -85,8 +88,9 @@ import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 import { diffStat, DIFF_STAT_COMMAND } from './diff-stat';
-import { recordTiming, timed, timingReport } from './perf-timings';
+import { onSlowWork, recordTiming, timed, timingReport } from './perf-timings';
 import { modelPricing, type PiModelCost } from './model-info';
+import { worktreeOfChatKey } from './session-branch-commands';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -988,7 +992,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	const agentsProvider: vscode.ChatCustomAgentProvider = {
 		onDidChangeCustomAgents: changed.event,
-		provideCustomAgents: (): NamedChatResource[] => discoverAgents(agentRoots(profileInForce(), trustedWorkspaceDirs()), fsReader)
+		provideCustomAgents: (): NamedChatResource[] => timed('agents: listing', () => discoverAgents(agentRoots(profileInForce(), trustedWorkspaceDirs()), fsReader))
 			.map(agent => ({ uri: vscode.Uri.file(agent.file), name: agent.name, ...(agent.description === undefined ? {} : { description: agent.description }) })),
 	};
 
@@ -998,7 +1002,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	const skillsProvider: vscode.ChatSkillProvider = {
 		onDidChangeSkills: changed.event,
-		provideSkills: (): NamedChatResource[] => discoverSkills(currentSkillRoots(), fsReader)
+		provideSkills: (): NamedChatResource[] => timed('skills: listing', () => discoverSkills(currentSkillRoots(), fsReader))
 			.map(skill => ({ uri: vscode.Uri.file(skill.file), name: skill.name, ...(skill.description === undefined ? {} : { description: skill.description }) })),
 	};
 
@@ -1123,6 +1127,16 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	// The `+N −M` under Changes in the Agent layout's status column, for the folder the editor asks about.
 	disposables.push(vscode.commands.registerCommand(DIFF_STAT_COMMAND, (folder: unknown) => typeof folder === 'string' ? timed('status: lines changed', () => diffStat(folder)) : undefined));
+	// The active chat's own branch copy, when it has one: Status shows its branch and changes instead of the window's.
+	// The chat is the one the person is looking at (its resource, from the editor), so switching sessions switches the branch.
+	disposables.push(vscode.commands.registerCommand('picode.git.activeWorktree', async (chatKey: unknown) => {
+		const folder = typeof chatKey === 'string' ? worktreeOfChatKey(chatKey) : undefined;
+		if (folder === undefined) {
+			return undefined;
+		}
+		const git = await readGit(folder);
+		return { folder, branch: git.branch, files: git.changes ?? 0, added: git.insertions ?? 0, removed: git.deletions ?? 0 };
+	}));
 	// The Context block of Status: where a chat's context goes, and its Compact button.
 	disposables.push(vscode.commands.registerCommand('picode.context.breakdown', (chat: unknown) => getSessionContext(chat)));
 	disposables.push(vscode.commands.registerCommand('picode.context.compact', async (chat: unknown) => {
@@ -2484,7 +2498,16 @@ const voice = new VoiceController(os.homedir(), voiceManifestFor(process.platfor
 
 export function activate(context: vscode.ExtensionContext): void {
 	const activationStart = performance.now();
-	queueMicrotask(() => recordTiming('activation', performance.now() - activationStart));
+	// The PiCode log, kept with the window's logs: what pi reports and any work that ran slow.
+	const picodeLog = vscode.window.createOutputChannel('PiCode', { log: true });
+	context.subscriptions.push(picodeLog);
+	onSlowWork(line => picodeLog.warn(line));
+	picodeLog.info(`activating, ${Math.round(process.uptime() * 1000)} ms after the extension host started`);
+	queueMicrotask(() => {
+		const ms = performance.now() - activationStart;
+		recordTiming('activation', ms);
+		picodeLog.info(`activated in ${Math.round(ms)} ms`);
+	});
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
 	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
 	applyProductEnv(process.env, profileDirectory(context.extensionUri));
@@ -2668,9 +2691,11 @@ export function activate(context: vscode.ExtensionContext): void {
 	// pi's own conversations, in the editor's Sessions panel: the one list. The transcripts pi
 	// writes under the profile's `sessions/` folder are listed here, opened as history, and
 	// continued in place; the import fires it when a tree of transcripts lands.
+	setSessionGitProfile(profileInForce);
+	context.subscriptions.push(registerSessionBranchCommands(), registerSessionActions());
 	const piSessions = registerPiSessionsProvider({
 		participant: piParticipant,
-		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => console.error(`[pi] ${line}`) },
+		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => { console.error(`[pi] ${line}`); picodeLog.info(line); } },
 		profileDir: profileInForce,
 		listingCacheFile: path.join(context.globalStorageUri.fsPath, 'sessions-listing.json'),
 	});
@@ -2776,6 +2801,7 @@ const setupDeps = {
 		runningJobs: runningBackgroundJobs,
 		finishedJobs: finishedBackgroundJobs,
 		agents: () => gentleAgents.current(),
+		chats: answeringChatRows,
 		todos: currentTodos,
 		onWorkChange: listener => {
 			const subscription = onDidChangeAgentWork(listener);

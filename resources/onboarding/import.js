@@ -307,13 +307,16 @@ function renderImportItems(source, category) {
 	const filterKey = `${source.key}/${category.id}`;
 	const query = (importView.filters.get(filterKey) ?? '').toLowerCase();
 	const mine = importPickedFor(source.key).get(category.id);
-	const items = category.items.filter(item => query === '' || item.label.toLowerCase().includes(query));
+	const items = category.items.filter(item => query === '' || item.label.toLowerCase().includes(query) || (item.description ?? '').toLowerCase().includes(query));
 	const rows = items.slice(0, 200).map(item => {
 		const box = el('input', { type: 'checkbox', class: 'imp-check', checked: mine instanceof Set && mine.has(item.id) });
 		box.addEventListener('change', event => { importToggleItem(source, category, item.id, event.target.checked); renderImportView(); });
 		return el('label', { class: 'imp-row' },
 			box,
-			el('span', { class: 'imp-row-label', text: item.label }),
+			item.icon ? el('img', { class: 'imp-row-icon', src: item.icon, alt: '' }) : null,
+			item.description
+				? el('span', { class: 'imp-row-text' }, el('span', { class: 'imp-row-label', text: item.label }), el('span', { class: 'imp-row-description', text: item.description }))
+				: el('span', { class: 'imp-row-label', text: item.label }),
 			item.detail ? el('span', { class: 'imp-pill', text: item.detail }) : null,
 		);
 	});

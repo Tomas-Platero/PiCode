@@ -550,6 +550,33 @@ export function mapGithubLabelNames(json: unknown): string[] {
 	return Array.isArray(json) ? json.map(label => asString(asRecord(label)?.name)).filter(name => name.length > 0) : [];
 }
 
+/** A pull request of a branch, as the session rows' hover card shows it. */
+export interface IPicodePull {
+	readonly number: number;
+	readonly title: string;
+	readonly state: 'open' | 'draft' | 'merged' | 'closed';
+	readonly url: string | undefined;
+}
+
+/** `GET /repos/{o}/{r}/pulls` → the pull requests; merged is told apart from closed by `merged_at`. */
+export function mapGithubPulls(json: unknown): IPicodePull[] {
+	if (!Array.isArray(json)) {
+		return [];
+	}
+	const pulls: IPicodePull[] = [];
+	for (const entry of json) {
+		const pull = asRecord(entry);
+		const number = pull?.number;
+		if (typeof number !== 'number' || !Number.isInteger(number)) {
+			continue;
+		}
+		const merged = typeof pull?.merged_at === 'string' && pull.merged_at !== '';
+		const state = merged ? 'merged' : pull?.state === 'open' ? (pull.draft === true ? 'draft' : 'open') : 'closed';
+		pulls.push({ number, title: asString(pull?.title), state, url: httpsUrl(pull?.html_url) || undefined });
+	}
+	return pulls;
+}
+
 /** `GET /repos/{o}/{r}/assignees` → the people an issue of the repository can be given to (their login is both id and name). */
 export function mapGithubAssignees(json: unknown): IPicodeNamed[] {
 	return Array.isArray(json) ? json.map(user => asString(asRecord(user)?.login)).filter(login => login.length > 0).map(login => ({ id: login, name: login })) : [];

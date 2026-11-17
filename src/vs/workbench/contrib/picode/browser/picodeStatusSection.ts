@@ -12,6 +12,7 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { localize } from '../../../../nls.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { defaultButtonStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { renderIcon } from '../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { aiCustomizationManagementSectionRegistry, IAICustomizationManagementSectionContribution, IAICustomizationManagementSectionWidget } from '../../chat/browser/aiCustomization/aiCustomizationManagementSectionRegistry.js';
@@ -33,6 +34,11 @@ import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
  */
 
 const STATUS_DATA_COMMAND = 'picode.setup.status';
+
+/** The last status read, kept for the window and across starts, so the page never opens empty. */
+const LAST_STATUS_KEY = 'picode.status.last';
+let lastStatus: IStatusData | undefined;
+let lastStatusText: string | undefined;
 const RESTART_COMMAND = 'picode.pi.restart';
 const CLEAN_CACHE_COMMAND = 'picode.pi.cleanCache';
 const OPEN_PROFILE_COMMAND = 'picode.pi.openProfile';
@@ -175,6 +181,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 	constructor(
 		container: HTMLElement,
 		@ICommandService private readonly commandService: ICommandService,
+		@IStorageService private readonly storageService: IStorageService,
 	) {
 		super();
 
@@ -207,7 +214,22 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			}
 		}, REFRESH_MS);
 
+		// The last reading shows at once, even from a previous start; the fresh one replaces it when it comes.
+		const remembered = lastStatus ?? this.readRemembered();
+		if (remembered !== undefined) {
+			this.fingerprint = fingerprintOf(remembered);
+			this.render(remembered);
+		}
 		void this.refresh();
+	}
+
+	private readRemembered(): IStatusData | undefined {
+		try {
+			const text = this.storageService.get(LAST_STATUS_KEY, StorageScope.PROFILE);
+			return text === undefined ? undefined : JSON.parse(text) as IStatusData;
+		} catch {
+			return undefined;
+		}
 	}
 
 	layout(_dimension: DOM.Dimension): void {
@@ -247,6 +269,12 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			return;
 		}
 		const fingerprint = fingerprintOf(data);
+		const text = JSON.stringify(data);
+		if (text !== lastStatusText) {
+			lastStatusText = text;
+			this.storageService.store(LAST_STATUS_KEY, text, StorageScope.PROFILE, StorageTarget.MACHINE);
+		}
+		lastStatus = data;
 		if (!force && fingerprint === this.fingerprint) {
 			return;
 		}

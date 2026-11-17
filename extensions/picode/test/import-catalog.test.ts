@@ -51,12 +51,13 @@ function piProfile(root: string): string {
 	return dir;
 }
 
-test('the pi scan lists packages one by one and hides the ones the product leaves behind', () => {
+test('the pi scan lists packages one by one and hides the ones the product leaves behind or ships itself', () => {
 	const catalog = scanPiProfile(piProfile(scratch()));
 	const packages = catalog.categories.find(category => category.id === 'packages');
-	assert.deepStrictEqual(packages?.items.map(item => item.id), ['npm:gentle-pi@4.8.0', 'npm:pi-tools@1.0.0']);
-	assert.strictEqual(packages?.items[0].label, 'gentle-pi');
-	assert.strictEqual(packages?.items[0].detail, '4.8.0');
+	assert.deepStrictEqual(packages?.items.map(item => item.id), ['npm:pi-tools@1.0.0']);
+	assert.strictEqual(packages?.items[0].label, 'pi-tools');
+	assert.strictEqual(packages?.items[0].detail, '1.0.0');
+	assert.strictEqual(catalog.categories.some(category => category.id === 'memory'), false, 'every pi shares the same memory');
 	assert.strictEqual(catalog.categories.find(category => category.id === 'providers')?.count, 2);
 	assert.strictEqual(catalog.categories.find(category => category.id === 'logins')?.sensitive, true);
 });
@@ -186,4 +187,43 @@ test('the host answers the Import window\'s two commands (a command the switch d
 	assert.ok(existsSync(join(paths.profileDir, 'skills', 'review', 'SKILL.md')));
 	assert.ok(!existsSync(join(paths.profileDir, 'auth.json')), 'a malformed logins value is not "all"');
 	assert.strictEqual(applied.categories[0].category, 'skills');
+});
+
+test("the pi scan leaves out what PiCode's own profile already has", () => {
+	const root = scratch();
+	const own = join(root, 'own');
+	write(join(own, 'settings.json'), { packages: ['npm:pi-tools@0.9.0'] });
+	write(join(own, 'models.json'), { providers: { openai: {} } });
+	write(join(own, 'mcp.json'), { mcpServers: { git: {} } });
+	write(join(own, 'skills', 'review', 'SKILL.md'), '# review');
+	const catalog = scanPiProfile(piProfile(root), own);
+	const ids = (id: string) => catalog.categories.find(category => category.id === id)?.items.map(item => item.id);
+	assert.deepStrictEqual(ids('packages'), undefined, 'pi-tools is there already, so the category is gone');
+	assert.deepStrictEqual(ids('providers'), ['local']);
+	assert.deepStrictEqual(ids('mcp'), ['web']);
+	assert.deepStrictEqual(ids('skills'), ['deploy']);
+});
+
+test('extensions show the name and icon of their store page, and settings their Settings-page name', () => {
+	const roots = vscodeMachine(scratch());
+	const extensions = join(roots.home, '.vscode', 'extensions');
+	const prettier = join(extensions, 'esbenp.prettier-vscode-10.0.0');
+	write(join(prettier, 'package.json'), { displayName: '%name%', icon: 'icon.png', contributes: { configuration: { properties: { 'prettier.semi': {} } } } });
+	write(join(prettier, 'package.nls.json'), { name: 'Prettier - Code formatter' });
+	writeFileSync(join(prettier, 'icon.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+	write(join(roots.appData, 'Code', 'User', 'settings.json'), {
+		'editor.wordWrap': 'on', '[python]': {}, 'prettier.semi': false, 'gone.extension.option': 1, 'github.copilot.enable': {}, 'update.mode': 'none',
+	});
+	const [catalog] = scanVsCode(roots);
+	const byId = (id: string) => catalog.categories.find(category => category.id === id);
+	const row = byId('extensions')?.items[0];
+	assert.strictEqual(row?.label, 'Prettier - Code formatter');
+	assert.strictEqual(row?.description, 'esbenp.prettier-vscode');
+	assert.ok(row?.icon?.startsWith('data:image/png;base64,'));
+	const settings = byId('editorSettings')?.items;
+	assert.deepStrictEqual(settings?.map(item => [item.id, item.label, item.detail]), [
+		['editor.wordWrap', 'Editor: Word Wrap', undefined],
+		['[python]', 'Python (language settings)', undefined],
+		['prettier.semi', 'Prettier: Semi', 'Prettier - Code formatter'],
+	]);
 });
