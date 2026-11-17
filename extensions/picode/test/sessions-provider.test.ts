@@ -289,3 +289,19 @@ test('reuseRows hands back the row it handed out before when nothing about it ch
 	assert.strictEqual(relabelled[0].label, 'A renamed');
 	assert.notStrictEqual(relabelled[0], before[0]);
 });
+
+test('a conversation with no message yet is listed by its session name, until its first prompt', () => {
+	const files: Record<string, string> = {
+		'/sessions/2026_c.jsonl': '{"type":"session","id":"c"}\n{"type":"session_info","id":"i1","name":"feat/login"}',
+		'/sessions/2026_d.jsonl': '{"type":"session","id":"d"}\n{"type":"session_info","id":"i1","name":"feat/x"}\n{"type":"message","message":{"role":"user","content":[{"type":"text","text":"fix the form"}]}}',
+	};
+	const fs = {
+		read: (file: string): string => files[file] ?? '',
+		list: (dir: string): string[] => Object.keys(files).filter(f => f.startsWith(dir + '/')),
+		mtime: (file: string): number => file.endsWith('c.jsonl') ? 2001 : 2002,
+	};
+	const labels = new Map(listSessionFiles('/sessions', fs).map(file => [file.id, file.label]));
+	assert.strictEqual(labels.get('2026_c'), 'feat/login');
+	assert.strictEqual(labels.get('2026_d'), 'fix the form');
+});
+

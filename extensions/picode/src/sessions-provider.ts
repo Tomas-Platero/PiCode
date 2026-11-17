@@ -819,6 +819,25 @@ function factsFromEnds(file: string, fs: SessionsFs): TranscriptFacts | undefine
 	return header === undefined || opening === undefined || lastRole === undefined ? undefined : { header, opening, lastRole };
 }
 
+/** The name the latest `session_info` entry gives the session, if any. */
+export function sessionInfoName(text: string): string | undefined {
+	let name: string | undefined;
+	for (const line of text.split('\n')) {
+		if (!line.includes('"session_info"')) {
+			continue;
+		}
+		try {
+			const entry: unknown = JSON.parse(line);
+			if (isRecord(entry) && entry.type === 'session_info' && typeof entry.name === 'string' && entry.name.trim() !== '') {
+				name = entry.name.trim();
+			}
+		} catch {
+			// not a whole line
+		}
+	}
+	return name;
+}
+
 /** One transcript's listing entry, from or into the mtime-keyed cache. */
 function describeTranscript(entry: string, fs: SessionsFs): PiSessionFile {
 	const stat = fs.mtime(entry);
@@ -837,7 +856,10 @@ function describeTranscript(entry: string, fs: SessionsFs): PiSessionFile {
 	// doing — are all answered from that one read.
 	const facts = factsFromEnds(entry, fs) ?? factsOf(fs.read(entry));
 	const { header, opening, lastRole } = facts;
+	// Before its first prompt, a session started on a branch is called by the name it was given
+	// (`session-transcript.ts`); the file name is the last resort.
 	const firstPrompt = (opening === undefined ? '' : ownerPrompt(opening))
+		|| (opening === undefined ? sessionInfoName(fs.read(entry)) : undefined)
 		|| path.basename(entry).replace(/\.jsonl$/, '');
 	const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
 	const label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;

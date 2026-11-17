@@ -3,14 +3,18 @@
 /*
  * The setup window's page.
  *
- * One page, three jobs: the first run, the run after a version upgrade, and "PiCode: Setup"
- * from inside the editor. The difference is `mode`, and what the page does with the state it is
- * given — the editor's current pi, model and theme arrive already filled in, so the page never
- * asks for something that is configured, and never writes over it without the owner clicking.
+ * One page, four jobs: the first run, the run after a version upgrade, "PiCode: Setup" from inside
+ * the editor, and the Import view on its own. The difference is `mode`, and what the page does with
+ * the state it is given — the editor's current pi, model and theme arrive already filled in, so the
+ * page never asks for something that is configured, and never writes over it without a click.
  *
  * The page decides nothing about disk. Every write is a named command the main process runs
  * through the connector's own backend (`host.cjs`), and every answer carries a fresh snapshot so
  * the page repaints from what is actually recorded rather than from what it hoped it wrote.
+ *
+ * Painting: every change of state calls `render()`, which builds the step again as plain elements
+ * and *patches* them onto what is on screen (`patch`). Nodes that are still there are kept, so a
+ * field keeps its focus and its caret, and a list keeps its scroll; only what changed is touched.
  */
 
 /* ------------------------------------------------------------------ *
@@ -19,12 +23,10 @@
 
 /**
  * One table per language, loaded from l10n/<code>.js (see index.html). English is the source and
- * the fallback for any key a language lacks, so a page with only some languages is still usable
- * without a language pack.
+ * the fallback for any key a language lacks.
  *
  * A list stays a list: spreading English's arrays over the translation's would turn them into plain
- * objects, and the page destructures two of them (`layoutAgentZones`, `layoutEditorZones`) and maps
- * the other two. A language that left an item out gets the English one in its place.
+ * objects. A language that left an item out gets the English one in its place.
  */
 const STRINGS = window.PICODE_L10N;
 for (const [code, table] of Object.entries(STRINGS)) {
@@ -67,14 +69,14 @@ function initialLanguage(languages = navigator.languages ?? [navigator.language]
 }
 
 /* ------------------------------------------------------------------ *
- * Themes
+ * Fixed data
  * ------------------------------------------------------------------ */
 
 /**
  * The themes the cards show, with a palette measured from each theme's own colours.
  *
- * These are previews, not the theme engine: the editor paints the real thing when it opens, and
- * the window tints itself with the same handful of colours so picking one is not a guess.
+ * These are previews, not the theme engine: the editor paints the real thing when it opens. The
+ * preview pane beside the grid uses the same handful of colours, so picking one is not a guess.
  */
 const THEMES = [
 	// PiCode's own family first: these are the product's colours, and the editor defaults to
@@ -101,36 +103,33 @@ const THEMES = [
 	{ id: 'Default High Contrast Light', label: 'High Contrast Light', featured: false, dark: false, palette: { bg: '#ffffff', panel: '#f2f2f2', fg: '#292929', line: '#0f4a85', keyword: '#0f4a85', string: '#811f3f', comment: '#515151', accent: '#0f4a85' } },
 ];
 
-/** The provider presets: addresses that answer, and the dialect each one speaks. */
+/** The API-key presets: addresses that answer, and the dialect each one speaks. */
 const PROVIDER_PRESETS = [
-	{ id: 'openrouter', label: 'OpenRouter', endpoint: 'https://openrouter.ai/api/v1', api: 'openai-completions', mark: 'OR', keyUrl: 'https://openrouter.ai/keys' },
-	{ id: 'deepseek', label: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', api: 'openai-completions', mark: 'DS', keyUrl: 'https://platform.deepseek.com/api_keys' },
-	{ id: 'groq', label: 'Groq', endpoint: 'https://api.groq.com/openai/v1', api: 'openai-completions', mark: 'GQ', keyUrl: 'https://console.groq.com/keys' },
+	{ id: 'openrouter', label: 'OpenRouter', endpoint: 'https://openrouter.ai/api/v1', api: 'openai-completions', keyUrl: 'https://openrouter.ai/keys' },
+	{ id: 'deepseek', label: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', api: 'openai-completions', keyUrl: 'https://platform.deepseek.com/api_keys' },
+	{ id: 'groq', label: 'Groq', endpoint: 'https://api.groq.com/openai/v1', api: 'openai-completions', keyUrl: 'https://console.groq.com/keys' },
 ];
 
-/**
- * Well-known model ids, offered **only when the provider actually returned them**.
- *
- * A recommendation that names a model the account cannot use is worse than no recommendation, so
- * this list is a filter over the answer, never a list of its own: whatever the endpoint did not
- * report simply is not shown.
- */
-const RECOMMENDED_MODELS = [
-	'anthropic/claude-sonnet-4',
-	'anthropic/claude-3.5-sonnet',
-	'openai/gpt-4o',
-	'openai/gpt-4o-mini',
-	'deepseek/deepseek-chat',
-	'deepseek/deepseek-reasoner',
-	'meta-llama/llama-3.3-70b-instruct',
-	'qwen/qwen-2.5-72b-instruct',
-	'llama-3.3-70b-versatile',
-	'mistral-large-latest',
-];
+/** The dialects pi can speak to an address (`ProviderRequest.api` in onboarding-host.ts). */
+const PROVIDER_APIS = ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'];
 
-/* ------------------------------------------------------------------ *
- * State
- * ------------------------------------------------------------------ */
+/** Where each provider's mark comes from; anything else gets its initials on a colour. */
+const PROVIDER_DOMAINS = {
+	'openai-codex': 'openai.com',
+	openai: 'openai.com',
+	anthropic: 'anthropic.com',
+	'github-copilot': 'github.com',
+	xai: 'x.ai',
+	'kimi-coding': 'moonshot.ai',
+	openrouter: 'openrouter.ai',
+	deepseek: 'deepseek.com',
+	groq: 'groq.com',
+	meta: 'meta.com',
+	radius: 'radius.dev',
+};
+
+/** Marks drawn in dark ink, which disappear on the dark setup unless inverted. */
+const DARK_INK = new Set(['github.com', 'radius.dev']);
 
 /**
  * The theme a new install starts in, and the one the editor falls back to when nothing is set
@@ -139,68 +138,106 @@ const RECOMMENDED_MODELS = [
  */
 const DEFAULT_THEME = 'PiCode Dark';
 
-const STEPS = ['welcome', 'layout', 'pi', 'model', 'theme', 'extras', 'done'];
+/** Where the plans are explained: the free account and what Pro adds. */
+const PLANS_URL = 'https://www.getpicode.app/pricing';
+
+/** How long the browser gets to come back by itself before pasting is offered. */
+const PASTE_FALLBACK_MS = 30000;
+
+const STEPS = ['welcome', 'layout', 'agent', 'look', 'done'];
+
+/* ------------------------------------------------------------------ *
+ * State
+ * ------------------------------------------------------------------ */
 
 const state = {
-	/** How the editor's own language went: `ready`, `offline`… (the backend's word), until it is known. */
-	languageOutcome: undefined,
 	mode: 'first-run',
 	version: '',
 	snapshot: undefined,
 	step: 0,
-	/** Which pi the owner is pointing at, as the choice on screen (not yet written). */
+	/** The steps already shown, which the rail marks as seen. */
+	visited: new Set([0]),
+	/** Which pi runs (`picode.pi.runtime`), as the choice on screen. */
 	piChoice: 'internal',
-	/** The provider form's current values. */
-	provider: { id: 'openrouter', endpoint: 'https://openrouter.ai/api/v1', api: 'openai-completions', key: '' },
-	providerResult: undefined,
-	providerError: undefined,
-	/** Which provider the local-models tab is showing. */
-	localProvider: undefined,
-	/** What the local-models filter holds, so typing survives a repaint. */
-	modelQuery: '',
-	/** Which of the three ways in is on screen: `subscription`, `key` or `local`. */
-	modelTab: 'subscription',
-	/** Whether the API-key form shows the address/dialect fields as well. */
-	advanced: false,
+	piAdvancedOpen: false,
+	/** What pi reports as able to run models; `undefined` until it answers. */
+	liveProviders: undefined,
+	liveProvidersLoading: false,
 	subscriptions: undefined,
 	subscriptionsLoading: false,
 	subscriptionError: undefined,
+	/** The subscription sign-in in progress, if any. */
 	signIn: undefined,
-	/** The last "Test connection" answer: what the address said, and how long it took. */
+	pasteTimer: undefined,
+	/** What the provider search holds. */
+	providerQuery: '',
+	/** The provider row that is open: `live:<id>`, `sub:<id>` or `key:<id>` (`key:custom` for an address). */
+	openProvider: undefined,
+	/** The API-key form of the open row. */
+	provider: { id: '', endpoint: '', api: 'openai-completions', key: '' },
+	providerAdvanced: false,
 	probe: undefined,
 	probeRunning: false,
+	connecting: false,
+	providerError: undefined,
+	/** One line saying what the last action on the model changed. */
+	modelNote: undefined,
+	/** The model picked in each provider's row, before it is saved. */
+	pickedModel: {},
+	theme: undefined,
+	/** The theme under the pointer (or the keyboard), shown in the preview pane. */
+	previewTheme: undefined,
+	showAllThemes: false,
+	/** How PiCode is laid out (`picode.appearance.layout`). */
+	layout: 'editor',
+	/** The switches, as the editor has them in force; the backend says. */
+	extras: { mcp: true, context: true, voice: false },
+	voiceAvailable: false,
 	/** How much of the editor travels with a message (`picode.context.mode`). */
 	contextMode: 'project',
-	/** The model the owner picked, before it is written. */
-	pickedModel: undefined,
-	theme: undefined,
-	/** How PiCode is laid out (`picode.appearance.layout`): `editor` unless agent was chosen. */
-	layout: 'editor',
-	showAllThemes: false,
-	/** The three switches, as the editor has them in force; the backend says. */
-	extras: { mcp: true, context: true, voice: false },
-	/** Whether dictation exists for this system; the switch is offered only where it does. */
-	voiceAvailable: false,
-	packageQuery: '',
-	packageRows: undefined,
-	packageError: undefined,
+	gentle: undefined,
+	gentleLoading: false,
+	advancedOpen: false,
 	folder: undefined,
-	/** The account card's own state: nothing yet, or the request left for the editor. */
-	/** The account card: nothing yet, waiting in the browser, signed in, or the error. */
-	account: { state: 'idle', email: undefined, error: undefined },
-	/** How the last step will start: a folder, a clone, or nothing. */
+	/** How the editor will start: a folder, a clone, or nothing. */
 	startKind: undefined,
+	cloneUrl: '',
+	/** The account card: idle, waiting in the browser, signed in, signed out, or failed. */
+	account: { state: 'idle', email: undefined, error: undefined },
+	accountCancelled: false,
+	/** How the editor's own language went: `ready`, `offline`… (the backend's word), until it is known. */
+	languageOutcome: undefined,
 	busy: '',
 	notice: undefined,
 };
 
 /* ------------------------------------------------------------------ *
- * Small helpers
+ * Elements, and patching them onto the page
  * ------------------------------------------------------------------ */
 
 const $ = id => document.getElementById(id);
 
-/** One element, with attributes and children, without a template engine. */
+const HANDLERS = Symbol('handlers');
+const BOUND = Symbol('bound');
+
+/**
+ * Binds one dispatcher per event type and node; the handler it calls lives in `node[HANDLERS]`, so
+ * a patch can hand an existing node the handlers of the node that replaced it.
+ */
+function bind(node, type) {
+	node[BOUND] ??= new Set();
+	if (!node[BOUND].has(type)) {
+		node[BOUND].add(type);
+		node.addEventListener(type, event => node[HANDLERS]?.[type]?.(event));
+	}
+}
+
+/**
+ * One element, with attributes and children, without a template engine.
+ *
+ * `key` names a node among its siblings so a patch finds it again; `value` and `checked` are
+ * properties, not attributes; `html` sets the markup (only ever built here, from our own data).
+ */
 function el(tag, attributes, ...children) {
 	const node = document.createElement(tag);
 	for (const [name, value] of Object.entries(attributes ?? {})) {
@@ -213,107 +250,155 @@ function el(tag, attributes, ...children) {
 			node.textContent = String(value);
 		} else if (name === 'html') {
 			node.innerHTML = value;
+		} else if (name === 'key') {
+			node.setAttribute('data-key', String(value));
+		} else if (name === 'value') {
+			node.__value = String(value);
+		} else if (name === 'checked') {
+			node.__checked = Boolean(value);
+			node.checked = Boolean(value);
 		} else if (name.startsWith('on') && typeof value === 'function') {
-			node.addEventListener(name.slice(2).toLowerCase(), value);
-		} else if (name === 'checked' || name === 'disabled' || name === 'selected') {
-			node[name] = Boolean(value);
+			const type = name.slice(2).toLowerCase();
+			node[HANDLERS] ??= {};
+			node[HANDLERS][type] = value;
+			bind(node, type);
+		} else if (value === true) {
+			node.setAttribute(name, '');
 		} else {
 			node.setAttribute(name, String(value));
 		}
 	}
-	for (const child of children.flat()) {
+	for (const child of children.flat(Infinity)) {
 		if (child === undefined || child === null || child === false) {
 			continue;
 		}
 		node.append(typeof child === 'string' ? document.createTextNode(child) : child);
 	}
+	if (node.__value !== undefined) {
+		node.value = node.__value;
+	}
 	return node;
 }
 
-/** Replaces a container's contents. */
-function fill(node, ...children) {
-	if (!node) {
+function keyOf(node) {
+	return node.nodeType === 1 ? (node.getAttribute('data-key') ?? undefined) : undefined;
+}
+
+function sameKind(a, b) {
+	if (a.nodeType !== b.nodeType) {
+		return false;
+	}
+	if (a.nodeType !== 1) {
+		return true;
+	}
+	return a.nodeName === b.nodeName && a.getAttribute('type') === b.getAttribute('type') && keyOf(a) === keyOf(b);
+}
+
+/** Brings an existing node in line with a freshly built one, keeping its identity. */
+function update(old, next) {
+	if (old.nodeType !== 1) {
+		if (old.nodeValue !== next.nodeValue) {
+			old.nodeValue = next.nodeValue;
+		}
 		return;
 	}
-	// Painting a list again must not move the page: a choice repaints its step, and the person was
-	// reading the bottom of it. The position is put back at once, and again after the next frame,
-	// in case the browser settles the layout (or the focused card that was replaced) later.
-	const scroller = node.closest('.steps-scroll');
-	const top = scroller?.scrollTop;
-	node.replaceChildren(...children.flat().filter(child => child !== undefined && child !== null && child !== false));
-	if (scroller && top !== undefined && top > 0) {
-		scroller.scrollTop = top;
-		requestAnimationFrame(() => {
-			scroller.scrollTop = top;
-		});
+	for (const { name, value } of [...next.attributes]) {
+		if (old.getAttribute(name) !== value) {
+			old.setAttribute(name, value);
+		}
+	}
+	for (const { name } of [...old.attributes]) {
+		if (!next.hasAttribute(name)) {
+			old.removeAttribute(name);
+		}
+	}
+	old[HANDLERS] = next[HANDLERS];
+	for (const type of Object.keys(next[HANDLERS] ?? {})) {
+		bind(old, type);
+	}
+	patch(old, [...next.childNodes]);
+	if (next.__checked !== undefined && old.checked !== next.__checked) {
+		old.checked = next.__checked;
+	}
+	old.__value = next.__value;
+	// A field being typed in is its own truth: its `oninput` already wrote the state it came from.
+	if (next.__value !== undefined && old.value !== next.__value && document.activeElement !== old) {
+		old.value = next.__value;
 	}
 }
+
+/**
+ * Puts `next` inside `parent`, reusing what is already there.
+ *
+ * Keyed children are matched by key, the rest in order by tag; a matched node is updated in place
+ * (so focus, caret, scroll and loaded images survive), anything new is inserted, and what is left
+ * over is removed.
+ */
+function patch(parent, next) {
+	const wanted = next.flat(Infinity)
+		.filter(child => child !== undefined && child !== null && child !== false)
+		.map(child => (typeof child === 'string' ? document.createTextNode(child) : child));
+	const byKey = new Map();
+	const loose = [];
+	for (const node of parent.childNodes) {
+		const key = keyOf(node);
+		if (key === undefined) {
+			loose.push(node);
+		} else {
+			byKey.set(key, node);
+		}
+	}
+	let cursor = 0;
+	const result = wanted.map(node => {
+		const key = keyOf(node);
+		let match;
+		if (key !== undefined) {
+			match = byKey.get(key);
+			byKey.delete(key);
+		} else {
+			for (let index = cursor; index < loose.length; index++) {
+				if (sameKind(loose[index], node)) {
+					match = loose[index];
+					cursor = index + 1;
+					break;
+				}
+			}
+		}
+		if (match !== undefined && sameKind(match, node)) {
+			update(match, node);
+			return match;
+		}
+		return node;
+	});
+	result.forEach((node, index) => {
+		const at = parent.childNodes[index];
+		if (at !== node) {
+			parent.insertBefore(node, at ?? null);
+		}
+	});
+	while (parent.childNodes.length > result.length) {
+		parent.lastChild.remove();
+	}
+}
+
+/** Replaces a container's contents (the Import view and the language list paint with this). */
+function fill(node, ...children) {
+	if (node) {
+		patch(node, children);
+	}
+}
+
+/* ------------------------------------------------------------------ *
+ * Talking to the backend
+ * ------------------------------------------------------------------ */
 
 /** The snapshot, or an empty shape so the page can paint before the first answer. */
 function snapshot() {
-	return state.snapshot ?? { providers: [], packages: [], runtime: 'internal' };
+	return state.snapshot ?? { providers: [], packages: [], runtime: 'internal', orphanCredentials: [] };
 }
 
-/** Every model the profile declares, as `provider/model`. */
-function modelRefs() {
-	return providerList().flatMap(provider => provider.models.map(model => `${provider.id}/${model}`));
-}
-
-/** True when a usable model is recorded. */
 function hasModel() {
 	return typeof snapshot().defaultModel === 'string' && snapshot().defaultModel.length > 0;
-}
-
-/** Says something went wrong, in the header, without blocking the page. */
-let noticeTimer;
-
-/**
- * Says something that went wrong — once.
- *
- * An informational banner used to sit above the content for the rest of the session, following
- * the owner from step to step. It now has a close button, it leaves on its own, and moving to
- * another step takes it away: an alert is about the screen it appeared in.
- */
-function setNotice(text, kind) {
-	state.notice = text === undefined ? undefined : { text, kind: kind ?? 'info' };
-	renderNotice();
-	clearTimeout(noticeTimer);
-	if (state.notice !== undefined && state.notice.kind !== 'error') {
-		noticeTimer = setTimeout(() => setNotice(undefined), 9000);
-	}
-}
-
-function renderNotice() {
-	const node = $('notice');
-	if (state.notice === undefined) {
-		node.hidden = true;
-		$('notice-text').textContent = '';
-		return;
-	}
-	node.hidden = false;
-	node.className = `notice ${state.notice.kind}`;
-	$('notice-text').textContent = state.notice.text;
-}
-
-/** Runs an operation with the busy line on, and reports a failure instead of throwing. */
-async function withBusy(label, operation) {
-	state.busy = label;
-	renderBusy();
-	try {
-		return await operation();
-	} catch (error) {
-		setNotice(`${t('errorTitle')}: ${error instanceof Error ? error.message : String(error)}`, 'error');
-		return undefined;
-	} finally {
-		state.busy = '';
-		renderBusy();
-	}
-}
-
-function renderBusy() {
-	const busy = $('busy');
-	busy.hidden = state.busy.length === 0;
-	$('busy-text').textContent = state.busy;
 }
 
 /** One backend command, with the answer's error turned into a sentence. */
@@ -338,226 +423,243 @@ function adopt(next) {
 	state.layout = next.layout === 'agent' ? 'agent' : 'editor';
 }
 
+let noticeTimer;
+
+/**
+ * Says something that went wrong — once. It has a close button, it leaves on its own (errors
+ * stay until closed), and moving to another step takes it away.
+ */
+function setNotice(text, kind) {
+	state.notice = text === undefined ? undefined : { text, kind: kind ?? 'info' };
+	clearTimeout(noticeTimer);
+	if (state.notice !== undefined && state.notice.kind !== 'error') {
+		noticeTimer = setTimeout(() => setNotice(undefined), 9000);
+	}
+	renderNotice();
+}
+
+/** Runs an operation with the busy line on, and reports a failure instead of throwing. */
+async function withBusy(label, operation) {
+	state.busy = label;
+	renderBusy();
+	try {
+		return await operation();
+	} catch (error) {
+		setNotice(`${t('errorTitle')}: ${messageOf(error)}`, 'error');
+		return undefined;
+	} finally {
+		state.busy = '';
+		renderBusy();
+	}
+}
+
+function messageOf(error) {
+	return error instanceof Error ? error.message : String(error);
+}
+
 /* ------------------------------------------------------------------ *
- * Painting
+ * The frame: rail, notice, footer
  * ------------------------------------------------------------------ */
 
-/**
- * Nothing repaints the window any more.
- *
- * It used to: picking a theme rewrote the whole palette, which was a nice trick and a bad idea
- * at the same time — the interface you are trying to read became the thing being previewed, and
- * a blue-on-blue theme made every label hard to find. The chrome now has one palette (the
- * product's), and a theme lives where a theme belongs: inside its card's code sample, in its own
- * colours, so the comparison is between the themes rather than between the window and itself.
- */
-
-/**
- * Paints the window with a theme's own palette.
- *
- * It was removed for a while — "the chrome should not follow the theme, a blue-on-blue theme makes
- * labels hard to find" — and that was half right and half wrong: not following meant choosing a
- * theme was choosing a thumbnail, and the owner asked for the preview back. Following it is only
- * readable when the *whole* palette moves together, which is what this does: background, surface,
- * text, borders and accent, all from the theme's own colours.
- */
-function paintTheme(palette) {
-	const root = document.documentElement;
-	root.style.setProperty('--bg', palette.bg);
-	root.style.setProperty('--sidebar', palette.panel);
-	root.style.setProperty('--panel', palette.panel);
-	root.style.setProperty('--fg', palette.fg);
-	root.style.setProperty('--line', palette.line);
-	root.style.setProperty('--line-strong', palette.line);
-	root.style.setProperty('--comment', palette.comment);
-	root.style.setProperty('--fg-disabled', palette.comment);
-	root.style.setProperty('--accent', palette.accent);
-	root.style.setProperty('--accent-hover', palette.accent);
-	root.style.setProperty('--accent-ink', palette.dark ? '#FFFFFF' : '#04121B');
-	root.style.setProperty('--ok', palette.dark ? '#10B981' : '#0F7B4F');
-	root.style.setProperty('--info', palette.accent);
-	document.body.dataset.dark = palette.dark ? 'true' : 'false';
-}
-
-/** The palette to paint with: the theme in force, or the product's own before one is chosen. */
-function paletteOf(id) {
-	return THEMES.find(theme => theme.id === id)?.palette;
-}
-
-/** Puts the window back on the product palette (nothing chosen, or the pointer left the cards). */
-function paintProductPalette() {
-	const root = document.documentElement;
-	for (const name of ['--bg', '--sidebar', '--panel', '--fg', '--line', '--line-strong', '--comment', '--fg-disabled', '--accent', '--accent-hover', '--accent-ink', '--ok', '--info']) {
-		root.style.removeProperty(name);
+/** What each step holds right now, in a few words, and whether it wants a look. */
+function stepStatus(step) {
+	if (step === 'welcome') {
+		return { text: state.account.state === 'signed-in' ? t('accountSignedInShort') : t('railOptional') };
 	}
-	document.body.dataset.dark = 'true';
+	if (step === 'layout') {
+		return { text: state.layout === 'agent' ? t('layoutAgent') : t('layoutEditor') };
+	}
+	if (step === 'agent') {
+		if (!hasModel()) {
+			return { text: t('railNoModel'), attention: true };
+		}
+		const ref = snapshot().defaultModel;
+		return { text: ref.slice(ref.lastIndexOf('/') + 1) };
+	}
+	if (step === 'look') {
+		return { text: themeById(state.theme)?.label ?? state.theme };
+	}
+	return { text: undefined };
 }
 
-/** The seven steps in the rail, with what is done and where we are. */
 function renderRail() {
-	const rail = $('steps');
-	const items = STEPS.map((step, index) => {
-		const done = index < state.step;
+	patch($('steps'), STEPS.map((step, index) => {
 		const current = index === state.step;
+		const seen = state.visited.has(index) && !current;
+		const status = stepStatus(step);
+		const attention = status.attention === true && seen;
 		return el('button', {
 			type: 'button',
-			class: `step-link${current ? ' current' : ''}${done ? ' done' : ''}`,
+			key: step,
+			class: `step-link${current ? ' current' : ''}${seen ? ' seen' : ''}${attention ? ' attention' : ''}`,
 			'aria-current': current ? 'step' : undefined,
-			disabled: index > state.step,
 			onclick: () => go(index),
 		},
-			el('span', { class: 'step-index', text: done ? '✓' : String(index + 1) }),
-			el('span', { class: 'step-name', text: t('steps')[step] ?? step }),
+			el('span', { class: 'step-index', 'aria-hidden': 'true', text: attention ? '!' : seen ? '✓' : String(index + 1) }),
+			el('span', { class: 'step-text' },
+				el('span', { class: 'step-name', text: t('steps')[step] ?? step }),
+				status.text ? el('span', { class: 'step-state', text: status.text }) : undefined,
+			),
 		);
-	});
-	fill(rail, items);
+	}));
 	$('rail-subtitle').textContent = t('railSubtitle');
+	$('steps').setAttribute('aria-label', t('railSubtitle'));
 }
 
-/** Which section is on screen, and what the footer says. */
-/** The step last shown: only arriving at another one starts it at the top. */
-let shownStep = -1;
-
-function renderStep() {
-	const name = STEPS[state.step];
-	for (const section of document.querySelectorAll('.step')) {
-		section.classList.toggle('active', section.dataset.step === name);
-	}
-	renderRail();
-	renderFooter();
-	if (shownStep !== state.step) {
-		shownStep = state.step;
-		document.querySelector('.steps-scroll')?.scrollTo?.({ top: 0 });
-	}
+function renderNotice() {
+	const node = $('notice');
+	node.hidden = state.notice === undefined;
+	node.className = `notice ${state.notice?.kind ?? ''}`;
+	$('notice-text').textContent = state.notice?.text ?? '';
+	$('notice-close').title = t('dismiss');
 }
 
+function renderBusy() {
+	$('busy').hidden = state.busy.length === 0;
+	$('busy-text').textContent = state.busy;
+}
+
+/** One meaning for Skip: open the editor now, keeping whatever has been chosen. */
 function renderFooter() {
-	const name = STEPS[state.step];
 	const last = state.step === STEPS.length - 1;
 	$('back').textContent = t('back');
 	$('back').hidden = state.step === 0;
 	$('next').textContent = last ? t('startCoding') : state.step === 0 ? t('getStarted') : t('next');
-	// The model step is the one that can hold somebody up, and it says so with its own escape.
-	let skipLabel = t('skip');
-	if (name === 'model' && !hasModel()) {
-		skipLabel = t('modelLater');
-	} else if (name === 'extras') {
-		skipLabel = t('skipExtras');
-	} else if (name === 'done') {
-		$('skip').hidden = true;
-		$('next').disabled = false;
-		return;
+	$('skip').hidden = last;
+	$('skip').textContent = t('skip');
+	$('skip').title = t('skipWhy');
+}
+
+/** The step last painted: only arriving at another one starts at the top and moves the focus. */
+let shownStep = -1;
+
+const VIEWS = {
+	welcome: welcomeView,
+	layout: layoutView,
+	agent: agentView,
+	look: lookView,
+	done: doneView,
+};
+
+/** Paints everything from `state`. Cheap: only what changed is touched. */
+function render() {
+	const name = STEPS[state.step];
+	for (const section of document.querySelectorAll('.step')) {
+		const active = section.dataset.step === name;
+		section.classList.toggle('active', active);
+		section.hidden = !active;
+		if (active) {
+			patch(section, VIEWS[name]());
+		}
 	}
-	$('skip').hidden = false;
-	$('skip').textContent = skipLabel;
-	$('next').disabled = STEPS[state.step] === 'model' && !hasModel();
+	renderRail();
+	renderFooter();
+	renderNotice();
+	renderBusy();
+	if (shownStep !== state.step) {
+		const arrived = shownStep !== -1;
+		shownStep = state.step;
+		document.querySelector('.steps-scroll')?.scrollTo?.({ top: 0 });
+		// The heading takes the focus, so a screen reader says where we are and Tab starts at the top.
+		if (arrived) {
+			document.querySelector('.step.active .step-title')?.focus({ preventScroll: true });
+		}
+	}
 }
 
-/* -- step 1: welcome ------------------------------------------------ */
+/* ------------------------------------------------------------------ *
+ * Step 1: welcome
+ * ------------------------------------------------------------------ */
 
-function renderWelcome() {
-	renderAccount();
-	$('welcome-title').textContent = t('welcomeTitle');
-	$('welcome-line').textContent = state.mode === 'update' ? t('welcomeUpdate') : state.mode === 'setup' ? t('welcomeSetup') : t('welcomeFirst');
-	// The second line only belongs to a first run: the other two modes already say what they are.
-	$('welcome-how').textContent = state.mode === 'first-run' ? t('welcomeHow') : '';
+function welcomeView() {
+	const line = state.mode === 'update' ? t('welcomeUpdateMode') : state.mode === 'setup' ? t('welcomeSetup') : t('welcomeFirst');
+	return [
+		el('div', { class: 'welcome' },
+			el('img', { class: 'welcome-mark', src: 'media/picode.svg', alt: '' }),
+			el('h1', { class: 'step-title', tabindex: '-1', text: t('welcomeTitle') }),
+			el('p', { class: 'lead', text: line }),
+			state.mode === 'first-run' ? el('p', { class: 'lead-sub', text: t('welcomeHow') }) : undefined,
+			accountCard(),
+			// Importing fills PiCode's own profile, so it is offered only while that is the one in use.
+			state.piChoice === 'internal' ? el('button', {
+				type: 'button',
+				key: 'import',
+				class: 'import-action',
+				onclick: () => void openImportView({ embedded: true }),
+			},
+				el('span', { class: 'import-mark', 'aria-hidden': 'true', text: '📥' }),
+				el('span', { class: 'import-text' },
+					el('strong', { text: t('impOpenWelcome') }),
+					el('span', { text: t('impWelcomeHint') }),
+				),
+				el('span', { class: 'import-go', 'aria-hidden': 'true', text: '→' }),
+			) : undefined,
+		),
+	];
 }
 
-/**
- * The account card: one line of status, one action, no repetition.
- *
- * It used to say "waiting for the browser" twice — once as the status and again inside a disabled
- * primary button — which reads as a stuck interface. The waiting state now has the sentence once,
- * with a spinner, the instruction underneath, and a quiet way out; the signed-in state swaps the
- * badge and offers to sign out.
- */
-function renderAccount() {
-	const node = $('welcome-account');
+/** The account card: one line of status, one action, no repetition. */
+function accountCard() {
 	if (snapshot().accountAvailable !== true) {
-		node.hidden = true;
-		node.replaceChildren();
-		return;
+		return undefined;
 	}
-	node.hidden = false;
 	const account = state.account;
 	const signedIn = account.state === 'signed-in';
+	const waiting = account.state === 'waiting';
+	const signedOut = !signedIn && !waiting && account.state !== 'signed-out';
 
-	// Signed in: a profile, not a paragraph. The avatar is the account's own picture when the
-	// identity carries one, and the initials when it does not.
-	const profile = signedIn ? el('div', { class: 'account-profile' },
-		account.picture === undefined
-			? el('span', { class: 'account-avatar', text: initialsOf(account.email) })
-			: el('img', {
-				class: 'account-avatar account-picture',
-				src: account.picture,
-				alt: '',
-				// A profile picture is a remote file: if it does not arrive, the initials are still
-				// an identity — a broken image icon is not.
-				onerror: event => {
-					const fallback = event.target.parentElement?.querySelector('.account-picture');
-					if (fallback !== null && fallback !== undefined) {
-						fallback.replaceWith(el('span', { class: 'account-avatar', text: initialsOf(account.email) }));
-					}
-				},
-			}),
-		el('div', { class: 'account-identity' },
-			el('span', { class: 'account-name', text: account.email ?? t('accountTitle') }),
-			el('span', { class: 'account-sub', text: t('accountSignedInShort') }),
-		),
-	) : undefined;
+	const avatar = account.picture === undefined
+		? el('span', { class: 'account-avatar', text: initialsOf(account.email) })
+		: el('img', {
+			class: 'account-avatar',
+			src: account.picture,
+			alt: '',
+			// A remote picture that does not arrive falls back to the initials, not a broken icon.
+			onerror: () => {
+				state.account = { ...state.account, picture: undefined };
+				render();
+			},
+		});
 
 	const status = account.state === 'signed-out'
 		? el('p', { class: 'account-line', text: t('accountSignOutQueued') })
-		: account.state === 'waiting'
+		: waiting
 			? el('p', { class: 'account-line waiting' }, el('span', { class: 'spinner' }), t('accountWaiting'))
 			: account.state === 'failed'
 				? el('p', { class: 'account-line error', text: t('accountFailed', account.error ?? '?') })
-				: signedIn ? undefined : el('p', { class: 'account-line', text: t('accountHow') });
+				: undefined;
 
-	const action = signedIn
-		? el('button', { type: 'button', class: 'secondary compact', onclick: () => signOutOfAccount() }, t('accountSignOut'))
-		: account.state === 'waiting'
-			? el('button', { type: 'button', class: 'link quiet', onclick: () => cancelAccountSignIn() }, t('accountCancel'))
-			: el('button', {
-				type: 'button', class: 'primary account-button',
-				onclick: () => startAccountSignIn(),
-			},
-				el('span', { class: 'account-mark', text: '👤' }),
-				el('span', { text: account.state === 'failed' ? t('accountRetry') : t('accountSignIn') }),
-			);
-
-	// Not signed in and not waiting: what the account is, and where the plans are.
-	const signedOut = !signedIn && account.state !== 'waiting' && account.state !== 'signed-out';
-
-	fill(node,
+	return el('div', { class: 'panel account-card', key: 'account' },
 		el('div', { class: 'panel-head account-head' },
 			el('span', { class: 'panel-title', text: t('accountTitle') }),
 		),
-		el('p', { class: 'account-line account-subtitle', text: t('accountWhy') }),
-		profile,
+		signedIn ? el('div', { class: 'account-profile' },
+			avatar,
+			el('div', { class: 'account-identity' },
+				el('span', { class: 'account-name', text: account.email ?? t('accountTitle') }),
+				el('span', { class: 'account-sub', text: t('accountSignedInShort') }),
+			),
+		) : el('p', { class: 'account-line', text: t('accountWhy') }),
 		status,
-		signedOut ? accountPerks() : undefined,
-		account.state === 'waiting' ? el('p', { class: 'hint account-hint', text: t('accountWaitingWhy') }) : undefined,
-		// Everything sits on the card's centre line: one action, or the waiting pair in a row.
+		signedOut ? el('ul', { class: 'account-perks' },
+			el('li', {}, el('span', { class: 'perk-mark', text: '🆓' }), el('span', { text: t('accountFree') })),
+			el('li', {}, el('span', { class: 'perk-mark', text: '☁️' }), el('span', { text: t('accountPro') })),
+		) : undefined,
+		waiting ? el('p', { class: 'hint', text: t('accountWaitingWhy') }) : undefined,
 		el('div', { class: 'account-actions' },
-			// Waiting: the page first, the way out second, both on the centre line.
-			account.state === 'waiting' && typeof account.url === 'string'
+			waiting && typeof account.url === 'string'
 				? el('button', { type: 'button', class: 'secondary compact', onclick: () => window.picode.openExternal(account.url) }, t('accountReopen'))
 				: undefined,
-			action,
+			signedIn
+				? el('button', { type: 'button', class: 'secondary compact', onclick: () => signOutOfAccount() }, t('accountSignOut'))
+				: waiting
+					? el('button', { type: 'button', class: 'link quiet', onclick: () => cancelAccountSignIn() }, t('accountCancel'))
+					: el('button', { type: 'button', class: 'primary account-button', onclick: () => startAccountSignIn() },
+						el('span', { 'aria-hidden': 'true', text: '👤' }),
+						el('span', { text: account.state === 'failed' ? t('accountRetry') : t('accountSignIn') }),
+					),
 			signedOut ? el('button', { type: 'button', class: 'link quiet', onclick: () => window.picode.openExternal(PLANS_URL) }, t('accountPlans')) : undefined,
 		),
-	);
-}
-
-/** Where the plans are explained: the free account and what Pro adds. */
-const PLANS_URL = 'https://www.getpicode.app/pricing';
-
-/** What an account is, said once, in the states where a person has not signed in yet. */
-function accountPerks() {
-	return el('ul', { class: 'account-perks' },
-		el('li', {}, el('span', { class: 'perk-mark', text: '\ud83c\udd93' }), el('span', { text: t('accountFree') })),
-		el('li', {}, el('span', { class: 'perk-mark', text: '\u2601\ufe0f' }), el('span', { text: t('accountPro') })),
 	);
 }
 
@@ -569,42 +671,35 @@ function initialsOf(email) {
 	return (letters || '?').toUpperCase();
 }
 
-
 /** Signs in for real: the browser opens now, and the card says what is happening. */
 async function startAccountSignIn() {
 	state.accountCancelled = false;
 	state.account = { state: 'waiting', email: undefined, error: undefined, url: undefined };
-	renderAccount();
+	render();
 	// The main process says which address it opened; the card offers it again, so a browser that
 	// opened behind everything is one click away instead of a second attempt.
 	const stopListening = window.picode.account.onEvent(message => {
 		if (message?.type === 'opening' && typeof message.url === 'string') {
 			state.account = { ...state.account, url: message.url };
-			renderAccount();
+			render();
 		}
 	});
 	setTimeout(() => stopListening(), 60000);
 	const result = await window.picode.account.signIn();
-	// Cancelled while waiting: the answer that comes back is the cancellation itself, and it must
-	// not turn into "authentication failed" on screen.
+	// Cancelled while waiting: the answer that comes back is the cancellation itself.
 	if (state.accountCancelled === true) {
 		return;
 	}
-	if (result?.ok === true) {
-		state.account = { state: 'signed-in', email: result.email, picture: result.picture, error: undefined };
-		// The session itself is stored by the main process (the code is spent by the exchange and
-		// cannot be handed over); nothing to forward from here.
-	} else {
-		state.account = { state: 'failed', email: undefined, error: result?.error ?? t('errorTitle') };
-	}
-	renderAccount();
+	state.account = result?.ok === true
+		? { state: 'signed-in', email: result.email, picture: result.picture, error: undefined }
+		: { state: 'failed', email: undefined, error: result?.error ?? t('errorTitle') };
+	render();
 }
 
-/** Stops waiting: the listener is closed and the card goes back to where it was. */
 async function cancelAccountSignIn() {
 	state.accountCancelled = true;
 	state.account = { state: 'idle', email: undefined, error: undefined };
-	renderAccount();
+	render();
 	try {
 		await window.picode.account.cancel();
 	} catch {
@@ -613,16 +708,13 @@ async function cancelAccountSignIn() {
 }
 
 /**
- * Signs out for real: no code left here, and the editor drops its own session at start.
- *
- * The session lives in the editor's secret storage, which this window cannot reach — so it says
- * what it did ("your editor will finish it") instead of pretending the cookie is gone.
+ * Signs out: the running editor drops its session now, and the next start finishes the job. The
+ * session lives in the editor's secret storage, which this window cannot reach.
  */
 async function signOutOfAccount() {
 	state.account = { state: 'signed-out', email: undefined, error: undefined };
-	renderAccount();
+	render();
 	try {
-		// The running editor first: removing the account from its storage is what signs it out now.
 		await window.picode.account.signOut();
 		await command('clearPendingCode', {});
 		await command('setAccountSignOut', {});
@@ -631,107 +723,101 @@ async function signOutOfAccount() {
 	}
 }
 
-/* -- step 2: pi ---------------------------------------------------- */
+/* ------------------------------------------------------------------ *
+ * Step 2: layout
+ * ------------------------------------------------------------------ */
 
-function renderPi() {
-	$('pi-title').textContent = t('piTitle');
-	$('pi-lead').textContent = t('piLead');
-
-	const data = snapshot();
-	const internalVersion = data.internalPiVersion;
-	const external = data.externalPi;
-
-	const cards = [
-		card({
-			key: 'internal',
-			title: t('piInternal'),
-			badges: [t('piInternalRecommended')],
-			why: t('piInternalWhy'),
-			detail: internalVersion ? `${t('piInternalVersion')} ${internalVersion}` : undefined,
-			available: true,
-		}),
-		card({
-			key: 'external',
-			title: t('piExternal'),
-			badges: [t('piExternalReadOnly')],
-			why: t('piExternalWhy'),
-			detail: external ? `${t('piExternalFound')}${external.version ? ` · v${external.version}` : ''}` : t('piExternalMissing'),
-			available: external !== undefined && external.hasProfile,
-		}),
-	];
-	fill($('pi-cards'), cards);
-	renderImport();
+function escapeXml(text) {
+	return String(text).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 }
 
-function card(options) {
-	const chosen = state.piChoice === options.key;
-	const disabled = options.available !== true;
+/**
+ * A drawing of each layout, with its zones named. Plain SVG painted with the window's own tokens
+ * (`.lp-*` in onboarding.css), so it follows the palette and costs nothing to load.
+ */
+function layoutDrawing(layout) {
+	const agent = layout === 'agent';
+	const [left, centre, right] = t(agent ? 'layoutAgentZones' : 'layoutEditorZones').map(escapeXml);
+	const label = (x, y, text) => `<text class="lp-label" x="${x}" y="${y}" text-anchor="middle">${text}</text>`;
+	const lines = (x, y, widths, gap = 9) => widths.map((width, index) => `<rect class="lp-line" x="${x}" y="${y + index * gap}" width="${width}" height="4" rx="2"/>`).join('');
+	const svg = agent
+		? `<rect class="lp-window" x="1" y="1" width="318" height="178" rx="10"/>
+			<rect class="lp-zone" x="10" y="12" width="70" height="158" rx="6"/>
+			${lines(18, 34, [50, 42, 54, 38, 46])}
+			<rect class="lp-pill" x="18" y="20" width="54" height="8" rx="4"/>
+			<rect class="lp-zone lp-main" x="88" y="12" width="138" height="158" rx="6"/>
+			<rect class="lp-bubble" x="140" y="28" width="76" height="14" rx="7"/>
+			<rect class="lp-bubble lp-bubble-pi" x="98" y="50" width="96" height="28" rx="7"/>
+			<rect class="lp-bubble" x="150" y="86" width="66" height="14" rx="7"/>
+			<rect class="lp-input" x="98" y="146" width="118" height="16" rx="8"/>
+			<rect class="lp-zone" x="234" y="12" width="76" height="158" rx="6"/>
+			<rect class="lp-pill" x="242" y="20" width="18" height="6" rx="3"/><rect class="lp-pill" x="264" y="20" width="18" height="6" rx="3"/><rect class="lp-pill" x="286" y="20" width="16" height="6" rx="3"/>
+			<rect class="lp-diff-add" x="242" y="36" width="56" height="4" rx="2"/><rect class="lp-diff-del" x="242" y="45" width="40" height="4" rx="2"/><rect class="lp-diff-add" x="242" y="54" width="48" height="4" rx="2"/>
+			${label(45, 120, left)}${label(157, 126, centre)}${label(272, 120, right)}`
+		: `<rect class="lp-window" x="1" y="1" width="318" height="178" rx="10"/>
+			<rect class="lp-zone lp-bar" x="10" y="12" width="12" height="158" rx="4"/>
+			<rect class="lp-zone" x="28" y="12" width="64" height="158" rx="6"/>
+			${lines(36, 22, [44, 36, 48, 30, 40, 34])}
+			<rect class="lp-zone lp-main" x="98" y="12" width="138" height="110" rx="6"/>
+			${lines(108, 24, [70, 96, 58, 88, 64, 40], 10)}
+			<rect class="lp-zone lp-bottom" x="98" y="128" width="138" height="42" rx="6"/>
+			${lines(108, 140, [60, 84], 9)}
+			<rect class="lp-zone" x="242" y="12" width="68" height="158" rx="6"/>
+			<rect class="lp-bubble" x="256" y="26" width="46" height="12" rx="6"/>
+			<rect class="lp-bubble lp-bubble-pi" x="250" y="44" width="52" height="22" rx="6"/>
+			${label(60, 120, left)}${label(167, 96, centre)}${label(167, 160, escapeXml(t('layoutEditorBottom')))}${label(276, 120, right)}`;
+	return el('div', {
+		class: 'layout-preview',
+		'aria-hidden': 'true',
+		html: `<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`,
+	});
+}
+
+function layoutView() {
+	return [
+		el('h2', { class: 'step-title', tabindex: '-1', text: t('layoutTitle') }),
+		el('p', { class: 'lead', text: t('layoutLead') }),
+		el('div', { class: 'layout-grid', role: 'radiogroup', 'aria-label': t('layoutTitle') }, ['agent', 'editor'].map(layoutCard)),
+	];
+}
+
+function layoutCard(layout) {
+	const chosen = state.layout === layout;
+	const agent = layout === 'agent';
 	return el('button', {
 		type: 'button',
-		class: `card${chosen ? ' chosen' : ''}${disabled ? ' muted' : ''}`,
-		disabled,
-		onclick: () => choosePi(options.key),
+		key: layout,
+		class: `layout-card${chosen ? ' chosen' : ''}`,
+		role: 'radio',
+		'aria-checked': chosen ? 'true' : 'false',
+		onclick: () => chooseLayout(layout),
 	},
-		el('div', { class: 'card-head' },
-			el('span', { class: 'card-title', text: options.title }),
-			...(options.badges ?? []).map(text => el('span', { class: 'badge', text })),
-			chosen ? el('span', { class: 'badge ok', text: t('piChosen') }) : undefined,
+		layoutDrawing(layout),
+		el('div', { class: 'layout-head' },
+			el('span', { class: 'layout-name', text: agent ? `🤖 ${t('layoutAgent')}` : `💻 ${t('layoutEditor')}` }),
+			agent ? el('span', { class: 'badge new', text: t('layoutNew') }) : undefined,
+			chosen ? el('span', { class: 'check', 'aria-hidden': 'true', text: '✓' }) : undefined,
 		),
-		el('p', { class: 'card-why', text: options.why }),
-		options.detail ? el('p', { class: 'card-detail', text: options.detail }) : undefined,
+		el('span', { class: 'layout-note', text: agent ? t('layoutAgentNote') : t('layoutEditorNote') }),
+		el('ul', { class: 'layout-points' }, t(agent ? 'layoutAgentPoints' : 'layoutEditorPoints').map(point => el('li', { text: point }))),
 	);
 }
 
-async function choosePi(key) {
-	state.piChoice = key;
-	renderPi();
-	await withBusy('', async () => {
-		await command('setRuntime', { runtime: key });
-	});
-	renderPi();
+async function chooseLayout(layout) {
+	state.layout = layout;
+	render();
+	await withBusy('', async () => { await command('setLayout', { layout }); });
+	render();
 }
 
-/**
- * The import card: only when there is another profile to bring something from, and only when
- * the pi in use is PiCode's own — importing into a profile that is not being read would leave
- * the panel showing one thing and pi running another.
- */
-function renderImport() {
-	const node = $('import-card');
-	if (state.piChoice !== 'internal') {
-		node.hidden = true;
-		return;
-	}
-	node.hidden = false;
-	fill(node,
-		el('div', { class: 'panel-head' },
-			el('span', { class: 'panel-title', text: `📥 ${t('impTitle')}` }),
-		),
-		el('p', { class: 'panel-hint', text: t('impWizardLead') }),
-		el('div', { class: 'panel-actions' },
-			el('button', { class: 'secondary', type: 'button', onclick: () => void openImportView({ embedded: true }) }, t('impOpen')),
-		),
-	);
-}
-
-
-/* -- step 3: model ------------------------------------------------- */
+/* ------------------------------------------------------------------ *
+ * Step 3: agent (which pi, and the model it talks to)
+ * ------------------------------------------------------------------ */
 
 /**
- * The model step, as three tabs and one panel.
- *
- * It used to be three cards that each opened a block underneath, and two of them could be open at
- * once: the page grew taller than the window and the last panel slid under the footer. A tab bar
- * makes "one thing at a time" structural instead of a promise — every panel is shown by exactly
- * one tab, and switching closes the other.
- */
-/**
- * The providers that can run models, as pi itself reports them once it has loaded.
- *
- * Until that answer arrives the ones the profile declares are shown. pi's answer is the truth: it
- * includes the providers a package brings (NAN) and the ones signed in with a subscription
- * (Anthropic), which no file declares, and it keeps each provider apart instead of reading a
- * model id's prefix as if it were one.
+ * The providers that can run models: pi's own answer once it has loaded (it includes what a
+ * package brings and what a subscription signed in), plus anything the profile declares that pi
+ * did not list (a local router that needs no key).
  */
 function providerList() {
 	const declared = snapshot().providers.map(provider => ({ ...provider, name: provider.id, subscription: false }));
@@ -745,15 +831,16 @@ function providerList() {
 		hasKey: true,
 		subscription: provider.subscription === true,
 	}));
-	// pi only lists a provider that can run right now. One the profile declares (omni, a local
-	// router that needs no key) is still the owner's provider, with its own models, so it stays.
 	const seen = new Set(live.map(provider => provider.id));
 	return [...live, ...declared.filter(provider => !seen.has(provider.id))];
 }
 
-/** Asks pi which providers can run models right now, once per change. */
+function refsOf(provider) {
+	return provider.models.map(model => `${provider.id}/${model}`);
+}
+
 async function loadProviders() {
-	if (state.liveProviders !== undefined || state.liveProvidersLoading === true) {
+	if (state.liveProviders !== undefined || state.liveProvidersLoading) {
 		return;
 	}
 	state.liveProvidersLoading = true;
@@ -766,181 +853,13 @@ async function loadProviders() {
 		// The declared providers stay on screen; nothing is lost by pi not answering.
 	} finally {
 		state.liveProvidersLoading = false;
-		renderModel();
-		renderFooter();
+		render();
 	}
 }
 
-function renderModel() {
-	if (state.liveProviders === undefined && state.liveProvidersLoading !== true) {
-		void loadProviders();
-	}
-	$('model-title').textContent = t('modelTitle');
-	$('model-lead').textContent = t('modelLead');
-
-	const refs = modelRefs();
-	// Nothing to show in "local" means the tab does not exist: a tab that opens an empty shelf is
-	// a dead end with a label.
-	if (state.modelTab === 'local' && refs.length === 0) {
-		state.modelTab = 'subscription';
-	}
-
-	renderTabs(refs.length);
-	renderStatus(refs.length);
-	renderSubscriptions();
-	renderProviderForm();
-	renderLocal(refs);
-	// Only while there is nothing connected, and not while the sign-in tab is saying it already.
-	$('model-note').textContent = refs.length > 0 || state.modelTab === 'subscription' ? '' : t('modelSubscriptionNote');
-}
-
-/** The three ways in, as tabs with their counts. */
-function renderTabs(localCount) {
-	const tabs = [
-		{ key: 'subscription', label: t('modelSubscription'), mark: '💳' },
-		{ key: 'key', label: t('modelApiKey'), mark: '🔑' },
-		{ key: 'local', label: t('modelLocal'), mark: '📦', count: localCount },
-	];
-	fill($('model-tabs'), tabs
-		.filter(tab => tab.key !== 'local' || localCount > 0)
-		.map(tab => el('button', {
-			type: 'button',
-			class: `tab${state.modelTab === tab.key ? ' chosen' : ''}`,
-			role: 'tab',
-			'aria-selected': state.modelTab === tab.key ? 'true' : 'false',
-			onclick: () => {
-				state.modelTab = tab.key;
-				renderModel();
-			},
-		},
-			el('span', { class: 'tab-mark', text: tab.mark }),
-			el('span', { text: tab.label }),
-			tab.key === 'local' ? el('span', { class: 'tab-count', text: String(localCount) }) : undefined,
-		)));
-}
-
-/** What is already connected, on whichever tab you are standing. */
-function renderStatus(localCount) {
-	const node = $('model-status');
-	const providers = providerList().filter(provider => provider.models.length > 0);
-	if (providers.length === 0) {
-		node.hidden = true;
-		node.replaceChildren();
-		return;
-	}
-	node.hidden = false;
-	fill(node,
-		el('span', { class: 'dot ok' }),
-		el('span', {
-			text: `${t('modelConnected')} · ${countOf(localCount)} ${t('modelConnectedVia')} ${providers.map(provider => provider.name).join(', ')}`,
-		}),
-	);
-}
-
-function renderProviderForm() {
-	const node = $('model-form');
-	if (state.modelTab !== 'key') {
-		node.hidden = true;
-		node.replaceChildren();
-		return;
-	}
-	node.hidden = false;
-	const presets = PROVIDER_PRESETS.map(preset => el('button', {
-		type: 'button',
-		class: `preset${state.provider.id === preset.id ? ' chosen' : ''}`,
-		onclick: () => {
-			// A known provider fills its own address and dialect: asking for them is asking the
-			// owner to type what the preset already knows.
-			state.provider = { id: preset.id, endpoint: preset.endpoint, api: preset.api, key: state.provider.key };
-			state.probe = undefined;
-			renderModel();
-		},
-	}, el('span', { class: 'preset-mark', text: preset.mark }), el('span', { text: preset.label })));
-
-	const field = (label, input) => el('label', { class: 'field' }, el('span', { class: 'field-label', text: label }), input);
-	const preset = PROVIDER_PRESETS.find(candidate => candidate.id === state.provider.id);
-	const knownPreset = preset !== undefined && state.provider.endpoint === preset.endpoint;
-
-	// The key comes from somewhere the owner has to go, and sending them there is the point.
-	const keyLink = preset === undefined ? undefined : el('button', {
-		type: 'button',
-		class: 'link small',
-		title: preset.keyUrl,
-		onclick: async () => {
-			const answer = await window.picode.openExternal(preset.keyUrl);
-			if (answer?.ok !== true) {
-				setNotice(answer?.error ?? t('errorTitle'), 'error');
-			}
-		},
-	}, `${t('providerGetKey')} · ${preset.label}`);
-
-	fill(node,
-		el('div', { class: 'panel-head' },
-			el('span', { class: 'panel-title', text: knownPreset ? `${t('modelApiKey')} · ${preset.label}` : t('modelApiKey') }),
-			keyLink,
-		),
-		el('div', { class: 'presets' }, presets),
-		// One field by default. The address, the dialect and the name are what a preset is for;
-		// they are here for a local server or an endpoint nobody has heard of.
-		// A short placeholder and the sentence underneath: a paragraph inside a one-line field is
-		// what made the key row look like two texts stacked on each other.
-		field(t('providerKey'), el('input', {
-			type: 'password', value: state.provider.key, spellcheck: 'false', autocomplete: 'off',
-			placeholder: 'sk-…',
-			oninput: event => { state.provider.key = event.target.value; },
-		})),
-		el('p', { class: 'hint', text: t('providerKeyHint') }),
-		state.advanced ? el('div', { class: 'fields' },
-			field(t('providerName'), el('input', {
-				type: 'text', value: state.provider.id, spellcheck: 'false',
-				oninput: event => { state.provider.id = event.target.value; },
-			})),
-			field(t('providerEndpoint'), el('input', {
-				type: 'text', value: state.provider.endpoint, spellcheck: 'false',
-				oninput: event => { state.provider.endpoint = event.target.value; },
-			})),
-			field(t('providerDialect'), el('select', {
-				onchange: event => { state.provider.api = event.target.value; },
-			}, ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'].map(api =>
-				el('option', { value: api, selected: state.provider.api === api, text: api })))),
-		) : undefined,
-		el('button', {
-			type: 'button',
-			class: 'link small advanced-toggle',
-			onclick: () => { state.advanced = !state.advanced; renderModel(); },
-		}, state.advanced ? t('providerAdvancedHide') : t('providerAdvancedShow')),
-		probeStatus(),
-		state.providerError ? el('p', { class: 'hint error', text: state.providerError }) : undefined,
-		el('div', { class: 'panel-actions' },
-			el('button', { type: 'button', class: 'secondary', disabled: state.probeRunning, onclick: testProvider },
-				state.probeRunning ? t('providerTesting') : t('providerTest')),
-			el('button', { type: 'button', class: 'primary', onclick: connectProvider }, t('providerConnect')),
-		),
-		el('p', { class: 'hint', text: t('providerWait') }),
-	);
-}
-
-/**
- * The providers a subscription can be opened for — asked of pi, not of a list we keep.
- *
- * The panel is the accordion: it is the same slot the API key uses, so opening one closes the
- * other and nothing is left holding empty space.
- */
-function openSubscriptions() {
-	state.modelTab = 'subscription';
-	state.subscriptionError = undefined;
-	renderModel();
-}
-
-/**
- * Asks pi which providers can be signed in to, once.
- *
- * The list belongs to a tab that is on screen from the start now, so it is asked for when the tab
- * paints — the same mistake the import card made: a panel that shows a spinner nothing ever
- * resolves is worse than one that asks.
- */
+/** Asks pi which providers can be signed in to, once. */
 async function loadSubscriptions() {
-	if (state.subscriptions !== undefined || state.subscriptionsLoading === true) {
+	if (state.subscriptions !== undefined || state.subscriptionsLoading) {
 		return;
 	}
 	state.subscriptionsLoading = true;
@@ -948,51 +867,290 @@ async function loadSubscriptions() {
 		const answer = await window.picode.command('subscriptions', {});
 		state.subscriptions = Array.isArray(answer?.data) ? answer.data : [];
 	} catch (error) {
-		state.subscriptionError = error instanceof Error ? error.message : String(error);
+		state.subscriptions = [];
+		state.subscriptionError = messageOf(error);
 	} finally {
 		state.subscriptionsLoading = false;
-		renderSubscriptions();
+		render();
 	}
 }
 
-/** Where each provider's mark comes from; anything else gets its initials on a colour. */
-const PROVIDER_DOMAINS = {
-	'openai-codex': 'openai.com',
-	openai: 'openai.com',
-	anthropic: 'anthropic.com',
-	'github-copilot': 'github.com',
-	xai: 'x.ai',
-	'kimi-coding': 'moonshot.ai',
-	openrouter: 'openrouter.ai',
-	meta: 'meta.com',
-	radius: 'radius.dev',
-};
+/** Logos already fetched (`ok`) or given up on (`failed`); a row paints the logo only once it has arrived. */
+const LOGOS = new Map();
 
-/** Marks drawn in dark ink, which disappear on the dark setup unless inverted. */
-const DARK_INK = new Set(['github.com', 'radius.dev']);
+function logoUrl(domain) {
+	return `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+}
 
-/** The provider's mark: initials straight away, the real logo once it has loaded. */
+/** The provider's mark: initials on a colour, the real logo once it has loaded. */
 function providerMark(id) {
-	const mark = el('span', { class: 'sub-mark' });
+	const domain = PROVIDER_DOMAINS[id];
+	const status = domain === undefined ? undefined : LOGOS.get(domain);
+	if (status === 'ok') {
+		return el('span', { class: `sub-mark logo${DARK_INK.has(domain) ? ' dark-ink' : ''}`, 'aria-hidden': 'true' }, el('img', { src: logoUrl(domain), alt: '' }));
+	}
+	if (domain !== undefined && status === undefined) {
+		LOGOS.set(domain, 'loading');
+		const image = new Image();
+		image.onload = () => { LOGOS.set(domain, 'ok'); render(); };
+		image.onerror = () => { LOGOS.set(domain, 'failed'); };
+		image.src = logoUrl(domain);
+	}
 	let hash = 0;
 	for (const char of id) {
 		hash = (hash * 31 + char.charCodeAt(0)) % 360;
 	}
-	mark.style.background = `hsl(${hash} 55% 32%)`;
-	mark.textContent = id.split(/[-_]/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
-	const domain = PROVIDER_DOMAINS[id];
-	if (domain !== undefined) {
-		const image = new Image();
-		image.alt = '';
-		image.onload = () => {
-			mark.textContent = '';
-			mark.style.background = 'transparent';
-			mark.classList.toggle('dark-ink', DARK_INK.has(domain));
-			mark.appendChild(image);
-		};
-		image.src = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+	return el('span', {
+		class: 'sub-mark',
+		'aria-hidden': 'true',
+		style: `background:hsl(${hash} 55% 32%)`,
+		text: id.split(/[-_]/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?',
+	});
+}
+
+/** `1 model` / `2 models`, in the language on screen. */
+function countOf(models) {
+	return `${models} ${models === 1 ? t('modelWord') : t('modelCount')}`;
+}
+
+function agentView() {
+	void loadProviders();
+	void loadSubscriptions();
+	return [
+		el('h2', { class: 'step-title', tabindex: '-1', text: t('agentTitle') }),
+		el('p', { class: 'lead', text: t('agentLead') }),
+		piRow(),
+		modelPanel(),
+		piAdvanced(),
+	];
+}
+
+/** The pi in use, on one line: the built-in one is the default and needs no decision. */
+function piRow() {
+	const data = snapshot();
+	const external = state.piChoice === 'external';
+	const version = external ? data.externalPi?.version : data.internalPiVersion;
+	return el('div', { class: 'pi-row', key: 'pi-row' },
+		el('img', { class: 'pi-mark', src: 'media/picode.svg', alt: '' }),
+		el('span', { class: 'pi-text' },
+			el('strong', { text: external ? t('piExternal') : t('piInternal') }),
+			el('span', { text: external ? t('piExternalWhy') : t('piInternalWhy') }),
+		),
+		version ? el('span', { class: 'pill', text: `v${version}` }) : undefined,
+		el('span', { class: 'pill ok', text: t('inUse') }),
+	);
+}
+
+/** Choosing the machine's own pi instead: rare, so it waits behind "Advanced". */
+function piAdvanced() {
+	const data = snapshot();
+	const external = data.externalPi;
+	const option = (key, title, why, detail, available) => {
+		const chosen = state.piChoice === key;
+		return el('button', {
+			type: 'button',
+			key,
+			class: `card${chosen ? ' chosen' : ''}`,
+			role: 'radio',
+			'aria-checked': chosen ? 'true' : 'false',
+			disabled: !available,
+			onclick: () => choosePi(key),
+		},
+			el('span', { class: 'card-head' },
+				el('span', { class: 'card-title', text: title }),
+				chosen ? el('span', { class: 'check', 'aria-hidden': 'true', text: '✓' }) : undefined,
+			),
+			el('span', { class: 'card-why', text: why }),
+			detail ? el('span', { class: 'card-detail', text: detail }) : undefined,
+		);
+	};
+	return disclosure({
+		key: 'pi-advanced',
+		title: t('advanced'),
+		summary: state.piChoice === 'external' ? t('piExternal') : t('piInternal'),
+		open: state.piAdvancedOpen,
+		toggle: () => { state.piAdvancedOpen = !state.piAdvancedOpen; render(); },
+		body: [
+			el('p', { class: 'hint', text: t('agentAdvancedLead') }),
+			el('div', { class: 'cards', role: 'radiogroup', 'aria-label': t('agentAdvancedLead') },
+				option('internal', t('piInternal'), t('piInternalWhy'), data.internalPiVersion ? `${t('piInternalVersion')} ${data.internalPiVersion}` : undefined, true),
+				option('external', t('piExternal'), t('piExternalWhy'),
+					external ? `${t('piExternalFound')}${external.version ? ` · v${external.version}` : ''}` : t('piExternalMissing'),
+					external !== undefined && external.hasProfile),
+			),
+		],
+	});
+}
+
+async function choosePi(key) {
+	state.piChoice = key;
+	render();
+	await withBusy('', async () => { await command('setRuntime', { runtime: key }); });
+	state.liveProviders = undefined;
+	render();
+}
+
+/** A section that opens in place: a header button that says what is inside, and its body. */
+function disclosure({ key, title, summary, open, toggle, body }) {
+	return el('div', { class: `disclosure${open ? ' open' : ''}`, key },
+		el('button', { type: 'button', class: 'disclosure-head', 'aria-expanded': open ? 'true' : 'false', onclick: toggle },
+			el('span', { class: 'disclosure-caret', 'aria-hidden': 'true' }),
+			el('span', { class: 'disclosure-title', text: title }),
+			summary ? el('span', { class: 'disclosure-summary', text: summary }) : undefined,
+		),
+		open ? el('div', { class: 'disclosure-body' }, body) : undefined,
+	);
+}
+
+/** The model: what is in force, then one searchable list of every way to get one. */
+function modelPanel() {
+	const providers = providerList();
+	const current = snapshot().defaultModel;
+	const allRefs = providers.flatMap(refsOf);
+	// A default model no provider declares is one the editor cannot run; said once pi has answered.
+	const stale = hasModel() && state.liveProviders !== undefined && !allRefs.includes(current);
+	const orphans = snapshot().orphanCredentials ?? [];
+
+	const status = stale
+		? el('p', { class: 'model-status warn', key: 'status' }, el('span', { class: 'dot warn' }), t('modelStale', current))
+		: hasModel()
+			? el('p', { class: 'model-status ok', key: 'status' }, el('span', { class: 'dot ok' }), el('span', {}, `${t('modelNewConversations')}: `, el('strong', { text: current })))
+			: el('p', { class: 'model-status', key: 'status' }, el('span', { class: 'dot' }), t('modelNone'));
+
+	const query = state.providerQuery.trim().toLowerCase();
+	const matches = (...texts) => query.length === 0 || texts.some(text => typeof text === 'string' && text.toLowerCase().includes(query));
+
+	const connected = providers
+		.filter(provider => provider.models.length > 0 && matches(provider.name, provider.id))
+		.map(provider => connectedRow(provider, current));
+	const subscriptions = state.subscriptions === undefined
+		? (query.length === 0 ? [0, 1, 2].map(index => el('div', { class: 'prow skeleton', key: `skeleton-${index}` })) : [])
+		: state.subscriptions
+			.filter(provider => matches(provider.name, provider.id, provider.note))
+			.map(subscriptionRow);
+	const keys = [...PROVIDER_PRESETS, { id: 'custom', label: t('providerCustom') }]
+		.filter(preset => matches(preset.label, preset.id, preset.id === 'custom' ? t('providerCustomWhy') : undefined))
+		.map(keyRow);
+
+	const group = (key, title, rows, extra) => rows.length === 0 && extra === undefined ? undefined : el('section', { class: 'pgroup', key },
+		el('h3', { class: 'pgroup-title', text: title }),
+		extra,
+		el('div', { class: 'prows' }, rows),
+	);
+	const nothing = connected.length + subscriptions.length + keys.length === 0;
+
+	return el('div', { class: 'panel model-panel', key: 'model' },
+		status,
+		state.modelNote ? el('p', { class: 'model-status ok', key: 'note' }, el('span', { class: 'dot ok' }), state.modelNote) : undefined,
+		orphans.length > 0 ? el('p', { class: 'hint', key: 'orphans', text: t('modelOrphanKey', orphans.join(', ')) }) : undefined,
+		el('label', { class: 'search', key: 'search' },
+			el('span', { class: 'search-mark', 'aria-hidden': 'true', text: '🔎' }),
+			el('input', {
+				type: 'search',
+				value: state.providerQuery,
+				placeholder: t('providerSearch'),
+				'aria-label': t('providerSearch'),
+				spellcheck: 'false',
+				oninput: event => { state.providerQuery = event.target.value; render(); },
+			}),
+		),
+		nothing ? el('p', { class: 'hint', key: 'none', text: t('providerNoMatch', state.providerQuery.trim()) }) : undefined,
+		group('g-connected', t('groupConnected'), connected),
+		group('g-subscriptions', t('groupSubscriptions'), subscriptions,
+			state.subscriptionsLoading && state.subscriptions === undefined ? el('p', { class: 'hint', text: t('subLoading') })
+				: state.subscriptionError ? el('p', { class: 'hint error', text: state.subscriptionError })
+					: state.subscriptions?.length === 0 && query.length === 0 ? el('p', { class: 'hint', text: t('subNone') }) : undefined),
+		group('g-keys', t('groupKeys'), keys),
+	);
+}
+
+/** One provider row: a header that opens it, and what it holds when open. */
+function providerRow({ key, mark, name, note, chip, chipOk, open, onclick, disabled, body }) {
+	return el('div', { class: `prow${open ? ' open' : ''}`, key },
+		el('button', { type: 'button', class: 'prow-head', 'aria-expanded': open ? 'true' : 'false', disabled, onclick },
+			mark,
+			el('span', { class: 'prow-text' },
+				el('span', { class: 'prow-name', text: name }),
+				note ? el('span', { class: 'prow-note', text: note }) : undefined,
+			),
+			chip ? el('span', { class: `pill${chipOk ? ' ok' : ''}`, text: chip }) : undefined,
+			el('span', { class: 'prow-caret', 'aria-hidden': 'true' }),
+		),
+		open && body ? el('div', { class: 'prow-body' }, body) : undefined,
+	);
+}
+
+function toggleProvider(key, onOpen) {
+	const opening = state.openProvider !== key;
+	state.openProvider = opening ? key : undefined;
+	state.modelNote = undefined;
+	if (opening) {
+		onOpen?.();
 	}
-	return mark;
+	render();
+}
+
+/** A provider pi can run now: open it to pick the model new conversations use. */
+function connectedRow(provider, current) {
+	const key = `live:${provider.id}`;
+	const refs = refsOf(provider).toSorted((left, right) => left.localeCompare(right));
+	const holdsCurrent = refs.includes(current);
+	const note = `${countOf(refs.length)}${provider.subscription ? ` · ${t('subSignedIn')}` : provider.hasKey === false ? ` · ${t('modelNoKey')}` : ''}`;
+	const open = state.openProvider === key;
+	const picked = refs.includes(state.pickedModel[provider.id]) ? state.pickedModel[provider.id] : holdsCurrent ? current : refs[0];
+	return providerRow({
+		key,
+		mark: providerMark(provider.id),
+		name: provider.name,
+		note,
+		chip: holdsCurrent ? t('inUse') : undefined,
+		chipOk: true,
+		open,
+		onclick: () => toggleProvider(key),
+		body: open ? [
+			el('label', { class: 'field' },
+				el('span', { class: 'field-label', text: t('modelNewConversations') }),
+				el('select', {
+					value: picked,
+					onchange: event => { state.pickedModel[provider.id] = event.target.value; render(); },
+				}, refs.map(ref => el('option', { value: ref, text: ref }))),
+			),
+			el('p', { class: 'hint', text: t('modelAgentsNote') }),
+			el('div', { class: 'panel-actions' },
+				el('button', {
+					type: 'button',
+					class: 'primary',
+					disabled: picked === undefined || picked === current,
+					onclick: () => useModel(picked),
+				}, picked === current ? t('inUse') : t('modelSaveDefault')),
+			),
+		] : undefined,
+	});
+}
+
+async function useModel(ref) {
+	await withBusy('', async () => { await command('setModel', { ref }); });
+	state.modelNote = undefined;
+	render();
+}
+
+/** An account pi can sign in to; clicking starts the sign-in, and the row carries it. */
+function subscriptionRow(provider) {
+	const key = `sub:${provider.id}`;
+	const running = state.signIn !== undefined && state.signIn.providerId === provider.id ? state.signIn : undefined;
+	const busyElsewhere = state.signIn !== undefined && state.signIn.running === true && running === undefined;
+	return providerRow({
+		key,
+		mark: providerMark(provider.id),
+		name: provider.name,
+		note: provider.note ?? t('subYourAccount'),
+		chip: provider.signedIn === true ? `✓ ${t('subSignedIn')}` : t('subSignIn'),
+		chipOk: provider.signedIn === true,
+		open: running !== undefined,
+		disabled: busyElsewhere || running?.running === true,
+		onclick: () => startSignIn(provider.id),
+		body: running === undefined ? undefined : signInBody(provider, running),
+	});
 }
 
 /** A network failure, said for a person rather than as `fetch failed`. */
@@ -1002,99 +1160,19 @@ function signInFailure(message) {
 		: (message ?? '');
 }
 
-/** How long the browser gets to come back by itself before pasting is offered. */
-const PASTE_FALLBACK_MS = 30000;
-
-function renderSubscriptions() {
-	const node = $('model-subscriptions');
-	if (state.modelTab !== 'subscription') {
-		node.hidden = true;
-		node.replaceChildren();
-		return;
-	}
-	node.hidden = false;
-	if (state.subscriptions === undefined && state.subscriptionsLoading !== true) {
-		void loadSubscriptions();
-	}
-
-	const running = state.signIn;
-	const tiles = (state.subscriptions ?? []).map(provider => running !== undefined && running.providerId === provider.id
-		? signInCard(provider, running)
-		: el('button', {
-			type: 'button',
-			class: 'sub-tile',
-			disabled: running !== undefined && running.running === true,
-			onclick: () => startSignIn(provider.id),
-		},
-			providerMark(provider.id),
-			el('span', { class: 'provider-text' },
-				el('span', { class: 'provider-name', text: provider.name }),
-				el('span', { class: 'provider-note', text: provider.note ?? t('subYourAccount') }),
-			),
-			el('span', { class: provider.signedIn === true ? 'sub-go ok' : 'sub-go', text: provider.signedIn === true ? `✓ ${t('subSignedIn')}` : t('subSignIn') }),
-		));
-
-	fill(node,
-		el('div', { class: 'panel-head' },
-			el('span', { class: 'panel-title', text: t('subTitle') }),
-		),
-		el('p', { class: 'panel-hint', text: t('subLead') }),
-		state.subscriptionError === undefined ? undefined : el('p', { class: 'hint error', text: state.subscriptionError }),
-		state.subscriptions === undefined
-			? el('div', { class: 'providers' }, [0, 1, 2, 3].map(() => el('span', { class: 'sub-tile skeleton' })))
-			: state.subscriptions.length === 0 ? el('p', { class: 'hint', text: t('subNone') })
-				: el('div', { class: 'providers' }, tiles),
-	);
-}
-
-/** The tile being signed in: where it stands, and the one thing that can be done next. */
-function signInCard(provider, running) {
+/** The row being signed in: where it stands, and the one thing that can be done next. */
+function signInBody(provider, running) {
 	const failed = running.running !== true && running.finished !== true && running.error !== undefined;
 	const phase = running.finished === true ? 'done' : failed ? 'failed' : running.code !== undefined ? 'code' : 'browser';
 	const note = phase === 'done' ? t('subDone')
 		: phase === 'failed' ? t('subFailed')
 			: phase === 'code' ? t('subEnterCode')
 				: running.url === undefined ? t('subStarting') : t('subWaiting');
-	const head = el('div', { class: 'sub-card-head' },
-		providerMark(provider.id),
-		el('span', { class: 'provider-text' },
-			el('span', { class: 'provider-name', text: provider.name }),
-			el('span', { class: 'provider-note', text: note }),
-		),
-		phase === 'done' ? el('span', { class: 'sub-check', text: '✓' })
-			: phase === 'failed' ? el('span', { class: 'sub-cross', text: '!' })
-				: el('span', { class: 'dot pending' }),
-	);
 
 	const prompt = running.prompt;
 	// pi's "or paste the code here" waits behind the browser: shown only if it has not come back.
 	const pasteReady = prompt?.type === 'manual_code' && running.pasteReady === true;
 	const showPrompt = prompt !== undefined && (prompt.type !== 'manual_code' || pasteReady);
-
-	const body = [];
-	if (phase === 'browser' && running.url !== undefined) {
-		body.push(el('p', { class: 'hint', text: t('subBrowserHint') }));
-	}
-	if (phase === 'code') {
-		const chip = el('button', {
-			type: 'button',
-			class: 'sub-code',
-			title: t('subCopyCode'),
-			onclick: () => {
-				void navigator.clipboard.writeText(running.code);
-				chip.classList.add('copied');
-			},
-		}, el('span', { text: running.code }), el('span', { class: 'sub-copy', text: '⧉' }));
-		body.push(chip, el('p', { class: 'hint', text: t('subCodeHint') }));
-	}
-	if (showPrompt) {
-		body.push(prompt.type === 'manual_code'
-			? el('div', { class: 'sub-paste' }, el('p', { class: 'hint', text: t('subPasteHint') }), renderPrompt(prompt))
-			: renderPrompt(prompt));
-	}
-	if (phase === 'failed') {
-		body.push(el('p', { class: 'hint error', text: signInFailure(running.error) }));
-	}
 
 	const actions = [];
 	if (phase === 'browser' || phase === 'code') {
@@ -1105,54 +1183,68 @@ function signInCard(provider, running) {
 	} else if (phase === 'failed') {
 		actions.push(
 			el('button', { type: 'button', class: 'primary', onclick: () => startSignIn(provider.id) }, t('subRetry')),
-			el('button', { type: 'button', class: 'secondary', onclick: () => { state.signIn = undefined; renderSubscriptions(); } }, t('subClose')),
+			el('button', { type: 'button', class: 'secondary', onclick: () => { state.signIn = undefined; render(); } }, t('subClose')),
 		);
 	}
 
 	return el('div', { class: `sub-card phase-${phase}` },
-		head,
-		body.length > 0 ? el('div', { class: 'sub-card-body' }, body) : undefined,
+		el('p', { class: 'sub-state' },
+			phase === 'done' ? el('span', { class: 'sub-check', text: '✓' })
+				: phase === 'failed' ? el('span', { class: 'sub-cross', text: '!' })
+					: el('span', { class: 'spinner' }),
+			note,
+		),
+		phase === 'browser' && running.url !== undefined ? el('p', { class: 'hint', text: t('subBrowserHint') }) : undefined,
+		phase === 'code' ? [
+			el('button', {
+				type: 'button',
+				class: `sub-code${running.copied ? ' copied' : ''}`,
+				title: t('subCopyCode'),
+				onclick: () => {
+					void navigator.clipboard.writeText(running.code);
+					state.signIn = { ...state.signIn, copied: true };
+					render();
+				},
+			}, el('span', { text: running.code }), el('span', { class: 'sub-copy', text: '⧉' })),
+			el('p', { class: 'hint', text: t('subCodeHint') }),
+		] : undefined,
+		showPrompt ? (prompt.type === 'manual_code'
+			? el('div', { class: 'sub-paste' }, el('p', { class: 'hint', text: t('subPasteHint') }), promptField(prompt))
+			: promptField(prompt)) : undefined,
+		phase === 'failed' ? el('p', { class: 'hint error', text: signInFailure(running.error) }) : undefined,
 		actions.length > 0 ? el('div', { class: 'panel-actions' }, actions) : undefined,
 	);
 }
 
 /** One of pi's questions, as a field the page can answer. */
-function renderPrompt(prompt) {
+function promptField(prompt) {
 	const send = value => {
 		void window.picode.signIn.answer(prompt.id, value);
-		// Answered: the question leaves the panel, so only what pi says next is left to wait on.
+		// Answered: the question leaves the row, so only what pi says next is left to wait on.
 		if (state.signIn?.prompt?.id === prompt.id) {
 			state.signIn = { ...state.signIn, prompt: undefined };
-			renderSubscriptions();
+			render();
 		}
 	};
 	if (prompt.type === 'select') {
-		return el('label', { class: 'field' },
+		return el('label', { class: 'field', key: `prompt-${prompt.id}` },
 			el('span', { class: 'field-label', text: prompt.message }),
-			// A select that already shows its first option never fires `change` when the owner picks
-			// that same option, so pi would wait forever for an answer. A blank first entry keeps every
-			// real option, the default included, one choice away from sending.
-			el('select', { onchange: event => { if (event.target.value !== '') { send(event.target.value); } } },
-				[el('option', { value: '', text: t('subChoose'), selected: true, disabled: true }),
-					...(prompt.options ?? []).map(option => el('option', { value: option.id, text: option.label }))]),
+			// A blank first entry keeps every real option one choice away from sending: a select that
+			// already shows its first option never fires `change` when that same option is picked.
+			el('select', { value: '', onchange: event => { if (event.target.value !== '') { send(event.target.value); } } },
+				el('option', { value: '', text: t('subChoose'), disabled: true }),
+				(prompt.options ?? []).map(option => el('option', { value: option.id, text: option.label }))),
 		);
 	}
-	return el('div', { class: 'field' },
+	return el('div', { class: 'field', key: `prompt-${prompt.id}` },
 		el('span', { class: 'field-label', text: prompt.message }),
-		el('div', { class: 'clone' },
+		el('div', { class: 'inline' },
 			el('input', {
 				type: prompt.type === 'secret' ? 'password' : 'text',
 				placeholder: prompt.placeholder ?? '',
-				onkeydown: event => {
-					if (event.key === 'Enter') {
-						send(event.target.value);
-					}
-				},
+				onkeydown: event => { if (event.key === 'Enter') { send(event.target.value); } },
 			}),
-			el('button', {
-				type: 'button', class: 'secondary',
-				onclick: event => send(event.target.parentElement.querySelector('input').value),
-			}, t('next')),
+			el('button', { type: 'button', class: 'secondary', onclick: event => send(event.target.closest('.inline').querySelector('input').value) }, t('next')),
 		),
 	);
 }
@@ -1161,19 +1253,19 @@ function renderPrompt(prompt) {
 async function startSignIn(providerId) {
 	clearTimeout(state.pasteTimer);
 	state.signIn = { running: true, providerId };
+	state.openProvider = `sub:${providerId}`;
 	state.subscriptionError = undefined;
-	renderSubscriptions();
+	render();
 	let run;
-	const subscription = window.picode.signIn.onEvent(message => {
+	const unsubscribe = window.picode.signIn.onEvent(message => {
 		// Events from an attempt that is no longer the one on screen are not ours to act on.
 		if (run !== undefined && message.run !== undefined && message.run !== run) {
 			return;
 		}
-		const current = state.signIn ?? { running: true };
+		const current = state.signIn ?? { running: true, providerId };
 		if (message.type === 'event') {
 			const event = message.event ?? {};
-			// pi's own wording ("A browser window should open", ports, token exchanges) is its
-			// plumbing: the card says where things stand in the setup's own words.
+			// pi's own wording is its plumbing: the row says where things stand in the setup's words.
 			if (event.type === 'auth_url') {
 				state.signIn = { ...current, url: event.url };
 				void window.picode.openExternal(event.url);
@@ -1184,13 +1276,12 @@ async function startSignIn(providerId) {
 			} else {
 				return;
 			}
-			renderSubscriptions();
+			render();
 			return;
 		}
 		if (message.type === 'prompt') {
-			// "How do you want to sign in?" always has an answer already: the browser one, which pi
-			// marks as its default. Nobody should have to pick it, so it is sent straight away and
-			// the question never reaches the screen.
+			// "How do you want to sign in?" has an answer already: the browser one, which pi marks as
+			// its default. It is sent straight away and the question never reaches the screen.
 			const options = message.prompt?.options ?? [];
 			const preferred = message.prompt?.type === 'select'
 				? (options.find(option => /\(default\)/i.test(option.label ?? '')) ?? options.find(option => /browser/i.test(option.label ?? '')))
@@ -1205,58 +1296,56 @@ async function startSignIn(providerId) {
 				state.pasteTimer = setTimeout(() => {
 					if (state.signIn?.prompt?.id === message.id) {
 						state.signIn = { ...state.signIn, pasteReady: true };
-						renderSubscriptions();
+						render();
 					}
 				}, PASTE_FALLBACK_MS);
 			}
-			renderSubscriptions();
+			render();
 			return;
 		}
 		if (message.type === 'promptGone') {
 			if (current.prompt?.id === message.id) {
 				state.signIn = { ...current, prompt: undefined, pasteReady: false };
-				renderSubscriptions();
+				render();
 			}
 			return;
 		}
 		if (message.type === 'done') {
 			clearTimeout(state.pasteTimer);
 			state.signIn = { ...current, running: false, finished: true, prompt: undefined };
-			// The tick shows for a moment, then the tile goes back to saying it is signed in.
+			// The tick shows for a moment, then the row goes back to saying it is signed in.
 			setTimeout(() => {
 				if (state.signIn?.finished === true && state.signIn.providerId === current.providerId) {
 					state.signIn = undefined;
-					renderSubscriptions();
+					render();
 				}
 			}, 1800);
-			subscription();
+			unsubscribe();
 			void refreshAfterSignIn();
+			render();
 			return;
 		}
 		if (message.type === 'cancelled' || message.type === 'exit') {
-			// `exit` is the safety net: whatever ended the child, the panel must stop saying it
-			// is still waiting.
-			// A cancelled sign-in simply goes back to its tile; nothing was lost.
+			// `exit` is the safety net: whatever ended the child, the row must stop saying it waits.
 			clearTimeout(state.pasteTimer);
 			state.signIn = undefined;
-			subscription();
-			renderSubscriptions();
+			unsubscribe();
+			render();
 			return;
 		}
 		if (message.type === 'error') {
 			clearTimeout(state.pasteTimer);
 			state.signIn = { ...current, running: false, prompt: undefined, error: message.message ?? '' };
-			subscription();
-			renderSubscriptions();
+			unsubscribe();
+			render();
 		}
 	});
 	const started = await window.picode.signIn.start(providerId);
 	run = started?.run;
 }
 
-/** After a sign-in the profile has new models: ask again, and offer them. */
+/** After a sign-in the profile has new models: ask again. */
 async function refreshAfterSignIn() {
-	// A sign-in changes both lists: which providers can run models, and which rows say "Signed in".
 	state.liveProviders = undefined;
 	state.subscriptions = undefined;
 	await withBusy('', async () => {
@@ -1265,393 +1354,347 @@ async function refreshAfterSignIn() {
 			adopt(answer.data);
 		}
 	});
-	renderModel();
-	renderFooter();
+	render();
 }
 
-/**
- * The models in the profile: **provider first, then its models**.
- *
- * A profile may declare one provider whose model ids carry their own namespaces — the one in front
- * of me has a single `omni` whose 165 models are `NAN-…`, `nan-providers/…`, `auto/…`, `nvidia/…`.
- * Showing that as one flat list mixes families that belong nowhere near each other, and showing
- * only `omni` hides the very families somebody is looking for. So the first dropdown lists the
- * provider **and each of its namespaces as its own entry** — `omni`, `omni › NAN`, `omni ›
- * nan-providers` — and the second holds only that entry's models.
- *
- * Nothing is renamed or moved on disk: this is a view over what pi reports. A namespace is a
- * group of model ids, and the label says whose they are.
- */
-function renderLocal(refs) {
-	const node = $('model-local');
-	if (state.modelTab !== 'local' || refs.length === 0) {
-		node.hidden = true;
-		node.replaceChildren();
+/** A provider reached with a key: a preset fills the address, or any address for `custom`. */
+function keyRow(preset) {
+	const key = `key:${preset.id}`;
+	const open = state.openProvider === key;
+	const custom = preset.id === 'custom';
+	return providerRow({
+		key,
+		mark: custom ? el('span', { class: 'sub-mark plain', 'aria-hidden': 'true', text: '🔗' }) : providerMark(preset.id),
+		name: preset.label,
+		note: custom ? t('providerCustomWhy') : t('providerKeyNote'),
+		open,
+		onclick: () => toggleProvider(key, () => {
+			// A known provider fills its own address and dialect: asking for them is asking the owner
+			// to type what the preset already knows.
+			state.provider = { id: custom ? '' : preset.id, endpoint: custom ? '' : preset.endpoint, api: custom ? 'openai-completions' : preset.api, key: '' };
+			state.providerAdvanced = custom;
+			state.probe = undefined;
+			state.providerError = undefined;
+		}),
+		body: open ? keyForm(preset) : undefined,
+	});
+}
+
+function keyForm(preset) {
+	const custom = preset.id === 'custom';
+	const field = (key, label, input) => el('label', { class: 'field', key }, el('span', { class: 'field-label', text: label }), input);
+	const text = (name, value) => el('input', {
+		type: 'text', value, spellcheck: 'false',
+		oninput: event => { state.provider[name] = event.target.value; },
+	});
+	return [
+		field('f-key', t('providerKey'), el('input', {
+			type: 'password', value: state.provider.key, spellcheck: 'false', autocomplete: 'off', placeholder: 'sk-…',
+			oninput: event => { state.provider.key = event.target.value; },
+			onkeydown: event => { if (event.key === 'Enter') { void connectProvider(); } },
+		})),
+		el('p', { class: 'hint', key: 'f-key-hint', text: t('providerKeyHint') }),
+		state.providerAdvanced ? el('div', { class: 'fields', key: 'f-advanced' },
+			field('f-name', t('providerName'), text('id', state.provider.id)),
+			field('f-endpoint', t('providerEndpoint'), text('endpoint', state.provider.endpoint)),
+			field('f-api', t('providerDialect'), el('select', {
+				value: state.provider.api,
+				onchange: event => { state.provider.api = event.target.value; },
+			}, PROVIDER_APIS.map(api => el('option', { value: api, text: api })))),
+		) : undefined,
+		el('div', { class: 'form-links', key: 'f-links' },
+			custom ? undefined : el('button', {
+				type: 'button', class: 'link small',
+				onclick: () => { state.providerAdvanced = !state.providerAdvanced; render(); },
+			}, state.providerAdvanced ? t('providerAdvancedHide') : t('providerAdvancedShow')),
+			custom ? undefined : el('button', {
+				type: 'button', class: 'link small',
+				onclick: async () => {
+					const answer = await window.picode.openExternal(preset.keyUrl);
+					if (answer?.ok !== true) {
+						setNotice(answer?.error ?? t('errorTitle'), 'error');
+					}
+				},
+			}, `${t('providerGetKey')} · ${preset.label} ↗`),
+		),
+		probeLine(),
+		state.providerError ? el('p', { class: 'hint error', key: 'f-error', text: state.providerError }) : undefined,
+		el('div', { class: 'panel-actions', key: 'f-actions' },
+			el('span', { class: 'hint', text: t('providerWait') }),
+			el('button', { type: 'button', class: 'secondary', disabled: state.probeRunning, onclick: () => testProvider() }, t('providerTest')),
+			el('button', { type: 'button', class: 'primary', disabled: state.connecting, onclick: () => connectProvider() },
+				state.connecting ? t('providerConnecting') : t('providerConnect')),
+		),
+	];
+}
+
+function probeLine() {
+	if (state.probeRunning) {
+		return el('p', { class: 'probe', key: 'f-probe' }, el('span', { class: 'spinner' }), t('providerTesting'));
+	}
+	if (state.probe === undefined) {
+		return undefined;
+	}
+	return state.probe.ok
+		? el('p', { class: 'probe ok', key: 'f-probe' }, el('span', { class: 'dot ok' }), t('providerProbeOk', state.probe.models?.length ?? 0, state.probe.latencyMs ?? 0))
+		: el('p', { class: 'probe bad', key: 'f-probe' }, el('span', { class: 'dot bad' }), state.probe.error ?? t('providerFail'));
+}
+
+/** Asks the address what it has, with the key. Nothing is saved. */
+async function testProvider() {
+	state.probeRunning = true;
+	state.probe = undefined;
+	state.providerError = undefined;
+	render();
+	try {
+		const answer = await command('testProvider', { endpoint: state.provider.endpoint.trim(), key: state.provider.key.trim() });
+		state.probe = answer.data;
+	} catch (error) {
+		state.probe = { ok: false, error: messageOf(error) };
+	} finally {
+		state.probeRunning = false;
+		render();
+	}
+}
+
+/** Saves the provider: the backend asks the address first and refuses one that lists no models. */
+async function connectProvider() {
+	if (state.connecting) {
 		return;
 	}
-	node.hidden = false;
-
-	const entries = providerEntries();
-	const current = snapshot().defaultModel;
-	// A default model whose provider is not in the profile is a model the editor cannot run. It is
-	// not this window's job to choose one, but it is its job to say so instead of showing a list
-	// that never mentions it.
-	const allRefs = entries.length > 0 ? entries[0] === undefined ? [] : providerList().flatMap(provider => provider.models.map(model => `${provider.id}/${model}`)) : [];
-	state.staleModel = typeof current === 'string' && current.length > 0 && !allRefs.includes(current)
-		? t('modelStale', current)
-		: undefined;
-	if (state.localProvider === undefined || !entries.some(entry => entry.key === state.localProvider)) {
-		// Start where the owner already is: the narrowest entry that holds the default model, so the
-		// dropdown opens on the family in use instead of on a list of 165.
-		const holders = entries.filter(entry => typeof current === 'string' && entry.models.some(model => `${entry.provider}/${model}` === current));
-		state.localProvider = (holders.length === 0 ? entries[0] : holders.reduce((narrowest, entry) => (entry.models.length <= narrowest.models.length ? entry : narrowest)))?.key;
+	const request = {
+		id: state.provider.id.trim(),
+		endpoint: state.provider.endpoint.trim(),
+		api: state.provider.api,
+		key: state.provider.key.trim(),
+		makeDefault: !hasModel(),
+	};
+	state.connecting = true;
+	state.providerError = undefined;
+	render();
+	let connected = false;
+	try {
+		const answer = await command('addProvider', { request });
+		const models = answer.data?.models?.length ?? 0;
+		state.provider = { ...state.provider, key: '' };
+		state.probe = undefined;
+		state.liveProviders = undefined;
+		state.openProvider = `live:${request.id}`;
+		state.providerQuery = '';
+		const label = PROVIDER_PRESETS.find(preset => preset.id === request.id && preset.endpoint === request.endpoint)?.label ?? request.id;
+		state.modelNote = t('providerConnectedDone', label, models);
+		connected = true;
+	} catch (error) {
+		state.providerError = messageOf(error);
+	} finally {
+		state.connecting = false;
+		render();
 	}
-	const entry = entries.find(candidate => candidate.key === state.localProvider);
-	const entryRefs = entry === undefined ? [] : entry.models.map(model => `${entry.provider}/${model}`);
-	const selected = entryRefs.includes(state.pickedModel) ? state.pickedModel : (entryRefs.includes(current) ? current : entryRefs[0]);
-	if (selected !== undefined) {
-		state.pickedModel = selected;
+	if (connected) {
+		// The new provider's row opened somewhere else in the list: bring it to where the eyes are.
+		requestAnimationFrame(() => document.querySelector('.prow.open')?.scrollIntoView({ block: 'nearest' }));
 	}
+}
 
-	fill(node,
-		el('label', { class: 'field' },
-			el('span', { class: 'field-label', text: t('modelPickProvider') }),
-			el('select', {
-				onchange: event => {
-					// A model belongs to its entry: switching clears the pick.
-					state.localProvider = event.target.value;
-					state.pickedModel = undefined;
-					renderModel();
-				},
-			}, entries.map(candidate => el('option', {
-				value: candidate.key,
-				selected: candidate.key === state.localProvider,
-				text: candidate.label,
-			}))),
+/* ------------------------------------------------------------------ *
+ * Step 4: look
+ * ------------------------------------------------------------------ */
+
+function themeById(id) {
+	return THEMES.find(theme => theme.id === id);
+}
+
+function lookView() {
+	const shown = THEMES.filter(theme => state.showAllThemes || theme.featured || theme.id === state.theme);
+	const previewed = themeById(state.previewTheme) ?? themeById(state.theme) ?? themeById(DEFAULT_THEME);
+	return [
+		el('h2', { class: 'step-title', tabindex: '-1', text: t('themeTitle') }),
+		el('p', { class: 'lead', text: t('lookLead') }),
+		el('div', { class: 'look', key: 'look' },
+			el('div', { class: 'look-list' },
+				el('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': t('themeTitle') }, shown.map(themeCard)),
+				el('button', {
+					type: 'button', class: 'link small',
+					onclick: () => { state.showAllThemes = !state.showAllThemes; render(); },
+				}, state.showAllThemes ? t('themeFewer') : t('themeAllCount', THEMES.length)),
+			),
+			themePreview(previewed),
 		),
-		(snapshot().orphanCredentials ?? []).length === 0 ? undefined : el('p', { class: 'hint' },
-			`${t('modelOrphan')} (${snapshot().orphanCredentials.join(', ')})`),
-		state.staleModel === undefined ? undefined : el('p', { class: 'hint error', text: state.staleModel }),
-		el('label', { class: 'field' },
-			el('span', { class: 'field-label', text: t('modelNewConversations') }),
-			el('select', {
-				onchange: event => { state.pickedModel = event.target.value; },
-			}, entryRefs.toSorted((left, right) => left.localeCompare(right)).map(ref =>
-				el('option', { value: ref, selected: ref === selected, text: ref }))),
-		),
-		el('p', { class: 'hint', text: t('modelAgentsNote') }),
-		el('div', { class: 'panel-actions' },
-			el('button', {
-				type: 'button', class: 'secondary',
-				disabled: selected === undefined,
-				onclick: async () => {
-					const chosen = $('model-local').querySelectorAll('select')[1];
-					if (chosen === undefined) {
-						return;
-					}
-					await withBusy('', async () => { await command('setModel', { ref: chosen.value }); });
-					renderModel();
-					renderFooter();
-				},
-			}, t('modelSaveDefault')),
-		),
-	);
-}
-
-/** `1 model` / `2 models`, in the language on screen. */
-function countOf(models) {
-	return `${models} ${models === 1 ? t('modelWord') : t('modelCount')}`;
-}
-
-/**
- * The provider dropdown's entries: one per provider, with the models it really offers.
- *
- * A provider is what pi reports as one. A model id's prefix (`NAN-…`, `auto/…`) is not a provider,
- * so omni lists only omni's models, NAN appears when the NAN package brings it, and a subscription
- * (Anthropic) appears once it is signed in.
- */
-function providerEntries() {
-	return providerList()
-		.filter(candidate => candidate.models.length > 0)
-		.map(provider => {
-			const models = provider.models.map(model => (typeof model === 'string' ? model : String(model)));
-			const note = provider.subscription ? ` · ${t('subSignedIn')}` : provider.hasKey ? '' : ` · ${t('modelNoKey')}`;
-			return {
-				key: provider.id,
-				provider: provider.id,
-				label: `${provider.name} · ${countOf(models.length)}${note}`,
-				models,
-			};
-		});
-}
-
-/* -- step 4: theme ------------------------------------------------- */
-
-function renderLayout() {
-	$('layout-title').textContent = t('layoutTitle');
-	$('layout-lead').textContent = t('layoutLead');
-	fill($('layout-grid'), ['agent', 'editor'].map(layoutCard));
-}
-
-function renderTheme() {
-	$('theme-title').textContent = t('themeTitle');
-	$('theme-lead').textContent = t('themeLead');
-	const shown = THEMES.filter(theme => state.showAllThemes || theme.featured);
-	fill($('theme-grid'), shown.map(themeCard));
-	$('theme-all').textContent = state.showAllThemes ? t('themeFewer') : t('themeAll');
+	];
 }
 
 function themeCard(theme) {
 	const chosen = state.theme === theme.id;
+	const p = theme.palette;
+	const show = () => { if (state.previewTheme !== theme.id) { state.previewTheme = theme.id; render(); } };
+	const hide = () => { if (state.previewTheme === theme.id) { state.previewTheme = undefined; render(); } };
 	return el('button', {
 		type: 'button',
+		key: theme.id,
 		class: `theme-card${chosen ? ' chosen' : ''}`,
-		title: t('themeTry'),
-		onmouseenter: () => paintTheme(theme.palette),
-		onmouseleave: () => { const inForce = paletteOf(state.theme); if (inForce) { paintTheme(inForce); } else { paintProductPalette(); } },
-		onfocus: () => paintTheme(theme.palette),
-		onblur: () => { const inForce = paletteOf(state.theme); if (inForce) { paintTheme(inForce); } else { paintProductPalette(); } },
+		role: 'radio',
+		'aria-checked': chosen ? 'true' : 'false',
+		onmouseenter: show,
+		onfocus: show,
+		onmouseleave: hide,
+		onblur: hide,
 		onclick: () => chooseTheme(theme),
 	},
-		el('div', {
-			class: 'theme-preview',
-			style: `background:${theme.palette.bg};border-color:${theme.palette.line}`,
-			html: [
-				`<span style="color:${theme.palette.comment}">// hello</span>`,
-				`<span style="color:${theme.palette.keyword}">const</span> <span style="color:${theme.palette.fg}">pi</span> <span style="color:${theme.palette.keyword}">=</span> <span style="color:${theme.palette.string}">'picode'</span>`,
-				`<span style="color:${theme.palette.keyword}">function</span> <span style="color:${theme.palette.fg}">chat</span><span style="color:${theme.palette.comment}">() {</span>`,
-				`  <span style="color:${theme.palette.keyword}">return</span> <span style="color:${theme.palette.string}">"hola"</span>`,
-				`<span style="color:${theme.palette.comment}">}</span>`,
-			].join('<br>'),
-		}),
-		el('div', { class: 'theme-name' },
-			el('span', { text: theme.label }),
-			chosen ? el('span', { class: 'badge ok', text: '✓' }) : undefined,
+		el('span', { class: 'theme-swatch', 'aria-hidden': 'true', style: `background:${p.bg};border-color:${p.line}` },
+			[p.keyword, p.string, p.accent].map(colour => el('i', { style: `background:${colour}` })),
 		),
+		el('span', { class: 'theme-name', text: theme.label }),
+		chosen ? el('span', { class: 'check', 'aria-hidden': 'true', text: '✓' }) : undefined,
 	);
 }
 
-/**
- * One layout, as a card that explains itself: a small window with its three zones named, a line
- * saying who it suits, and three points on what goes where.
- */
-function layoutCard(layout) {
-	const chosen = state.layout === layout;
-	const agent = layout === 'agent';
-	const [left, centre, right] = t(agent ? 'layoutAgentZones' : 'layoutEditorZones');
-	const zone = (name, label) => el('span', { class: `layout-zone ${name}` }, el('span', { class: 'layout-zone-label', text: label }));
-	const preview = agent
-		? el('div', { class: 'layout-preview agent' }, zone('side', left), zone('main', centre), zone('side', right))
-		: el('div', { class: 'layout-preview editor' }, zone('side', left), el('span', { class: 'layout-stack' }, zone('main', centre), zone('bottom', t('layoutEditorBottom'))), zone('side', right));
-	return el('button', {
-		type: 'button',
-		class: `layout-card${chosen ? ' chosen' : ''}`,
-		'aria-pressed': chosen ? 'true' : 'false',
-		onclick: () => chooseLayout(layout),
-	},
-		preview,
-		el('div', { class: 'layout-head' },
-			el('span', { class: 'layout-title' },
-				el('span', { class: 'layout-name', text: agent ? `🤖 ${t('layoutAgent')}` : `💻 ${t('layoutEditor')}` }),
-				// The new way of working says so; the one everybody knows does not need to.
-				agent ? el('span', { class: 'badge new', text: t('layoutNew') }) : undefined,
+/** Dark or light text, whichever reads on a colour (`#rrggbb`). */
+function inkOn(hex) {
+	const [r, g, b] = [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
+	return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? '#0B0F19' : '#FFFFFF';
+}
+
+/** A small editor and chat in the theme's own colours: what the grid's names cannot say. */
+function themePreview(theme) {
+	const p = theme.palette;
+	const chosen = theme.id === state.theme;
+	const span = (colour, text) => `<span style="color:${colour}">${escapeXml(text)}</span>`;
+	const code = [
+		span(p.comment, '// the agent wrote this'),
+		`${span(p.keyword, 'export function')} ${span(p.fg, 'greet')}${span(p.comment, '(name) {')}`,
+		`  ${span(p.keyword, 'return')} ${span(p.string, '`Hello, ${name}`')}`,
+		span(p.comment, '}'),
+	].join('<br>');
+	const fileRow = (name, active) => el('span', {
+		class: `tp-file${active ? ' active' : ''}`,
+		style: active ? `color:${p.fg};background:color-mix(in srgb, ${p.accent} 22%, transparent)` : `color:${p.comment}`,
+		text: name,
+	});
+	return el('aside', { class: 'theme-preview-pane', 'aria-label': t('previewLabel') },
+		el('div', { class: 'tp', style: `background:${p.bg};color:${p.fg};border-color:${p.line}` },
+			el('div', { class: 'tp-bar', style: `background:${p.panel};border-color:${p.line}` },
+				el('i', {}), el('i', {}), el('i', {}),
+				el('span', { class: 'tp-tab', style: `color:${p.fg};border-color:${p.accent}`, text: 'greet.ts' }),
 			),
-			chosen ? el('span', { class: 'badge ok', text: '✓' }) : undefined,
+			el('div', { class: 'tp-body' },
+				el('div', { class: 'tp-side', style: `background:${p.panel};border-color:${p.line}` },
+					fileRow('src', false), fileRow('greet.ts', true), fileRow('app.ts', false), fileRow('README.md', false),
+				),
+				el('div', { class: 'tp-code', html: code }),
+			),
+			el('div', { class: 'tp-chat', style: `background:${p.panel};border-color:${p.line}` },
+				el('span', { class: 'tp-msg you', style: `background:${p.accent};color:${inkOn(p.accent)}`, text: t('previewAsk') }),
+				el('span', { class: 'tp-msg', style: `background:color-mix(in srgb, ${p.fg} 9%, transparent);color:${p.fg}`, text: t('previewAnswer') }),
+			),
 		),
-		el('span', { class: 'layout-note', text: agent ? t('layoutAgentNote') : t('layoutEditorNote') }),
-		el('ul', { class: 'layout-points' }, ...t(agent ? 'layoutAgentPoints' : 'layoutEditorPoints').map(point => el('li', { text: point }))),
+		el('p', { class: 'tp-caption' },
+			el('strong', { text: theme.label }),
+			chosen ? el('span', { class: 'pill ok', text: t('inUse') }) : el('span', { class: 'hint', text: t('themeClickToUse') }),
+		),
 	);
-}
-
-async function chooseLayout(layout) {
-	state.layout = layout;
-	renderLayout();
-	await withBusy('', async () => { await command('setLayout', { layout }); });
 }
 
 async function chooseTheme(theme) {
 	state.theme = theme.id;
-	paintTheme(theme.palette);
-	renderTheme();
+	render();
 	await withBusy('', async () => { await command('setTheme', { id: theme.id }); });
+	render();
 }
 
-/* -- step 5: extras ----------------------------------------------- */
+/* ------------------------------------------------------------------ *
+ * Step 5: ready
+ * ------------------------------------------------------------------ */
 
-/** Gentle's two preferences, read once from the profile the editor will use. */
-async function loadGentle() {
-	if (state.gentle !== undefined || state.gentleLoading === true) {
-		return;
-	}
-	state.gentleLoading = true;
-	try {
-		const answer = await window.picode.command('gentle', {});
-		if (answer?.data) {
-			state.gentle = answer.data;
-		}
-	} catch {
-		// The panel simply does not show: the preferences stay what Gentle has on disk.
-	} finally {
-		state.gentleLoading = false;
-		renderExtras();
-	}
-}
-
-async function chooseGentle(key, value) {
-	await withBusy('', async () => {
-		const answer = await command('setGentle', { key, value });
-		if (answer?.data) {
-			state.gentle = answer.data;
-		}
-	});
-	renderExtras();
-}
-
-/** One group of cards for one Gentle preference, in the same shape as the context cards. */
-function gentleChoice(title, key, current, options) {
-	return el('div', { class: 'panel' },
-		el('div', { class: 'panel-head' },
-			el('span', { class: 'panel-title', text: title }),
-		),
-		el('div', { class: 'modes', role: 'radiogroup', 'aria-label': title },
-			options.map(option => {
-				const chosen = current === option.value;
-				return el('button', {
-					type: 'button',
-					class: `mode${chosen ? ' chosen' : ''}`,
-					role: 'radio',
-					'aria-checked': chosen ? 'true' : 'false',
-					onclick: () => chooseGentle(key, option.value),
-				},
-					el('span', { class: 'mode-head' },
-						el('span', { class: 'mode-mark', text: option.mark }),
-						el('strong', { text: option.title }),
-						chosen ? el('span', { class: 'mode-check', text: '✓' }) : undefined,
-					),
-					el('span', { class: 'mode-why', text: option.why }),
-				);
-			})),
-	);
-}
-
-function renderExtras() {
-	if (state.gentle === undefined && state.gentleLoading !== true) {
-		void loadGentle();
-	}
-	$('extras-title').textContent = t('extrasTitle');
-	$('extras-lead').textContent = t('extrasLead');
-	const toggle = (key, title, why) => el('label', { class: 'switch' },
-		el('span', { class: 'switch-text' },
-			el('strong', { text: title }),
-			el('span', { class: 'switch-why', text: why }),
-		),
-		el('input', {
-			type: 'checkbox',
-			checked: state.extras[key] === true,
-			onchange: async event => {
-				state.extras[key] = event.target.checked;
-				await withBusy('', async () => { await command('setExtras', { values: { [key]: event.target.checked } }); });
-				renderExtras();
-			},
-		}),
-	);
-
-	// One control, not two. It used to be a switch *and* three cards: with the switch off the
-	// cards were disabled and nobody could tell which of the two was in charge. The cards are the
-	// control; choosing one is what turns the context on.
-	const modes = [
-		{ key: 'project', title: t('contextProject'), why: t('contextProjectWhy'), mark: '📂', badge: t('contextRecommended') },
-		{ key: 'file', title: t('contextFile'), why: t('contextFileWhy'), mark: '📄' },
-		{ key: 'selection', title: t('contextSelection'), why: t('contextSelectionWhy'), mark: '🔒' },
+function doneView() {
+	return [
+		el('h2', { class: 'step-title', tabindex: '-1', text: t('doneTitle') }),
+		el('p', { class: 'lead', text: t('doneLead') }),
+		summary(),
+		startPanel(),
+		advancedBlock(),
+		el('p', { class: 'pro', text: t('proNote') }),
 	];
+}
 
-	fill($('extras-list'),
-		el('div', { class: 'panel' },
-			toggle('mcp', t('extraMcp'), t('extraMcpWhy')),
-		),
-		state.voiceAvailable ? el('div', { class: 'panel' },
-			toggle('voice', t('extraVoice'), t('extraVoiceWhy')),
+/** What the editor starts with, each line with a way back to the step that decides it. */
+function summary() {
+	const data = snapshot();
+	const external = data.runtime === 'external';
+	const piValue = external
+		? `${t('piExternal')}${data.externalPi?.version ? ` · ${data.externalPi.version}` : ''}`
+		: `${t('piInternal')}${data.internalPiVersion ? ` · ${data.internalPiVersion}` : ''}`;
+	const rows = [
+		data.accountAvailable === true ? { key: 'account', mark: '👤', label: t('accountFact'), value: state.account.state === 'signed-in' ? (state.account.email ?? t('accountSignedInShort')) : t('accountNone'), step: 'welcome' } : undefined,
+		{ key: 'layout', mark: '🧭', label: t('layoutFact'), value: state.layout === 'agent' ? t('layoutAgent') : t('layoutEditor'), step: 'layout' },
+		{ key: 'pi', mark: '🤖', label: t('welcomeFactsPi'), value: piValue, step: 'agent' },
+		{ key: 'model', mark: '🧠', label: t('welcomeFactsModel'), value: hasModel() ? data.defaultModel : t('modelNothingYet'), step: 'agent', attention: !hasModel() },
+		{ key: 'theme', mark: '🎨', label: t('welcomeFactsTheme'), value: themeById(state.theme)?.label ?? state.theme ?? t('notSet'), step: 'look' },
+		languageRow(),
+	].filter(Boolean);
+	return el('div', { class: 'summary', key: 'summary' }, rows.map(row => el('div', { class: `summary-row${row.attention ? ' attention' : ''}`, key: row.key },
+		el('span', { class: 'summary-mark', 'aria-hidden': 'true', text: row.mark }),
+		el('span', { class: 'summary-label', text: row.label }),
+		el('span', { class: 'summary-value', text: row.value }),
+		row.step === undefined ? undefined : el('button', {
+			type: 'button', class: 'link small',
+			'aria-label': `${t('summaryChange')}: ${row.label}`,
+			onclick: () => go(STEPS.indexOf(row.step)),
+		}, t('summaryChange')),
+	)));
+}
+
+/** The summary's language row: only while the editor still has to change, or could not get its pack. */
+function languageRow() {
+	const name = STRINGS[language]?.language ?? language;
+	if (state.languageOutcome === 'ready') {
+		return { key: 'language', mark: '🌐', label: t('languageFact'), value: `${name} · ${t('languageReady')}` };
+	}
+	if (state.languageOutcome === 'offline') {
+		return { key: 'language', mark: '🌐', label: t('languageFact'), value: `${name} · ${t('languageOffline')}` };
+	}
+	return undefined;
+}
+
+/** One question, three answers. */
+function startPanel() {
+	const starts = [
+		{ kind: 'folder', title: t('startFolder'), why: t('startFolderWhy'), mark: '📂' },
+		{ kind: 'clone', title: t('startClone'), why: t('startCloneWhy'), mark: '🐙' },
+		{ kind: 'blank', title: t('startBlank'), why: t('startBlankWhy'), mark: '⚡' },
+	];
+	const cloning = state.startKind === 'clone';
+	return el('div', { class: 'panel', key: 'start' },
+		el('div', { class: 'panel-head' }, el('span', { class: 'panel-title', text: t('startTitle') })),
+		el('div', { class: 'cards start-cards', role: 'radiogroup', 'aria-label': t('startTitle') }, starts.map(start => {
+			const chosen = state.startKind === start.kind;
+			return el('button', {
+				type: 'button',
+				key: start.kind,
+				class: `card start-card${chosen ? ' chosen' : ''}`,
+				role: 'radio',
+				'aria-checked': chosen ? 'true' : 'false',
+				onclick: () => chooseStart(start.kind),
+			},
+				el('span', { class: 'card-head' },
+					el('span', { class: 'start-mark', 'aria-hidden': 'true', text: start.mark }),
+					el('span', { class: 'card-title', text: start.title }),
+				),
+				el('span', { class: 'card-why', text: start.why }),
+			);
+		})),
+		cloning ? el('div', { class: 'inline', key: 'clone' },
+			el('input', {
+				type: 'text', spellcheck: 'false', placeholder: 'https://github.com/user/repo',
+				value: state.cloneUrl, 'aria-label': t('startClone'),
+				oninput: event => { state.cloneUrl = event.target.value; },
+				onkeydown: event => { if (event.key === 'Enter') { void cloneRepository(); } },
+			}),
+			el('button', { type: 'button', class: 'secondary', onclick: () => cloneRepository() }, t('clone')),
 		) : undefined,
-		el('div', { class: 'panel' },
-			el('div', { class: 'panel-head' },
-				el('span', { class: 'panel-title', text: t('contextTitle') }),
-			),
-			el('p', { class: 'panel-hint', text: t('contextLead') }),
-			el('div', { class: 'modes', role: 'radiogroup', 'aria-label': t('contextTitle') },
-				modes.map(mode => {
-					const chosen = state.contextMode === mode.key;
-					return el('button', {
-						type: 'button',
-						class: `mode${chosen ? ' chosen' : ''}`,
-						role: 'radio',
-						'aria-checked': chosen ? 'true' : 'false',
-						onclick: () => chooseContextMode(mode.key),
-					},
-						el('span', { class: 'mode-head' },
-							el('span', { class: 'mode-mark', text: mode.mark }),
-							el('strong', { text: mode.title }),
-							mode.badge === undefined ? undefined : el('span', { class: 'badge ok', text: mode.badge }),
-							chosen ? el('span', { class: 'mode-check', text: '✓' }) : undefined,
-						),
-						el('span', { class: 'mode-why', text: mode.why }),
-					);
-				})),
-			state.extras.context === false
-				? el('p', { class: 'hint' }, t('contextOffNote'))
-				: undefined,
-		),
-		state.gentle === undefined ? undefined : el('div', { class: 'panels' },
-			el('p', { class: 'panel-hint', text: `${t('gentleTitle')} · ${t('gentleLead')}` }),
-			gentleChoice(t('gentlePersonaTitle'), 'persona', state.gentle.persona, [
-				{ value: 'gentleman', title: t('personaGentleman'), why: t('personaGentlemanWhy'), mark: '🎩' },
-				{ value: 'neutral', title: t('personaNeutral'), why: t('personaNeutralWhy'), mark: '🧭' },
-			]),
-			gentleChoice(t('gentlePermissionsTitle'), 'permissions', state.gentle.permissions, [
-				{ value: 'normal', title: t('permissionsNormal'), why: t('permissionsNormalWhy'), mark: '🛡️' },
-				{ value: 'auto', title: t('permissionsAuto'), why: t('permissionsAutoWhy'), mark: '⚙️' },
-				{ value: 'yolo', title: t('permissionsYolo'), why: t('permissionsYoloWhy'), mark: '🚀' },
-			]),
-		),
+		el('p', { class: 'hint', key: 'start-hint', text: state.folder !== undefined ? `${t('folderChosen')} ${state.folder}` : cloning ? '' : t('startHint') }),
 	);
-
-	// `pi packages` is not here any more: it is a shelf you browse, not a question a first run has
-	// to answer, and it lives where it belongs (Agent Customizations → Packages, in the editor).
 }
 
-/**
- * Picks one of the three, and makes sure the context is **on**.
- *
- * The product keeps two settings: whether any context travels (`picode.context.attach`) and how
- * much (`picode.context.mode`). This step shows the second one only — so choosing a card also
- * turns the first one on. Without that, a card could look selected while nothing was attached,
- * which is exactly the confusion the switch caused.
- */
-async function chooseContextMode(mode) {
-	const wasOff = state.extras.context !== true;
-	state.contextMode = mode;
-	state.extras.context = true;
-	renderExtras();
-	await withBusy('', async () => {
-		await command('setContextMode', { mode });
-		if (wasOff) {
-			await command('setExtras', { values: { context: true } });
-		}
-	});
-	renderExtras();
-}
-
-/* -- step 6: ready -------------------------------------------------- */
-
-/**
- * Three ways to begin, and one question.
- *
- * The final screen used to compete with itself: suggested prompts, a folder button, a clone box
- * and the primary button all at once. It now asks the only question that matters here — where do
- * you want to start — and the primary button stays the one way out.
- *
- * The starter prompts are gone from this window on purpose: they belong in the chat, next to the
- * project they talk about, not in a setup screen that cannot see it yet.
- */
 async function chooseStart(kind) {
 	if (kind === 'folder') {
 		const answer = await window.picode.chooseFolder();
@@ -1665,54 +1708,166 @@ async function chooseStart(kind) {
 		state.folder = undefined;
 		state.startKind = 'blank';
 	}
-	renderDone();
+	render();
 }
 
-function renderDone() {
-	$('done-title').textContent = t('doneTitle');
-	$('done-lead').textContent = t('doneLead');
-	$('done-start-title').textContent = t('startTitle');
-	$('clone').textContent = t('clone');
-	$('pro-note').textContent = t('proNote');
+async function cloneRepository() {
+	const url = state.cloneUrl.trim();
+	if (url.length === 0) {
+		return;
+	}
+	await withBusy(t('cloning'), async () => {
+		const answer = await window.picode.clone(url);
+		if (answer?.ok === true && answer.path) {
+			state.folder = answer.path;
+		} else if (answer?.error && answer.error !== 'cancelled') {
+			setNotice(answer.error, 'error');
+		}
+	});
+	render();
+}
 
-	// One question, three answers — each a card, and the picked one says so.
-	const starts = [
-		{ kind: 'folder', title: t('startFolder'), why: t('startFolderWhy'), mark: '📂' },
-		{ kind: 'clone', title: t('startClone'), why: t('startCloneWhy'), mark: '🐙' },
-		{ kind: 'blank', title: t('startBlank'), why: t('startBlankWhy'), mark: '⚡' },
-	];
-	fill($('start-cards'), starts.map(start => el('button', {
-		type: 'button',
-		class: `card start-card${state.startKind === start.kind ? ' chosen' : ''}`,
-		onclick: () => chooseStart(start.kind),
-	},
-		el('div', { class: 'card-head' },
-			el('span', { class: 'start-mark', text: start.mark }),
-			el('span', { class: 'card-title', text: start.title }),
+/** Gentle's two preferences, read once from the profile the editor will use. */
+async function loadGentle() {
+	if (state.gentle !== undefined || state.gentleLoading) {
+		return;
+	}
+	state.gentleLoading = true;
+	try {
+		const answer = await window.picode.command('gentle', {});
+		if (answer?.data) {
+			state.gentle = answer.data;
+		}
+	} catch {
+		// The section simply does not show: the preferences stay what Gentle has on disk.
+	} finally {
+		state.gentleLoading = false;
+		render();
+	}
+}
+
+const CONTEXT_MODES = () => [
+	{ value: 'project', title: t('contextProject'), why: t('contextProjectWhy'), mark: '📂', badge: t('contextRecommended') },
+	{ value: 'file', title: t('contextFile'), why: t('contextFileWhy'), mark: '📄' },
+	{ value: 'selection', title: t('contextSelection'), why: t('contextSelectionWhy'), mark: '🔒' },
+];
+const PERSONAS = () => [
+	{ value: 'gentleman', title: t('personaGentleman'), why: t('personaGentlemanWhy'), mark: '🎩' },
+	{ value: 'neutral', title: t('personaNeutral'), why: t('personaNeutralWhy'), mark: '🧭' },
+];
+const PERMISSIONS = () => [
+	{ value: 'normal', title: t('permissionsNormal'), why: t('permissionsNormalWhy'), mark: '🛡️' },
+	{ value: 'auto', title: t('permissionsAuto'), why: t('permissionsAutoWhy'), mark: '⚙️' },
+	{ value: 'yolo', title: t('permissionsYolo'), why: t('permissionsYoloWhy'), mark: '🚀' },
+];
+
+/**
+ * Everything a first run does not have to decide, in one place that starts closed. Its header says
+ * what is in force, so nobody has to open it to know.
+ */
+function advancedBlock() {
+	void loadGentle();
+	const titleOf = (list, value) => list.find(option => option.value === value)?.title;
+	const parts = [
+		`${t('extraMcp')}: ${state.extras.mcp ? t('on') : t('off')}`,
+		state.extras.context === false ? `${t('contextTitle')}: ${t('off')}` : titleOf(CONTEXT_MODES(), state.contextMode),
+		state.gentle ? titleOf(PERSONAS(), state.gentle.persona) : undefined,
+		state.gentle ? titleOf(PERMISSIONS(), state.gentle.permissions) : undefined,
+	].filter(Boolean);
+	return disclosure({
+		key: 'advanced',
+		title: `⚙️ ${t('advanced')}`,
+		summary: parts.join(' · '),
+		open: state.advancedOpen,
+		toggle: () => { state.advancedOpen = !state.advancedOpen; render(); },
+		body: [
+			el('p', { class: 'hint', text: t('advancedLead') }),
+			toggleRow('mcp', t('extraMcp'), t('extraMcpWhy')),
+			state.voiceAvailable ? toggleRow('voice', t('extraVoice'), t('extraVoiceWhy')) : undefined,
+			choiceGroup('context', t('contextTitle'), t('contextLead'), state.extras.context === false ? undefined : state.contextMode, CONTEXT_MODES(), value => chooseContextMode(value),
+				state.extras.context === false ? t('contextOffNote') : undefined),
+			state.gentle === undefined ? undefined : [
+				choiceGroup('persona', t('gentlePersonaTitle'), t('gentleLead'), state.gentle.persona, PERSONAS(), value => chooseGentle('persona', value)),
+				choiceGroup('permissions', t('gentlePermissionsTitle'), undefined, state.gentle.permissions, PERMISSIONS(), value => chooseGentle('permissions', value)),
+			],
+		],
+	});
+}
+
+function toggleRow(key, title, why) {
+	return el('label', { class: 'switch', key: `switch-${key}` },
+		el('span', { class: 'switch-text' },
+			el('strong', { text: title }),
+			el('span', { class: 'switch-why', text: why }),
 		),
-		el('p', { class: 'card-why', text: start.why }),
-	)));
+		el('input', {
+			type: 'checkbox',
+			role: 'switch',
+			checked: state.extras[key] === true,
+			onchange: async event => {
+				state.extras[key] = event.target.checked;
+				render();
+				await withBusy('', async () => { await command('setExtras', { values: { [key]: state.extras[key] } }); });
+			},
+		}),
+	);
+}
 
-	// The clone address only exists when cloning is the answer: no box waiting to be filled in.
-	const cloning = state.startKind === 'clone';
-	$('clone-row').hidden = !cloning;
-	$('start-hint').textContent = state.folder === undefined
-		? (cloning ? '' : t('startHint'))
-		: `${t('folderChosen')} ${state.folder}`;
+/** One preference as a row of cards, radio semantics. */
+function choiceGroup(key, title, lead, current, options, choose, note) {
+	return el('div', { class: 'choice', key: `choice-${key}` },
+		el('div', { class: 'choice-title', text: title }),
+		lead ? el('p', { class: 'hint', text: lead }) : undefined,
+		el('div', { class: 'modes', role: 'radiogroup', 'aria-label': title }, options.map(option => {
+			const chosen = current === option.value;
+			return el('button', {
+				type: 'button',
+				key: option.value,
+				class: `mode${chosen ? ' chosen' : ''}`,
+				role: 'radio',
+				'aria-checked': chosen ? 'true' : 'false',
+				onclick: () => choose(option.value),
+			},
+				el('span', { class: 'mode-head' },
+					el('span', { class: 'mode-mark', 'aria-hidden': 'true', text: option.mark }),
+					el('strong', { text: option.title }),
+					option.badge ? el('span', { class: 'pill ok', text: option.badge }) : undefined,
+				),
+				el('span', { class: 'mode-why', text: option.why }),
+			);
+		})),
+		note ? el('p', { class: 'hint', text: note }) : undefined,
+	);
+}
 
-	const data = snapshot();
-	const piValue = data.runtime === 'external' ? (data.externalPi?.version ? `${t('externalShort')} · ${data.externalPi.version}` : t('externalShort')) : `${t('internalShort')}${data.internalPiVersion ? ` · ${data.internalPiVersion}` : ''}`;
-	const rows = [
-		[t('welcomeFactsPi'), piValue],
-		[t('welcomeFactsModel'), hasModel() ? snapshot().defaultModel : t('modelNothingYet')],
-		[t('layoutFact'), state.layout === 'agent' ? t('layoutAgent') : t('layoutEditor')],
-		...(languageRow() ? [languageRow()] : []),
-		[t('welcomeFactsTheme'), state.theme ?? t('notSet')],
-	];
-	fill($('done-summary'), rows.map(([label, value]) => el('div', { class: 'summary-row' },
-		el('span', { class: 'summary-label', text: label }),
-		el('span', { class: 'summary-value', text: value }),
-	)));
+/**
+ * Picks how much context travels, and makes sure the context is **on**: the product keeps two
+ * settings (whether, and how much) and this step shows only the second, so a card must never look
+ * chosen while nothing is attached.
+ */
+async function chooseContextMode(mode) {
+	const wasOff = state.extras.context !== true;
+	state.contextMode = mode;
+	state.extras.context = true;
+	render();
+	await withBusy('', async () => {
+		await command('setContextMode', { mode });
+		if (wasOff) {
+			await command('setExtras', { values: { context: true } });
+		}
+	});
+}
+
+async function chooseGentle(key, value) {
+	state.gentle = { ...state.gentle, [key]: value };
+	render();
+	await withBusy('', async () => {
+		const answer = await command('setGentle', { key, value });
+		if (answer?.data) {
+			state.gentle = answer.data;
+		}
+	});
+	render();
 }
 
 /* ------------------------------------------------------------------ *
@@ -1724,33 +1879,14 @@ function go(index) {
 		return;
 	}
 	state.step = index;
+	state.visited.add(index);
+	state.previewTheme = undefined;
 	// An alert belongs to the screen that raised it.
 	setNotice(undefined);
-	renderStep();
-	renderCurrent();
+	render();
 }
 
-function renderCurrent() {
-	const name = STEPS[state.step];
-	if (name === 'welcome') {
-		renderWelcome();
-	} else if (name === 'layout') {
-		renderLayout();
-	} else if (name === 'pi') {
-		renderPi();
-	} else if (name === 'model') {
-		renderModel();
-	} else if (name === 'theme') {
-		renderTheme();
-	} else if (name === 'extras') {
-		renderExtras();
-	} else if (name === 'done') {
-		renderDone();
-	}
-	renderFooter();
-}
-
-/** The last step's primary action: record the setup and let the editor open. */
+/** Records the setup and lets the editor open. */
 async function finish(skipped) {
 	await withBusy('', async () => {
 		await window.picode.finish({ skipped: skipped === true, folder: state.folder });
@@ -1765,67 +1901,49 @@ $('next').addEventListener('click', async () => {
 	go(state.step + 1);
 });
 $('back').addEventListener('click', () => go(state.step - 1));
-$('skip').addEventListener('click', async () => {
-	// "Skip" on the model step means "later, not now" and moves on; anywhere else it leaves.
-	if (STEPS[state.step] === 'model') {
-		go(state.step + 1);
-		return;
-	}
-	await finish(true);
-});
+// Skip has one meaning everywhere: open the editor now, with whatever is already chosen.
+$('skip').addEventListener('click', () => void finish(true));
 $('notice-close').addEventListener('click', () => setNotice(undefined));
-$('theme-all').addEventListener('click', () => {
-	state.showAllThemes = !state.showAllThemes;
-	renderTheme();
-});
-$('clone').addEventListener('click', async () => {
-	const url = $('clone-url').value.trim();
-	if (url.length === 0) {
+
+/*
+ * Escape closes the thing on top — the Import view, a notice — and nothing else. It used to skip the
+ * whole setup, which is the last thing a key pressed to dismiss a menu should do.
+ */
+document.addEventListener('keydown', event => {
+	if (event.key !== 'Escape' || event.defaultPrevented) {
 		return;
 	}
-	await withBusy(t('cloning'), async () => {
-		const answer = await window.picode.clone(url);
-		if (answer?.ok === true && answer.path) {
-			state.folder = answer.path;
-		} else if (answer?.error && answer.error !== 'cancelled') {
-			setNotice(answer.error, 'error');
-		}
-	});
-	renderDone();
-});
-
-document.addEventListener('keydown', event => {
-	if (event.key === 'Escape') {
-		finish(true);
+	if (!$('import-view').hidden && importView.embedded) {
+		closeImportView();
+		event.preventDefault();
+	} else if (state.notice !== undefined) {
+		setNotice(undefined);
+		event.preventDefault();
 	}
 });
 
 /* ------------------------------------------------------------------ *
- * Start
+ * Language
  * ------------------------------------------------------------------ */
 
-/** Switches the whole page's words, and repaints what is on screen. */
 function setLanguage(next) {
 	language = next;
 	paintLanguage();
 	document.documentElement.lang = next;
-	renderStep();
-	renderCurrent();
+	$('language').setAttribute('aria-label', t('languageFact'));
+	render();
 }
 
 /** The country's flag for a language, as a small vector image: emoji flags are only letters on Windows. */
 function flagOf(code) {
-	const flag = el('span', { class: 'flag', 'aria-hidden': 'true' });
-	flag.innerHTML = window.PICODE_FLAGS?.[code] ?? '';
-	return flag;
+	return el('span', { class: 'flag', 'aria-hidden': 'true', html: window.PICODE_FLAGS?.[code] ?? '' });
 }
 
-/** The button shows the language in use, flag first; the list marks it too. */
 function paintLanguage() {
 	fill($('language'),
 		flagOf(language),
 		el('span', { class: 'lang-name', text: STRINGS[language]?.language ?? language }),
-		el('span', { class: 'lang-caret', 'aria-hidden': 'true', text: '\u25be' }),
+		el('span', { class: 'lang-caret', 'aria-hidden': 'true', text: '▾' }),
 	);
 	for (const item of document.querySelectorAll('#language-list [role="option"]')) {
 		item.setAttribute('aria-selected', String(item.dataset.code === language));
@@ -1906,8 +2024,7 @@ function fillLanguages() {
 
 /**
  * Gets the editor's own language ready in the background: the language pack is downloaded while
- * the steps go by, and the editor installs it at its first start. Silent when it cannot: the
- * editor opens in the language it has, and the summary says so only at the end.
+ * the steps go by, and the editor installs it at its first start. Silent when it cannot.
  */
 async function prepareLanguage(code) {
 	state.languageOutcome = undefined;
@@ -1915,36 +2032,25 @@ async function prepareLanguage(code) {
 		const answer = await command('prepareLanguage', { language: code, label: STRINGS[code]?.language ?? code, firstRun: state.mode === 'first-run' });
 		if (code === language) {
 			state.languageOutcome = answer.data?.language;
-			renderCurrent();
+			render();
 		}
 	} catch {
 		// Nothing to say: the editor still opens.
 	}
 }
 
-/** The summary's language row: said only while the editor still has to change, or could not get its pack. */
-function languageRow() {
-	const name = STRINGS[language]?.language ?? language;
-	if (state.languageOutcome === 'ready') {
-		return [t('languageFact'), `${name} \u00b7 ${t('languageReady')}`];
-	}
-	if (state.languageOutcome === 'offline') {
-		return [t('languageFact'), `${name} \u00b7 ${t('languageOffline')}`];
-	}
-	return undefined;
-}
+/* ------------------------------------------------------------------ *
+ * Start
+ * ------------------------------------------------------------------ */
 
 async function main() {
 	fillLanguages();
 	setLanguage(initialLanguage());
 
-	// The setup window used to keep its own idea of the session; now it follows the shared one, so a
-	// sign-in or a sign-out in the editor shows here immediately (and the reverse is pushed the
-	// other way by the same file).
+	// The setup follows the editor's shared session: a sign-in or a sign-out there shows here at once.
 	window.picode.account.onState(message => {
 		const email = typeof message?.email === 'string' ? message.email : '';
-		// Ignore the echo of our own state: the card already shows it, and repainting would drop
-		// the "waiting" spinner mid-flow.
+		// Ignore the echo of our own state while waiting: repainting would drop the spinner mid-flow.
 		if (state.account.state === 'waiting') {
 			return;
 		}
@@ -1955,9 +2061,9 @@ async function main() {
 			return;
 		}
 		state.account = signedIn
-			? { state: 'signed-in', email, picture: typeof message?.picture === 'string' && message.picture.length > 0 ? message.picture : undefined, error: undefined }
+			? { state: 'signed-in', email, picture, error: undefined }
 			: { state: 'idle', email: undefined, error: undefined };
-		renderAccount();
+		render();
 		if (signedIn) {
 			setNotice(t('accountEditorSignedIn', email), 'info');
 		}
@@ -1980,20 +2086,17 @@ async function main() {
 		if (boot.snapshot) {
 			adopt(boot.snapshot);
 			if (!boot.snapshot.theme) {
-				// Nothing chosen yet: PiCode Dark is the product default, so record it now. This is
-				// what makes the card show as chosen and the welcome say the theme, and it keeps
+				// Nothing chosen yet: PiCode Dark is the product default, so record it now, which keeps
 				// the editor on the brand palette instead of an unset setting.
 				await command('setTheme', { id: DEFAULT_THEME }).catch(() => undefined);
 			}
 			if (state.mode === 'first-run' && boot.snapshot.layout !== 'agent') {
-				// A first setup recommends the new layout: Agent is marked from the start and recorded,
-				// so leaving the step alone (or skipping the setup) keeps it. The other modes keep
-				// whatever the person has.
+				// A first setup recommends the new layout: recorded now, so skipping keeps it. The
+				// other modes keep whatever the person has.
 				await command('setLayout', { layout: 'agent' }).catch(() => undefined);
 			}
 			state.piChoice = boot.snapshot.runtime === 'external' ? 'external' : 'internal';
-			// The extras start from what is recorded, so the switches tell the truth.
-			// The switches show what the editor will actually do, defaults included.
+			state.piAdvancedOpen = state.piChoice === 'external';
 			if (boot.snapshot.extras) {
 				state.extras = { ...state.extras, ...boot.snapshot.extras };
 			}
@@ -2006,12 +2109,9 @@ async function main() {
 			setNotice(boot.stateError, 'error');
 		}
 	} catch (error) {
-		setNotice(`${t('errorTitle')}: ${error instanceof Error ? error.message : String(error)}`, 'error');
+		setNotice(`${t('errorTitle')}: ${messageOf(error)}`, 'error');
 	}
 
-	// Always the welcome. Skipping it because "everything is configured" hid where you were and what
-	// the setup had read — the welcome already shows that (pi, model, theme) and every fact there is
-	// a shortcut to its step. Arriving mid-flow, at step 2, felt like a form that had lost its start.
 	go(0);
 	void prepareLanguage(language);
 	// Opened by the editor's Import command: that view is the whole window.

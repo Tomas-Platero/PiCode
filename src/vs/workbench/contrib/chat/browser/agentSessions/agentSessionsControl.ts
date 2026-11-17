@@ -25,7 +25,9 @@ import { Throttler } from '../../../../../base/common/async.js';
 import { observableValue } from '../../../../../base/common/observable.js';
 import { ITreeContextMenuEvent } from '../../../../../base/browser/ui/tree/tree.js';
 import { MarshalledId } from '../../../../../base/common/marshallingIds.js';
-import { Separator } from '../../../../../base/common/actions.js';
+import { IAction, Separator, toAction } from '../../../../../base/common/actions.js';
+import { Codicon } from '../../../../../base/common/codicons.js';
+import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { RenderIndentGuides, TreeFindMode } from '../../../../../base/browser/ui/tree/abstractTree.js';
 import { IAgentSessionsService } from './agentSessionsService.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
@@ -57,6 +59,9 @@ export interface IAgentSessionsControlOptions {
 	readonly compactShowMore?: boolean;
 	readonly itemHeight?: number;
 	readonly sectionHeight?: number;
+
+	/** PiCode: see `IAgentSessionRendererOptions.badgeHover`. */
+	badgeHover?(session: IAgentSession, target: HTMLElement): IDisposable | undefined;
 
 	createNewChat(): void;
 	getHoverPosition(): HoverPosition;
@@ -712,6 +717,9 @@ export class AgentSessionsControl extends Disposable implements IAgentSessionsCo
 		contextOverlay.push([ChatContextKeys.isReadAgentSession.key, session.isRead()]);
 		contextOverlay.push([ChatContextKeys.agentSessionType.key, session.providerType]);
 		contextOverlay.push([ChatContextKeys.agentSessionPullRequest.key, getAgentSessionPullRequestContextValue(session)]);
+		// PiCode: a session that works in its own copy of the project gets the branch actions in this menu.
+		const picodeGit = session.metadata?.picodeGit;
+		contextOverlay.push(['picodeSessionHasCopy', typeof picodeGit === 'object' && picodeGit !== null && (picodeGit as { worktree?: unknown }).worktree === true]);
 
 		const menu = this.menuService.createMenu(MenuId.AgentSessionsContext, this.contextKeyService.createOverlay(contextOverlay));
 
@@ -723,9 +731,12 @@ export class AgentSessionsControl extends Disposable implements IAgentSessionsCo
 		};
 
 		this.contextMenuService.showContextMenu({
-			getActions: () => Separator.join(...menu.getActions({ arg: marshalledContext, shouldForwardArgs: true }).map(([, actions]) => actions)),
+			// PiCode: every entry carries its icon, so what each one does reads at a glance.
+			getActions: () => Separator.join(...menu.getActions({ arg: marshalledContext, shouldForwardArgs: true }).map(([, actions]) => actions.map(withPicodeMenuIcon))),
 			getAnchor: () => anchor,
 			getActionsContext: () => marshalledContext,
+			getMenuClassName: () => 'picode-session-menu',
+			showMenuIcons: true,
 		});
 
 		menu.dispose();
@@ -912,4 +923,42 @@ export class AgentSessionsControl extends Disposable implements IAgentSessionsCo
 
 		return true;
 	}
+}
+
+/** PiCode: the icon of each entry of a session's context menu (VS Code's own and PiCode's). */
+const PICODE_SESSION_MENU_ICONS: Record<string, ThemeIcon> = {
+	'workbench.action.chat.openSessionInEditorGroup': Codicon.goToFile,
+	'workbench.action.chat.openSessionInNewEditorGroup': Codicon.splitHorizontal,
+	'workbench.action.chat.openSessionInNewWindow': Codicon.emptyWindow,
+	'agentSession.pin': Codicon.pin,
+	'agentSession.unpin': Codicon.pinned,
+	'agentSession.markUnread': Codicon.circleFilled,
+	'agentSession.markRead': Codicon.circleLargeOutline,
+	'workbench.action.chat.markAllAgentSessionsRead': Codicon.checkAll,
+	'agentSession.rename': Codicon.edit,
+	'agentSession.archive': Codicon.archive,
+	'agentSession.unarchive': Codicon.inbox,
+	'agentSession.delete': Codicon.trash,
+	'picode.session.rename': Codicon.edit,
+	'picode.session.reviewChanges': Codicon.diffMultiple,
+	'picode.session.createPullRequest': Codicon.gitPullRequestCreate,
+	'picode.session.merge': Codicon.gitMerge,
+	'picode.session.openCopy': Codicon.multipleWindows,
+};
+
+/** The same entry with its icon; one without a known icon is left as it is. */
+function withPicodeMenuIcon(action: IAction): IAction {
+	const icon = PICODE_SESSION_MENU_ICONS[action.id];
+	if (!icon || action.class) {
+		return action;
+	}
+	return toAction({
+		id: action.id,
+		label: action.label,
+		tooltip: action.tooltip,
+		enabled: action.enabled,
+		checked: action.checked,
+		class: ThemeIcon.asClassName(icon),
+		run: (...args: unknown[]) => action.run(...args),
+	});
 }

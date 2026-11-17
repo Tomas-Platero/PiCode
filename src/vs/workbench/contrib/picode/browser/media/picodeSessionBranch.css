@@ -1,0 +1,158 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.  Licensed under the MIT License.
+ *  See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The branch badge on a session row, and the card over it. */
+
+.picode-sessions-list .agent-session-badge.has-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	min-width: 0;
+}
+
+.picode-sessions-list .agent-session-badge-icon {
+	font-size: 12px;
+	flex: none;
+}
+
+.picode-branch-card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 220px;
+	max-width: 340px;
+}
+
+.picode-branch-card-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+}
+
+.picode-branch-card-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-branch-card-earlier,
+.picode-branch-card-loading,
+.picode-branch-card-none {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-branch-card-pulls {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	border-top: 1px solid var(--vscode-widget-border, transparent);
+	padding-top: 6px;
+}
+
+.picode-branch-pull {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 4px 6px;
+	border-radius: 6px;
+	color: inherit;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.picode-branch-pull:hover,
+.picode-branch-pull:focus-visible {
+	background: var(--vscode-list-hoverBackground);
+	outline: none;
+}
+
+.picode-branch-pull-icon {
+	margin-top: 2px;
+	flex: none;
+}
+
+.picode-branch-pull.is-open .picode-branch-pull-icon { color: var(--vscode-charts-green); }
+.picode-branch-pull.is-merged .picode-branch-pull-icon { color: var(--vscode-charts-purple); }
+.picode-branch-pull.is-closed .picode-branch-pull-icon { color: var(--vscode-charts-red); }
+.picode-branch-pull.is-draft .picode-branch-pull-icon { color: var(--vscode-descriptionForeground); }
+
+.picode-branch-pull-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.picode-branch-pull-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-branch-pull-meta {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* The "Worktree" box under a new chat. */
+.picode-worktree-box {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 0 4px;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+
+.picode-worktree-box.on {
+	color: var(--vscode-foreground);
+}
+
+.picode-worktree-check {
+	width: 12px;
+	height: 12px;
+	border: 1px solid var(--vscode-checkbox-border, var(--vscode-descriptionForeground));
+	border-radius: 3px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.picode-worktree-box.on .picode-worktree-check {
+	background: var(--vscode-button-background);
+	border-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-worktree-check .codicon {
+	font-size: 11px;
+}
+
+/* The branch of the chat in front, in the chat input. */
+.picode-branch-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 220px;
+	padding: 0 4px;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+
+.picode-branch-chip-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-branch-chip-added {
+	color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green));
+}
+
+.picode-branch-chip-removed {
+	color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red));
+}
