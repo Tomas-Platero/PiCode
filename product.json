@@ -205,6 +205,8 @@
 		"https://github.com",
 		"https://*.github.com",
 		"https://open-vsx.org",
+		"https://auth.atlassian.com",
+		"https://id.atlassian.com",
 		"https://vscodethemes.com",
 		"https://auth.openai.com",
 		"https://claude.ai",
