@@ -149,6 +149,9 @@ button:disabled {
 	align-items: center;
 	gap: 11px;
 	padding: 8px 10px;
+	/* Every row the same height, a step without a second line too: the thread below assumes it. */
+	min-height: 52px;
+	box-sizing: border-box;
 	border: 0;
 	border-radius: 9px;
 	background: transparent;
@@ -157,14 +160,15 @@ button:disabled {
 	transition: background var(--speed), color var(--speed);
 }
 
-/* The thread between the numbers: it reads as a path, and the seen part is green. */
+/* The thread between the numbers: it reads as a path, and the seen part is green. It runs from the
+   bottom of this number to the top of the next one, whatever the rows' height (rows are equal, 4px apart). */
 .step-link:not(:last-child)::after {
 	content: '';
 	position: absolute;
 	left: 20px;
-	top: 34px;
+	top: calc(50% + 13px);
 	width: 2px;
-	height: 14px;
+	height: calc(100% - 26px + 4px);
 	border-radius: 1px;
 	background: var(--line);
 }
