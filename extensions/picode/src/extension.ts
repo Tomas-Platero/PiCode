@@ -88,7 +88,7 @@ import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 import { diffStat, DIFF_STAT_COMMAND } from './diff-stat';
-import { recordTiming, timed, timingReport } from './perf-timings';
+import { onSlowWork, recordTiming, timed, timingReport } from './perf-timings';
 import { modelPricing, type PiModelCost } from './model-info';
 import { worktreeOfChatKey } from './session-branch-commands';
 
@@ -992,7 +992,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	const agentsProvider: vscode.ChatCustomAgentProvider = {
 		onDidChangeCustomAgents: changed.event,
-		provideCustomAgents: (): NamedChatResource[] => discoverAgents(agentRoots(profileInForce(), trustedWorkspaceDirs()), fsReader)
+		provideCustomAgents: (): NamedChatResource[] => timed('agents: listing', () => discoverAgents(agentRoots(profileInForce(), trustedWorkspaceDirs()), fsReader))
 			.map(agent => ({ uri: vscode.Uri.file(agent.file), name: agent.name, ...(agent.description === undefined ? {} : { description: agent.description }) })),
 	};
 
@@ -1002,7 +1002,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	const skillsProvider: vscode.ChatSkillProvider = {
 		onDidChangeSkills: changed.event,
-		provideSkills: (): NamedChatResource[] => discoverSkills(currentSkillRoots(), fsReader)
+		provideSkills: (): NamedChatResource[] => timed('skills: listing', () => discoverSkills(currentSkillRoots(), fsReader))
 			.map(skill => ({ uri: vscode.Uri.file(skill.file), name: skill.name, ...(skill.description === undefined ? {} : { description: skill.description }) })),
 	};
 
@@ -2498,7 +2498,16 @@ const voice = new VoiceController(os.homedir(), voiceManifestFor(process.platfor
 
 export function activate(context: vscode.ExtensionContext): void {
 	const activationStart = performance.now();
-	queueMicrotask(() => recordTiming('activation', performance.now() - activationStart));
+	// The PiCode log, kept with the window's logs: what pi reports and any work that ran slow.
+	const picodeLog = vscode.window.createOutputChannel('PiCode', { log: true });
+	context.subscriptions.push(picodeLog);
+	onSlowWork(line => picodeLog.warn(line));
+	picodeLog.info(`activating, ${Math.round(process.uptime() * 1000)} ms after the extension host started`);
+	queueMicrotask(() => {
+		const ms = performance.now() - activationStart;
+		recordTiming('activation', ms);
+		picodeLog.info(`activated in ${Math.round(ms)} ms`);
+	});
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
 	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
 	applyProductEnv(process.env, profileDirectory(context.extensionUri));
@@ -2686,7 +2695,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(registerSessionBranchCommands(), registerSessionActions());
 	const piSessions = registerPiSessionsProvider({
 		participant: piParticipant,
-		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => console.error(`[pi] ${line}`) },
+		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => { console.error(`[pi] ${line}`); picodeLog.info(line); } },
 		profileDir: profileInForce,
 		listingCacheFile: path.join(context.globalStorageUri.fsPath, 'sessions-listing.json'),
 	});
