@@ -203,3 +203,27 @@ test("the pi scan leaves out what PiCode's own profile already has", () => {
 	assert.deepStrictEqual(ids('mcp'), ['web']);
 	assert.deepStrictEqual(ids('skills'), ['deploy']);
 });
+
+test('extensions show the name and icon of their store page, and settings their Settings-page name', () => {
+	const roots = vscodeMachine(scratch());
+	const extensions = join(roots.home, '.vscode', 'extensions');
+	const prettier = join(extensions, 'esbenp.prettier-vscode-10.0.0');
+	write(join(prettier, 'package.json'), { displayName: '%name%', icon: 'icon.png', contributes: { configuration: { properties: { 'prettier.semi': {} } } } });
+	write(join(prettier, 'package.nls.json'), { name: 'Prettier - Code formatter' });
+	writeFileSync(join(prettier, 'icon.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+	write(join(roots.appData, 'Code', 'User', 'settings.json'), {
+		'editor.wordWrap': 'on', '[python]': {}, 'prettier.semi': false, 'gone.extension.option': 1, 'github.copilot.enable': {}, 'update.mode': 'none',
+	});
+	const [catalog] = scanVsCode(roots);
+	const byId = (id: string) => catalog.categories.find(category => category.id === id);
+	const row = byId('extensions')?.items[0];
+	assert.strictEqual(row?.label, 'Prettier - Code formatter');
+	assert.strictEqual(row?.description, 'esbenp.prettier-vscode');
+	assert.ok(row?.icon?.startsWith('data:image/png;base64,'));
+	const settings = byId('editorSettings')?.items;
+	assert.deepStrictEqual(settings?.map(item => [item.id, item.label, item.detail]), [
+		['editor.wordWrap', 'Editor: Word Wrap', undefined],
+		['[python]', 'Python (language settings)', undefined],
+		['prettier.semi', 'Prettier: Semi', 'Prettier - Code formatter'],
+	]);
+});

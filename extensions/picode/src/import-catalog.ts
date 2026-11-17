@@ -36,6 +36,10 @@ export interface CatalogItem {
 	readonly label: string;
 	/** A second, quieter line (a version, a kind), when there is one. */
 	readonly detail?: string;
+	/** A line under the label: an extension's id, a setting's key. */
+	readonly description?: string;
+	/** A small picture before the label, as a data URI: an extension's own icon. */
+	readonly icon?: string;
 }
 
 export interface CatalogCategory {
@@ -462,6 +466,95 @@ interface InstalledExtension {
 	readonly folder?: string;
 }
 
+/** The biggest icon file shown in the Import window: a store icon is a few kilobytes. */
+const MAX_ICON_BYTES = 128 * 1024;
+
+const ICON_TYPES: Readonly<Record<string, string>> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.gif': 'image/gif', '.webp': 'image/webp' };
+
+/** What an installed extension says about itself: the name and icon its store page shows, and the settings it adds. */
+interface ExtensionManifest {
+	readonly displayName?: string;
+	readonly icon?: string;
+	readonly settings: readonly string[];
+}
+
+/** A `%key%` placeholder of a manifest, read from its `package.nls.json`. */
+function localized(folder: string, value: unknown): string | undefined {
+	if (typeof value !== 'string' || value.trim() === '') {
+		return undefined;
+	}
+	const placeholder = /^%(.+)%$/.exec(value);
+	if (placeholder === null) {
+		return value;
+	}
+	const text = readJsonObject(path.join(folder, 'package.nls.json'))?.[placeholder[1]];
+	const message = typeof text === 'object' && text !== null ? (text as { message?: unknown }).message : text;
+	return typeof message === 'string' ? message : undefined;
+}
+
+function extensionManifest(folder: string | undefined): ExtensionManifest {
+	if (folder === undefined) {
+		return { settings: [] };
+	}
+	const manifest = readJsonObject(path.join(folder, 'package.json'));
+	if (manifest === undefined) {
+		return { settings: [] };
+	}
+	let icon: string | undefined;
+	if (typeof manifest['icon'] === 'string') {
+		const file = path.join(folder, manifest['icon']);
+		const type = ICON_TYPES[path.extname(file).toLowerCase()];
+		try {
+			if (type !== undefined && statSync(file).size <= MAX_ICON_BYTES) {
+				icon = `data:${type};base64,${readFileSync(file).toString('base64')}`;
+			}
+		} catch {
+			// No icon is shown rather than a broken one.
+		}
+	}
+	const contributes = manifest['contributes'];
+	const configuration = typeof contributes === 'object' && contributes !== null ? (contributes as Record<string, unknown>)['configuration'] : undefined;
+	const settings: string[] = [];
+	for (const block of Array.isArray(configuration) ? configuration : configuration === undefined ? [] : [configuration]) {
+		const properties = typeof block === 'object' && block !== null ? (block as { properties?: unknown }).properties : undefined;
+		if (typeof properties === 'object' && properties !== null) {
+			settings.push(...Object.keys(properties));
+		}
+	}
+	const displayName = localized(folder, manifest['displayName']);
+	return { ...(displayName !== undefined ? { displayName } : {}), ...(icon !== undefined ? { icon } : {}), settings };
+}
+
+/**
+ * The settings sections the editor itself owns: a setting under one of these means the same in
+ * PiCode as in VS Code. A setting outside them belongs to an extension, and is only offered when
+ * that extension is installed, in PiCode or in the editor being imported from.
+ */
+const EDITOR_SECTIONS = new Set([
+	'accessibility', 'audioCues', 'breadcrumbs', 'comments', 'css', 'debug', 'diffEditor', 'editor', 'emmet', 'explorer',
+	'extensions', 'files', 'git', 'github', 'html', 'http', 'javascript', 'json', 'less', 'markdown', 'merge-conflict',
+	'mergeEditor', 'notebook', 'npm', 'outline', 'php', 'problems', 'scm', 'screencastMode', 'scss', 'search', 'security',
+	'testing', 'terminal', 'timeline', 'typescript', 'window', 'workbench', 'zenMode', 'interactiveWindow', 'inlineChat',
+	'multiDiffEditor', 'simpleBrowser', 'task', 'launch', 'references', 'remote', 'gulp', 'grunt', 'jake', 'yaml', 'ipynb',
+]);
+
+/** "Word Wrap" from `wordWrap`, as the Settings page writes it. */
+function words(segment: string): string {
+	const spaced = segment.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ');
+	return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** A setting's name as the Settings page shows it: `editor.wordWrap` is "Editor: Word Wrap". */
+export function settingDisplayName(key: string): string {
+	const language = /^\[(.+)\]$/.exec(key);
+	if (language !== null) {
+		return `${language[1].split('][').map(words).join(', ')} (language settings)`;
+	}
+	const parts = key.split('.');
+	const last = words(parts[parts.length - 1]);
+	return parts.length === 1 ? last : `${parts.slice(0, -1).map(words).join(' › ')}: ${last}`;
+}
+
 function installedExtensions(extensionsDir: string): InstalledExtension[] {
 	const listed = readJsonValue(path.join(extensionsDir, 'extensions.json'));
 	const result: InstalledExtension[] = [];
@@ -514,13 +607,43 @@ export function scanVsCode(roots: VsCodeRoots = defaultVsCodeRoots(), paths?: Pi
 
 		const themes: CatalogItem[] = [];
 		const others: CatalogItem[] = [];
+		/** Which extension adds each setting, and whether that extension can be in PiCode. */
+		const settingOwners = new Map<string, { readonly name: string; readonly usable: boolean; readonly installedHere: boolean }>();
 		for (const extension of installedExtensions(extensionsDir)) {
-			if (SKIPPED_EXTENSION.test(extension.id) || have.has(extension.id.toLowerCase())) { continue; }
-			const row: CatalogItem = { id: extension.id, label: extension.id, ...(extension.version !== undefined ? { detail: extension.version } : {}) };
+			const skipped = SKIPPED_EXTENSION.test(extension.id);
+			const here = have.has(extension.id.toLowerCase());
+			const manifest = extensionManifest(extension.folder);
+			const name = manifest.displayName ?? extension.id;
+			for (const key of manifest.settings) {
+				settingOwners.set(key, { name, usable: !skipped, installedHere: here });
+			}
+			if (skipped || here) { continue; }
+			const row: CatalogItem = {
+				id: extension.id,
+				label: name,
+				...(name !== extension.id ? { description: extension.id } : {}),
+				...(manifest.icon !== undefined ? { icon: manifest.icon } : {}),
+				...(extension.version !== undefined ? { detail: extension.version } : {}),
+			};
 			(contributesTheme(extension.folder) ? themes : others).push(row);
 		}
 		const settings = readJsonObject(path.join(userDir, 'settings.json'));
-		const settingKeys = settings === undefined ? [] : Object.keys(settings).filter(key => !SKIPPED_SETTING.test(key));
+		// Only what means something in PiCode: the editor's own settings, language settings, and the
+		// settings of an extension PiCode has or can bring across. A leftover of an extension that is
+		// gone, or of one PiCode does not carry, is not offered.
+		const settingRows: CatalogItem[] = [];
+		for (const key of settings === undefined ? [] : Object.keys(settings)) {
+			if (SKIPPED_SETTING.test(key)) { continue; }
+			const owner = settingOwners.get(key);
+			const editorOwn = /^\[.+\]$/.test(key) || EDITOR_SECTIONS.has(key.split('.')[0]);
+			if (owner !== undefined ? !owner.usable : !editorOwn) { continue; }
+			settingRows.push({
+				id: key,
+				label: settingDisplayName(key),
+				description: key,
+				...(owner !== undefined && !owner.installedHere ? { detail: owner.name } : {}),
+			});
+		}
 		const keybindings = readJsonValue(path.join(userDir, 'keybindings.json'));
 		const snippetsDir = path.join(userDir, 'snippets');
 		const snippets = listDirectory(snippetsDir).filter(name => /\.(code-snippets|json)$/i.test(name));
@@ -528,7 +651,7 @@ export function scanVsCode(roots: VsCodeRoots = defaultVsCodeRoots(), paths?: Pi
 		const categories: CatalogCategory[] = [
 			{ id: 'themes', count: themes.length, items: themes },
 			{ id: 'extensions', count: others.length, items: others },
-			{ id: 'editorSettings', count: settingKeys.length, items: settingKeys.map(id => ({ id, label: id })) },
+			{ id: 'editorSettings', count: settingRows.length, items: settingRows },
 			{ id: 'keybindings', count: Array.isArray(keybindings) ? keybindings.length : 0, items: [], bulk: true },
 			{ id: 'snippets', count: snippets.length, items: snippets.map(id => ({ id, label: id.replace(/\.(code-snippets|json)$/i, '') })) },
 		];
