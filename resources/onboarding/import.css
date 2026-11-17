@@ -491,3 +491,31 @@
 		transition: none;
 	}
 }
+
+/* An extension's own icon, and the line under a row's name (its id, a setting's key). */
+.imp-row-icon {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	border-radius: 4px;
+	object-fit: contain;
+}
+
+.imp-row-text {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.imp-row-text .imp-row-label {
+	flex: none;
+}
+
+.imp-row-description {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--comment);
+	font-size: 11.5px;
+}

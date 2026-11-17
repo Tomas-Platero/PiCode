@@ -578,7 +578,10 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 			return false;
 		}
 
-		if (this.contextService.isInsideWorkspace(extension.location)) {
+		// PiCode: an extension that ships with the app is not one the folder brought, even when the app itself
+		// sits inside the opened folder (a portable copy in a project): without this, opening that folder
+		// untrusted turned off every built-in extension, the chat included.
+		if (extension.type !== ExtensionType.System && this.contextService.isInsideWorkspace(extension.location)) {
 			return true;
 		}
 

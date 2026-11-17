@@ -26,7 +26,7 @@ import {
 } from './picodeConnectorAuth.js';
 import {
 	buildGithubUpdate, buildJiraUpdate, GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeGithubPatch, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
-	mapEditMetaPriorities, mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, jiraKeyFromBranch, mapJiraBoardColumns, mapJiraProjectList, mapJiraUsers, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
+	mapEditMetaPriorities, mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, mapGithubPulls, type IPicodePull, jiraKeyFromBranch, mapJiraBoardColumns, mapJiraProjectList, mapJiraUsers, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
 } from './picodeIssueBoard.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
@@ -136,6 +136,8 @@ export interface IPicodeConnectorService {
 	workspaceRepoKey(): Promise<string | undefined>;
 	/** What `workspaceRepoKey` last answered, without reading anything. */
 	readonly knownWorkspaceRepoKey: string | undefined;
+	/** The pull requests of `branch` in `owner/repo`; undefined when GitHub is not connected, the plan is not Pro or the call failed. */
+	pullsForBranch(repo: string, branch: string): Promise<readonly IPicodePull[] | undefined>;
 	/** Asks the cloud service which plan the account is on, and remembers the answer. */
 	refreshPlan(): Promise<void>;
 }
@@ -324,10 +326,12 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		if (!clientId || !redirectUri) {
 			return 'failed';
 		}
-		// Asking again must not take back what the account already allowed.
-		const before = this.load('atlassian');
-		const write = options.write === true || before?.canWrite === true;
-		const boards = options.boards === true || before?.canReadBoards === true;
+		// Everything the panels use is asked for at once, so signing in is the only consent: reading,
+		// moving and editing issues, looking people up and reading the boards' columns. `options` stays
+		// for the callers that ask for one of them on a connection made before this.
+		void options;
+		const write = true;
+		const boards = true;
 		// The server tracks the attempt and trades the code, so nothing depends on the browser being
 		// able to open the editor again (it may refuse the link; another copy may have claimed it).
 		const begun = await this.postCloud('/v1/connect/atlassian', { action: 'begin' });
@@ -976,6 +980,21 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			this.etags.set(url, { etag: answer.etag, json: answer.json });
 		}
 		return { ok: true, json: answer.json };
+	}
+
+	async pullsForBranch(repoRef: string, branch: string): Promise<readonly IPicodePull[] | undefined> {
+		const repo = parseGithubRepoRef(repoRef);
+		if (!repo || branch === '' || !this.isConnected('github')) {
+			return undefined;
+		}
+		try {
+			const head = encodeURIComponent(`${repo.owner}:${branch}`);
+			const read = await this.getJson(`${GITHUB_API}/repos/${repo.owner}/${repo.repo}/pulls?state=all&head=${head}&per_page=10`);
+			return read.ok ? mapGithubPulls(read.json) : undefined;
+		} catch {
+			// Not Pro, the app lacks the pull requests permission, or no network: the row keeps its branch.
+			return undefined;
+		}
 	}
 
 	async workspaceRepoKey(): Promise<string | undefined> {

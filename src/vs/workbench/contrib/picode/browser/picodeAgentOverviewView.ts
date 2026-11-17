@@ -178,6 +178,8 @@ let knownMemory: IMemorySummary | undefined;
 
 /** The folder's `+N −M` as last read, shared the same way. */
 let knownDiff: { readonly added: number; readonly removed: number } | undefined;
+/** The active chat's own branch copy (a session on its own branch): its branch and changes replace the window's. */
+let knownWorktree: { readonly folder: string; readonly branch: string | undefined; readonly files: number; readonly added: number; readonly removed: number } | undefined;
 
 /**
  * Both, kept with the workspace between starts: the panel paints what was last seen while pi starts
@@ -264,8 +266,9 @@ export class PicodeAgentOverview extends Disposable {
 		this._register(this.scmService.onDidRemoveRepository(() => this.paint()));
 		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => {
 			this.paint();
-			// Another chat in front: its context, not the previous one's.
+			// Another chat in front: its context and its branch, not the previous one's.
 			void this.read('context', () => this.readContext());
+			void this.read('worktree', () => this.readWorktree());
 		}));
 		// A section hidden, shown, folded or unfolded, here or in the other Status of the window.
 		this._register(onDidChangePicodeStatusSections(() => this.paint()));
@@ -307,8 +310,9 @@ export class PicodeAgentOverview extends Disposable {
 		if (!isStatusSectionHidden(this.storageService, 'context')) {
 			void this.read('context', () => this.readContext());
 		}
+		void this.read('worktree', () => this.readWorktree());
 		// Only counted where it is drawn: with no changed file the column shows no lines at all.
-		if (this.changedFiles() > 0 && (this.diffStale || Date.now() - this.diffReadAt > DIFF_SAFETY_MS)) {
+		if (knownWorktree === undefined && this.changedFiles() > 0 && (this.diffStale || Date.now() - this.diffReadAt > DIFF_SAFETY_MS)) {
 			void this.read('diff', async () => {
 				this.diffStale = false;
 				this.diffReadAt = Date.now();
@@ -370,7 +374,7 @@ export class PicodeAgentOverview extends Disposable {
 	/** Everything `paint` draws from, apart from the folds, which repaint by themselves. */
 	private fingerprint(): string {
 		return JSON.stringify([
-			knownConnectors, knownDiff, knownTasks, knownMemory, knownContext,
+			knownConnectors, knownDiff, knownWorktree, knownTasks, knownMemory, knownContext,
 			this.changedFiles(), this.currentBranch(), this.contextUsage(),
 			this.workspaceService.getWorkspace().folders[0]?.uri.toString(),
 			this.contextKeyService.getContextKeyValue<boolean>(MEMORY_ENABLED_CONTEXT),
@@ -458,6 +462,9 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private changedFiles(): number {
+		if (knownWorktree !== undefined) {
+			return knownWorktree.files;
+		}
 		let files = 0;
 		for (const repository of this.scmService.repositories) {
 			for (const group of repository.provider.groups) {
@@ -510,6 +517,9 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private currentBranch(): string | undefined {
+		if (knownWorktree?.branch !== undefined) {
+			return knownWorktree.branch;
+		}
 		for (const repository of this.scmService.repositories) {
 			const name = repository.provider.historyProvider.get()?.historyItemRef.get()?.name;
 			if (name) {
@@ -601,6 +611,12 @@ export class PicodeAgentOverview extends Disposable {
 		return this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString();
 	}
 
+	/** The branch copy of the chat in front, if it works in one (a session on its own branch). */
+	private async readWorktree(): Promise<void> {
+		knownWorktree = await this.commandService.executeCommand<typeof knownWorktree>('picode.git.activeWorktree', this.focusedChatKey()) ?? undefined;
+		this.publish();
+	}
+
 	private async readContext(): Promise<void> {
 		knownContext = await this.commandService.executeCommand<IContextBreakdown>(CONTEXT_BREAKDOWN_COMMAND, this.focusedChatKey()) ?? undefined;
 	}
@@ -678,6 +694,12 @@ export class PicodeAgentOverview extends Disposable {
 			? localize('picode.overview.noChanges', "Nothing changed")
 			: files === 1 ? localize('picode.overview.oneChange', "1 file changed") : localize('picode.overview.manyChanges', "{0} files changed", files);
 		let row: HTMLElement;
+		if (knownWorktree !== undefined) {
+			// A session on its own branch: its copy's lines, without Review (the editor's Source Control shows the window's folder).
+			row = this.row(section, Codicon.diff, files === 0 ? filesLabel : `+${knownWorktree.added.toLocaleString()} −${knownWorktree.removed.toLocaleString()}`);
+			row.title = filesLabel;
+			return;
+		}
 		if (files > 0 && knownDiff && (knownDiff.added > 0 || knownDiff.removed > 0)) {
 			// Lines added and removed, as Claude Code shows them; the file count stays as the hover.
 			row = append(section, $('.picode-overview-row'));

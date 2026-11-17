@@ -1,289 +1,112 @@
-# The setup window
+# resources/onboarding/ — 🧭 La ventana de configuración
 
-The window PiCode shows **before the editor exists**: which pi runs, which model answers, how it
-looks, and what else to switch on. The same page serves three situations —
-[`onboarding.js`](onboarding.js) reads `mode` and starts from the state that is already configured
-instead of asking again:
+La ventana que PiCode enseña **antes de que exista el editor**: la cuenta, cómo se reparte la
+pantalla, qué modelo usa pi, el tema y dónde empezar. La misma página sirve para cuatro
+situaciones; [`onboarding.js`](onboarding.js) lee `mode` y parte de lo que ya está configurado en
+vez de volver a preguntarlo:
 
-| `mode` | When |
+| `mode` | Cuándo |
 | --- | --- |
-| `first-run` | no `onboarding.json` recorded for this installation |
-| `update` | the recorded `onboardingVersion` or the product's major version changed |
-| `setup` | `PiCode: Setup` from the Command Palette, with the editor already open |
-| `import` | `PiCode: Import from Pi or VS Code`: the same window, open only on the Import view |
+| `first-run` | no hay `onboarding.json` para esta instalación |
+| `update` | cambió el `onboardingVersion` guardado o la versión mayor del producto |
+| `setup` | `PiCode: Setup` desde la paleta, con el editor ya abierto |
+| `import` | `PiCode: Import from Pi or VS Code`: la misma ventana, solo con la vista Import |
 
-## What is in here
+## 🗺️ Los cinco pasos (2.3.0)
 
-| File | Its one job |
+| Paso | Qué decide | Qué escribe |
+| --- | --- | --- |
+| **Welcome** | la cuenta de PiCode (opcional) y, como acción secundaria, *Import from Pi or VS Code* | nada; la importación tiene su propia vista |
+| **Layout** | *Agent* o *Editor*, con un dibujo SVG de cada uno | `setLayout` |
+| **Agent** | el modelo de las conversaciones nuevas, en **una sola lista con buscador**: los proveedores listos para usar, las suscripciones (inicio de sesión con el navegador) y las claves de API (OpenRouter, DeepSeek, Groq u otra dirección). El pi incluido es el de serie y sale plegado en una línea; el pi del equipo vive en *Advanced* | `setModel`, `addProvider`, `setRuntime` |
+| **Look** | el tema, con una **vista previa al lado** (editor y chat en los colores del tema) | `setTheme` |
+| **Ready** | el resumen con un *Change* por fila, dónde empezar (carpeta, clonar, vacío) y un bloque *Advanced* plegado: MCP, dictado, contexto del chat, tono y permisos de Gentle | `setExtras`, `setContextMode`, `setGentle` |
+
+Ningún paso es obligatorio: *Continue* siempre avanza. Sin modelo, el paso Agent lo dice, el carril
+lo marca con **!** y el resumen lo pinta en naranja, pero no bloquea.
+
+## 🧩 Qué hay aquí
+
+| Fichero | Su único trabajo |
 | --- | --- |
-| [`index.html`](index.html) | the skeleton: rail, six steps, footer. No content — the steps are painted from data. |
-| [`onboarding.js`](onboarding.js) | everything the page decides: which step, what it shows, and the calls it makes. Two languages (English, Spanish) in one table. |
-| [`import.js`](import.js) · [`import.css`](import.css) | the Import view: source cards (your other pi, each VS Code found), collapsible categories with one checkbox per item, and a footer with the single action. It is a layer over the steps; in `import` mode it is the whole window. |
-| [`flags.js`](flags.js) | the 14 country flags of the language list, as small vector images in the flag's own colours (emoji flags are only letters on Windows, so they are drawn). |
-| [`onboarding.css`](onboarding.css) | the look, and the palette: **fixed**, the product's. Three surfaces (canvas `#0B0F19`, rail `#111625`, card `#182030` with a `#2A364F` border), three text weights (`#F3F4F6` · `#9CA3AF` · `#6B7280`), one blue for the action (`#2563EB`, hover `#1D4ED8`) and one green for "this worked" (`#10B981`). |
-| [`preload.cjs`](preload.cjs) | the only bridge to the main process: five named operations, no generic `invoke`. |
-| [`host.cjs`](host.cjs) | the backend shim. It loads the connector's own `onboarding-host` and answers one command per process. |
-| `media/picode.svg` | the robot mark, **copied verbatim** from `extensions/picode/media/picode.svg`. If the mark changes, this file changes with it. |
+| [`index.html`](index.html) | el esqueleto: carril, cinco secciones vacías y pie. El contenido se pinta desde datos. |
+| [`onboarding.js`](onboarding.js) | todo lo que decide la página: qué paso, qué enseña y qué comandos llama. |
+| [`onboarding.css`](onboarding.css) | el aspecto, con la paleta **fija** del producto (lienzo `#0B0F19`, carril `#111625`, tarjeta `#182030`, azul `#2563EB`, verde `#10B981`). |
+| [`import.js`](import.js) · [`import.css`](import.css) | la vista Import: orígenes, categorías plegables y una casilla por elemento. En modo `import` es toda la ventana. |
+| [`flags.js`](flags.js) | las 14 banderas del selector de idioma, en vectorial (en Windows las banderas emoji salen como letras). |
+| [`l10n/`](l10n/) | los textos, un fichero por idioma (inglés más 13). Ver su README. |
+| [`preload.cjs`](preload.cjs) | el único puente con el proceso principal: operaciones con nombre, sin `invoke` genérico. |
+| [`host.cjs`](host.cjs) | el backend: carga `onboarding-host` del conector y responde un comando por proceso. |
+| `media/picode.svg` | la marca, **copiada tal cual** de `extensions/picode/media/picode.svg`. |
 
-## The page does not move when it repaints
+## ⚙️ Cómo pinta
 
-A choice repaints its step, and the person was reading the bottom of it. `fill()` (the one helper
-every list is painted with) puts `.steps-scroll`'s position back after repainting, at once and again
-after the next frame; only arriving at *another* step starts at the top (`renderStep`, which used to
-scroll `.content`, an element that never scrolls). Scrollbars are the product's own, thin pills in
-the palette (`::-webkit-scrollbar` at the end of `onboarding.css`); never set the standard
-`scrollbar-width` / `scrollbar-color` there, because they switch the WebKit ones off.
+- **Un solo `render()`.** Cada cambio de estado vuelve a construir el paso como elementos normales
+  (`el()`) y `patch()` los **encaja sobre lo que ya hay**: los nodos que siguen ahí se conservan
+  (por `key` o por orden y etiqueta), solo se toca lo que cambió. Así un campo no pierde el foco ni
+  el cursor al escribir (el buscador de proveedores filtra mientras se teclea), una lista no salta
+  y los logos ya cargados no parpadean. Sigue siendo JavaScript sin dependencias.
+- **Los manejadores viajan con el nodo.** `el()` guarda cada `on…` en el propio nodo y un único
+  oyente por tipo lo llama; al reutilizar un nodo, `patch()` le pasa los manejadores nuevos.
+- **Al cambiar de paso** se vuelve arriba y el foco pasa al título del paso (para lector de
+  pantalla y teclado). Los cambios dentro de un paso no mueven nada.
+- **El carril dice el estado de cada paso**: número, ✓ si ya se vio, **!** si pide atención, y
+  debajo lo que tiene ahora (cuenta, diseño, modelo, tema). Se puede saltar a cualquier paso.
+- **La ventana no se repinta con los temas.** Pasar el ratón (o el foco) por un tema solo cambia
+  la vista previa; la ventana mantiene la paleta del producto.
+- **Movimiento corto** (≈200 ms) y **nada** si el sistema pide menos movimiento
+  (`prefers-reduced-motion`, al final de `onboarding.css`).
 
-## Which layout the setup starts on
+## ⌨️ Teclas y botones con un solo significado
 
-A **first** setup recommends the new layout: Agent is marked from the start and recorded as soon as
-the page loads (like the theme), with a *New* tag on its card, so leaving the step alone or skipping
-the setup keeps it. A later setup, or an update, keeps whatever the person has.
+- **Skip setup** = abrir el editor ya, conservando lo elegido hasta ahí. Está en todos los pasos
+  menos el último y siempre significa eso.
+- **Escape** cierra lo que está encima (la vista Import, un aviso, la lista de idiomas). Ya **no**
+  se salta la configuración entera.
 
-## The editor's language, while the steps go by
+## 🔑 Lo que conviene saber
 
-The page speaks the computer's language, which the main process reads from the system
-(`systemLanguages` in the bootstrap): the browser inside the editor would answer with the editor's own. The editor's own language is fixed when the
-program starts, so the setup cannot switch it live; it gets it ready instead. `prepareLanguage`
-(backend: `extensions/picode/src/display-language.ts`) downloads Microsoft's language pack from Open
-VSX into `<user data>/picode-language/`, and the editor installs it at its first start. The final
-summary shows a *Language* row only while something is left to do. See `docs/IDIOMAS.md`.
+- **No escribe nada por su cuenta.** Cada escritura es un comando con nombre que pasa por
+  `host.cjs` → `extensions/picode/src/onboarding-host.ts`, y cada respuesta trae el estado fresco
+  del disco, que es lo que se vuelve a pintar.
+- **Probar una clave no la guarda.** *Test connection* (`testProvider`) pregunta a la dirección
+  qué modelos tiene y cuánto tarda; solo *Connect* (`addProvider`) la guarda, y el backend la
+  rechaza si la dirección no lista modelos. (Hasta la 2.2 esa pestaña llamaba a funciones que ya
+  no existían; quedó arreglado con el rediseño.)
+- **Las suscripciones las lista pi**, no una lista nuestra. Su inicio de sesión corre en un
+  proceso hijo con el perfil de PiCode; los mensajes van marcados con `##picode##` porque esa
+  salida la comparte con npm, y cada intento lleva su número para ignorar los eventos de uno
+  cancelado.
+- **Las credenciales nunca se marcan por defecto** al importar, y la ventana no dice que estén
+  cifradas porque `auth.json` no lo está.
+- **El editor siempre se abre.** Cerrar la ventana, que se cuelgue o que no cargue cuenta como
+  "omitir"; la ventana se oculta (no se destruye) hasta que existe la del editor, porque VS Code
+  se cierra al quedarse sin ventanas.
+- **El idioma del editor** no se puede cambiar en vivo desde aquí: se descarga su paquete mientras
+  pasan los pasos (`prepareLanguage`) y el editor lo instala al arrancar. Ver `docs/IDIOMAS.md`.
+- **Primera vez:** *Agent* sale marcado y guardado desde el principio, y el tema PiCode Dark
+  también; una configuración posterior respeta lo que la persona ya tiene.
 
-## Signing in to a subscription, before the editor exists
+## 🧪 Cómo probarla
 
-This was the one thing that looked impossible here: pi's subscription logins run in the editor's
-account flow. They do not have to. The conversation with pi lives in
-`extensions/picode/src/subscriptions.ts`, which has **no runtime `vscode` import** — the editor
-supplies two things it lacks (a prompt and a notifier), and the setup window supplies its own.
-So the same `runtime.login(providerId, 'oauth', …)` runs in the child process, over PiCode's own
-profile, and the credential lands exactly where the editor will look for it.
+**Sin compilar el editor:** servir esta carpeta y sustituir `window.picode` por un simulado antes
+de `flags.js` permite recorrer los cinco pasos en cualquier navegador (`?mode=first-run|setup`,
+idioma del sistema simulado). Así se verificó la 2.3.0 en inglés y en español: foco en el
+buscador, Escape, Skip, vista previa de temas y el flujo de clave de API.
 
-What the window shows comes from pi, never from a guess: provider list (`getProviders()` filtered
-to those with `oauth.login`), its questions (select / text / secret / manual code), and its
-notices (`auth_url`, `device_code`, `progress`, `info`). The URL is opened in the system browser
-through the same allowlisted `openExternal` the key links use.
+**En la ventana real:** arrancar el editor con `--remote-debugging-port=9222`, borrar antes
+`<datos>/onboarding.json` para que salga, y evaluar clics dentro de la página por el protocolo de
+DevTools (buscar el destino cuya URL contiene `onboarding/index.html`). Las tres comprobaciones que
+importan:
 
-Two things learned the hard way, both fixed:
+1. **Skip** y la **X** terminan siempre con una ventana del editor y `onboarding.json` escrito.
+2. Sin el fichero, la ventana vuelve a salir; con él, no se crea nada.
+3. `PICODE_ONBOARDING_CONNECTOR=<conector>/out … host.cjs state` responde JSON con la versión de
+   pi: el backend funcionando sin editor.
 
-- **The protocol cannot share stdout with pi.** Loading pi runs npm the first time (its declared
-  packages get installed) and npm prints whatever it likes. Answers travel as lines prefixed with
-  `##picode##`, and everything else on that pipe is logged and ignored. (fd 3 was the first
-  attempt; it does not survive this spawn on Windows.)
-- **Attempts need a number.** A cancelled sign-in's child is still exiting when the next one
-  starts, and its `exit` would land on a window now watching a different attempt. Every event
-  carries the run it belongs to; the page ignores the others.
+## 📍 Dónde está el resto
 
-Verified on a real window, not in theory: nine providers listed from pi (Anthropic, GitHub
-Copilot, OpenAI, xAI, …), pi's own question rendered a second after the click, answering it
-produced **Claude's real authorize URL**, and Cancel settled the panel to "the sign-in was
-cancelled". The last step — approving the account — is the owner's, by definition.
-
-## The model step is three tabs, not three stacked cards
-
-Three cards that each opened a block underneath turned into a tower: two panels open at once, the
-page taller than the window, and the last one sliding under the footer. Now:
-
-- **A tab bar** — subscriptions, API key, local models (with its count). Exactly one panel is
-  shown, and the panel is chosen by the tab rather than by which cards were clicked.
-- **The layout has three bands**: a scrolling middle, a footer that is not part of the scroll, and
-  nothing else. Measured on a real window: scroll 612.5 + footer 68.5 = 681 = the window height,
-  and `elementFromPoint` in the footer's pixels answers *footer*, not the panel.
-- **The API-key form asks for one thing.** A preset fills the address and the dialect; the key is
-  the only field. `Advanced options` reveals name, address and dialect for a local server or an
-  endpoint nobody has heard of.
-- **Subscriptions are a two-column grid**, ordered like the editor orders them
-  (`rankOf`/`FEATURED_SUBSCRIPTIONS` in `subscriptions.ts`): ChatGPT, Claude, Copilot, xAI, Kimi,
-  OpenRouter first, then the rest by name, each with the note the product already had.
-
-The first time in a fresh install, opening that tab costs ten-thirteen seconds: loading pi for the
-first time also installs its declared packages. The panel says so instead of showing a spinner —
-`subLoading` names the reason.
-
-The list is **whatever pi reports**. This pi offers nine OAuth providers and neither Google Gemini
-nor Mistral is among them, so they are not listed: a row that fails on click is worse than a row
-that is not there. Both can still be used through the API-key tab.
-
-## The extras step: one control, not two
-
-It had a switch **and** three cards. With the switch off the cards were disabled, and nothing on
-screen said which of the two was in charge — the copy was also describing plumbing ("what travels
-with each message", "folder + file") rather than a choice a person makes.
-
-Now the section is *AI Code Context & Privacy*, its subtitle says what it decides, and the three
-cards **are** the control: `Full Workspace` (badge *Recommended*), `Active File Only`,
-`Selection Only`, each with the privacy it buys and what it costs. Radio semantics
-(`role="radiogroup"`, `aria-checked`), cobalt border and a lifted blue surface on the chosen one
-(`#2563EB`, measured).
-
-The product still keeps two settings — *whether* context travels (`picode.context.attach`) and
-*how much* (`picode.context.mode`) — but this screen shows only the second. Choosing a card turns
-the first on, which is what stops a card from looking selected while nothing is attached. If the
-context is off in Settings, the step **says so** and any card turns it back on; a card is never
-shown as chosen while the thing it describes is off.
-
-## The model step, after the repairs
-
-- The **white controls** were a real bug with a boring cause: deleting the old vertical-route
-  styles took `.preset`, `.field` and the input rules with them, so the browser painted its own
-  colours (`rgb(240,240,240)` on a pill, `rgb(255,255,255)` on the key field). Measured, restored,
-  and every control now sets its own background and colour instead of trusting an ancestor.
-- The **key field** no longer has a whole sentence as its placeholder: `sk-…` inside, the sentence
-  underneath. That was the "two texts on top of each other" look.
-- **Packages are installed before pi ever loads.** pi's own loader installs a declared-but-missing
-  package the moment a session is built — one npm process per package, with no `windowsHide`, so
-  each one flashes a console window. The connector already solved it for the editor
-  (`packages-install.ts`); the setup calls it before any import, sign-in or provider list, so by the
-  time pi runs, its check finds nothing to install and nothing flashes.
-- **Importing brings what it says.** Measured on a scratch profile: `settings`, `models`, `mcp`,
-  `skills`, `memory` and `sessions` copied, and the models that arrived are `omni`'s 165 — **13 of
-  them NAN** (`NAN-DeepSeek_V4.1-Flash`, `NAN-GEMMA4`, `NAN-GLM_5.3-Flash`…). The credential named
-  `nan` is a separate item and stays unticked, which is the rule.
-- **Local models: two dropdowns, and the first one holds root names only.** `omni · 165 models`,
-  `NAN · 6 models`, `nan-providers · 7 models`, `auto · 47 models`, `nvidia · 69 models`… — the
-  provider and each of its model families as a plain name, without repeated `omni ›` prefixes. The
-  second dropdown holds **only** that entry's models: picking `NAN` leaves exactly the six
-  `NAN-…` ids. Nothing is renamed; a family is the namespace the ids already carry.
-- **A stale default model is called out.** `deepseek/deepseek-v4-flash` in the profile in front of
-  me names a provider that is not declared anywhere, so the editor cannot run it. The panel says
-  so — *"the model in force is … and no provider here declares it. Pick one below and save it."* —
-  instead of showing a list that never mentions it.
-- **Counts read properly**: `1 model` / `2 models`, in the language on screen.
-- **One width for the welcome.** Mark, sentence, the three cards and the account card share a
-  single 720 px column; the cards are a grid of equal thirds (229 px each, measured) and the account
-  card takes the full width of that column — before, each card sized to its own text and the account
-  card capped at 520, so three widths met in a column that looked off-centre. The scroll area
-  reserves its gutter on **both** edges (`scrollbar-gutter: stable both-edges`): reserving it on the
-  right only left every centred block 15 px off. Measured after: 66 px left, 66 px right, 0
-  difference.
-- **The welcome is centred and is about the account** (changed 2026-11-02, «quita lo de agente,
-  modelo y tema»): the three shortcut cards (pi, model, theme) are gone, and the second line says
-  what signing in is for. The account card says what an account is (free, with email, Google or
-  GitHub; Pro adds cloud sync), one button *Sign in or sign up* and a quiet link to the plans.
-
-## What the public README says, and what it must not say
-
-`README.md` at the root is read by everyone who finds the repository, so it carries only what is
-true today and checkable: the setup is a window of its own before the editor, its themes are
-painted in their own colours, and `PiCode: Setup` reopens it. Two claims that had been true and
-stopped being true were corrected there rather than left to rot — "five steps … pick the packages"
-(there are six, and packages left the setup) and "hover to try a theme on" (the window no longer
-repaints itself; the cards carry their own colours).
-
-## What each step decided to stop doing
-
-- **Welcome** no longer repeats what the later steps ask: pi, model and theme are the *Ready*
-  summary's job. Its card is the account, and it has three states that read as buttons and one
-  sentence each — waiting (spinner, the page again, cancel), signed in (profile and *Sign out*), failed (retry).
-- **Model** no longer offers "Connect a subscription" as a card. Its sign-in runs in the editor's
-  account flow, and a card whose job is to say *you cannot use me yet* is worse than a sentence:
-  it is a footnote below the choices now, and only while nothing is connected.
-- **Extras** does not manage `pi packages` any more. Browsing a shelf is not a question a first
-  run has to answer; packages live in Agent Customizations → Packages, in the editor.
-- **Ready** asks one question — *Where do you want to start?* — with three cards (folder, clone,
-  blank). The suggested prompts left this window: they belong in the chat, next to the project
-  they talk about, and wiring them there is editor-side work, not a line in this page.
-- **Notices** are banners with a close button, they leave on their own, and changing step takes
-  them away. An alert that follows somebody from screen to screen is furniture.
-
-A note on the layout bug behind "an empty box in the middle of the model step": `[hidden]` was
-being beaten by our own `display: flex`, so a "hidden" panel stayed in the flow. One
-`[hidden] { display: none !important }` and the box is gone (measured: height 0).
-
-## The import card asks for its counts on sight
-
-The scan is a child process that reads the other profile and answers **counts only** (~150 ms on
-a profile with hundreds of sessions). It runs the moment the card is on screen, not when a card
-is clicked: leaving it to a click left *"Reading your setup…"* on screen for ever on the default
-choice, which is the built-in pi. `ensurePreview()` runs once, and the card tells three states
-apart — reading, the counts, or the failure with a **Retry**.
-
-## What the model step actually checks
-
-- **Test connection** asks the endpoint what it has, with the key, and reports a **measured**
-  latency and the real number of models — or the reason it failed: *the key was refused*, *the
-  account has no credit left*, *that address has no model list*, *no answer within 20 s*, *the
-  address could not be reached*. Nothing is saved until **Connect** is pressed.
-- **Get a key** opens the provider's own key page in the browser. The main process only opens
-  addresses on a short allowlist, so a page cannot send the owner anywhere it likes.
-- **Common picks** are filtered against what the provider returned. A recommendation the account
-  cannot run is not shown at all.
-
-## What the extras step really changes
-
-- **What travels with each message** is a setting of the product (`picode.context.mode`), not a
-  switch of this page: `project` (folder + file + selection, the default), `file` (no folder),
-  `selection` (only the text you selected — no paths at all). The context is assembled in
-  `extensions/picode/src/context.ts` (`applyContextMode`), which is pure and covered by tests.
-
-## Why it is written this way
-
-- **The chrome follows the theme, on hover and on click.** It was switched off for a while (fixed
-  palette only) and that turned choosing a theme into choosing a thumbnail, so it is back: hovering
-  a card paints the window with that theme's whole palette — background, surface, text, borders and
-  accent together, which is what keeps it readable — and leaving the card returns to the theme in
-  force. Measured: hovering *Quiet Light* turns the canvas `#F5F5F5`; leaving it returns to `Abyss`.
-  The fixed palette is what the window wears before a theme is chosen, and every pair in it was
-  measured: primary text 14.8:1 on a card, 17.4:1 on the canvas; white on the blue button 5.2:1.
-  on the canvas; secondary 6.4:1 and 7.5:1; white on the blue button 5.2:1 (6.7:1 on hover).
-- **No dependencies.** Vanilla HTML, CSS and one script: a page that runs before the editor
-  cannot lean on the editor's build, and a bundle here would be a second toolchain to keep alive.
-- **It writes nothing itself.** Every write goes through `host.cjs` →
-  `extensions/picode/src/onboarding-host.ts`, which reuses the connector's own profile logic
-  (`profile-import`, `declarations`, `endpoint`). There is no second copy of the import rules.
-- **Credentials are never a default.** The box starts unticked, the request only carries
-  `credentials: true` when it was ticked, and nothing fills it in on the way. The note beside it
-  says what is **true**: they are kept in the pi profile on this machine and pi uses them only
-  against the provider the owner configured. It does **not** claim encryption, because
-  `auth.json` is plain JSON on disk — a comfortable lie in a window whose whole job is trust.
-- **The editor always opens.** The main process treats a closed window, a dead renderer and a
-  page that failed to load as "skip", records it, and carries on to the editor.
-- **The window never leaves the editor at zero windows.** VS Code quits when its last window
-  closes, and while the editor has not been opened yet this window *is* the last one: closing it
-  disposed the application and the editor that started next died with *"Trying to add a disposable
-  to a DisposableStore that has already been disposed of"*. So both the last step and the X
-  **hide** it, the editor opens with it still alive, and it is destroyed as soon as another window
-  exists (`browser-window-created`, with a 10 s fallback). Measured on the packed build, both
-  ways: skip and X now open the editor.
-
-## Where the rest of it lives
-
-- The gate, the window, the IPC and the flag: `src/vs/code/electron-main/picodeOnboarding.ts`.
-- The backend: `extensions/picode/src/onboarding-host.ts`.
-- The command that reopens this window: `src/vs/workbench/contrib/picode/browser/picodeSetupCommands.ts`.
-- The folder is copied into the pack by `build/stage-distribution.sh` (step 3b).
-
-## How to verify it without a mouse
-
-The window's own buttons can be pressed over the Chrome DevTools Protocol, which is how the
-"skip crashes the editor" bug was found and proven fixed. Start the editor with a debugging port,
-then evaluate the click inside the page:
-
-```js
-// node --input-type=module <<'JS'
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-let target;
-for (let i = 0; i < 40 && !target; i++) {
-  try {
-    const list = await (await fetch('http://127.0.0.1:9222/json')).json();
-    target = list.find(t => (t.url ?? '').includes('onboarding/index.html'));
-  } catch { /* not up yet */ }
-  if (!target) await sleep(500);
-}
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise(r => ws.addEventListener('open', r, { once: true }));
-ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: "document.getElementById('skip').click()" } }));
-await sleep(1500);
-// JS
-```
-
-Start the editor with `--remote-debugging-port=9222`, delete `<data>/onboarding.json` first so the
-window appears, and check afterwards that **the editor window opened** and the process is still
-alive — that is the assertion the crash failed.
-
-The three checks that matter:
-
-1. **Skip** and **X** both end with an editor window, and `onboarding.json` recorded.
-2. Deleting the flag and starting again shows the window again; with the flag present, nothing is
-   created at all (no window, no child process).
-3. `PICODE_ONBOARDING_CONNECTOR=<connector>/out … host.cjs state` answers JSON with the pi version
-   — that is the backend working without any editor.
+- La puerta, la ventana, el IPC y el fichero de marca: `src/vs/code/electron-main/picodeOnboarding.ts`.
+- El backend: `extensions/picode/src/onboarding-host.ts` y `onboarding-settings.ts`.
+- El comando que la reabre: `src/vs/workbench/contrib/picode/browser/picodeSetupCommands.ts`.
+- La copia al paquete: `build/stage-distribution.sh` (paso 3b).

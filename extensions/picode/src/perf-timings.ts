@@ -16,6 +16,15 @@ interface Timing {
 
 const timings = new Map<string, Timing>();
 
+/** Work slower than this is written to the PiCode log as it happens, so a slow window can be read afterwards. */
+const SLOW_MS = 1000;
+let slowSink: ((line: string) => void) | undefined;
+
+/** Where slow work is reported: the PiCode log, set at activation. */
+export function onSlowWork(sink: (line: string) => void): void {
+	slowSink = sink;
+}
+
 export function recordTiming(label: string, ms: number): void {
 	const timing = timings.get(label) ?? { count: 0, totalMs: 0, maxMs: 0, lastMs: 0 };
 	timing.count++;
@@ -23,6 +32,9 @@ export function recordTiming(label: string, ms: number): void {
 	timing.maxMs = Math.max(timing.maxMs, ms);
 	timing.lastMs = ms;
 	timings.set(label, timing);
+	if (ms >= SLOW_MS) {
+		slowSink?.(`slow: ${label} took ${Math.round(ms)} ms`);
+	}
 }
 
 /** Times a piece of work, sync or async; a failure counts too and still reaches the caller. */
