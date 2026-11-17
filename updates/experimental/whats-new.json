@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.2.9-experimental",
+			"notes": "### ✨ New\n\n- **🔔 Alerts for your plan’s limits.** In Usage limits, each model now has its own alerts, like alarms on a phone: add as many as you want, each with its own percentage, and switch one off or remove it whenever you like. A mark on the bars shows where each one will go off.\n- Each alert goes off once per window (5-hour, weekly, billing period…) when it reaches its percentage, inside PiCode and also as a system notification when PiCode is in the background. It is ready again when the window drops back or resets."
+		},
+		{
 			"version": "2.2.8-experimental",
 			"notes": "### ✨ New\n\n- **pi checks your pages on its own.** pi can now use the editor's built-in browser: open a page, read it, click, type and take screenshots, and the screenshots reach the model as images. After changing anything a browser shows, it starts your project if needed, opens the page, tries what it changed and fixes what is off before telling you it is done. Ask it to look at or debug any page, `localhost` included. It follows the editor's own browser setting, not the MCP switch.\n- **What's New has a page for it**, with a demo you can play and a button that opens the browser.\n\n### 🛠️ Fixes\n\n- **The plan-limits ring follows the model you pick** in the chat box, instead of the one the conversation started with."
 		},
