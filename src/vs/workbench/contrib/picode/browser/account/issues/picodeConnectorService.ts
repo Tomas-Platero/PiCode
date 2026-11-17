@@ -326,10 +326,12 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		if (!clientId || !redirectUri) {
 			return 'failed';
 		}
-		// Asking again must not take back what the account already allowed.
-		const before = this.load('atlassian');
-		const write = options.write === true || before?.canWrite === true;
-		const boards = options.boards === true || before?.canReadBoards === true;
+		// Everything the panels use is asked for at once, so signing in is the only consent: reading,
+		// moving and editing issues, looking people up and reading the boards' columns. `options` stays
+		// for the callers that ask for one of them on a connection made before this.
+		void options;
+		const write = true;
+		const boards = true;
 		// The server tracks the attempt and trades the code, so nothing depends on the browser being
 		// able to open the editor again (it may refuse the link; another copy may have claimed it).
 		const begun = await this.postCloud('/v1/connect/atlassian', { action: 'begin' });
