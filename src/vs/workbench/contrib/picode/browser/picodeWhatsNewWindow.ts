@@ -276,6 +276,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.openBrowser', "Open the browser");
 		case 'newIsolatedSession':
 			return localize('picodeWhatsNew.newWorktreeSession', "Start a session in a worktree");
+		case 'openSetup':
+			return localize('picodeWhatsNew.openSetup', "Open the setup");
 	}
 }
 
@@ -324,6 +326,10 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 		case 'newIsolatedSession':
 			close();
 			void services.commandService.executeCommand('picode.session.newIsolated');
+			return;
+		case 'openSetup':
+			close();
+			void services.commandService.executeCommand('picode.setup');
 			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
@@ -380,6 +386,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	usageAlerts: usageAlertsPreview,
 	sessionBranches: sessionBranchesPreview,
 	parallelSessions: parallelSessionsPreview,
+	setup: setupPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -1226,6 +1233,36 @@ function sessionBranchesPreview(parent: HTMLElement, store: DisposableStore): vo
 				? localize('picodeWhatsNew.sessionBranches.demoMerged', "Merged · #{0}", pull.number)
 				: localize('picodeWhatsNew.sessionBranches.demoOpen', "Open · #{0}", pull.number);
 		}
+	};
+	draw();
+}
+
+function setupPreview(parent: HTMLElement, store: DisposableStore): void {
+	// The five steps as the setup's rail shows them: pick one to see what it asks.
+	const steps = [
+		{ icon: Codicon.account, label: localize('picodeWhatsNew.setup.stepWelcome', "Welcome"), detail: localize('picodeWhatsNew.setup.stepWelcomeDetail', "Sign in or sign up, or bring your settings from pi or VS Code.") },
+		{ icon: Codicon.layout, label: localize('picodeWhatsNew.setup.stepLayout', "Layout"), detail: localize('picodeWhatsNew.setup.stepLayoutDetail', "Agent or Editor, each drawn with its parts named.") },
+		{ icon: Codicon.hubot, label: localize('picodeWhatsNew.setup.stepAgent', "Agent"), detail: localize('picodeWhatsNew.setup.stepAgentDetail', "Connect a provider and pick a model, with a search box.") },
+		{ icon: Codicon.symbolColor, label: localize('picodeWhatsNew.setup.stepLook', "Look"), detail: localize('picodeWhatsNew.setup.stepLookDetail', "Pick a theme and see it beside the grid.") },
+		{ icon: Codicon.check, label: localize('picodeWhatsNew.setup.stepReady', "Ready"), detail: localize('picodeWhatsNew.setup.stepReadyDetail', "What you chose, and where to start.") },
+	];
+	let chosen = 0;
+	demoBar(parent, localize('picodeWhatsNew.setup.demo', "Pick a step to see what it asks."), store);
+	const list = append(parent, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(list);
+		steps.forEach((step, index) => {
+			const row = append(list, $(`button.picode-whatsnew-row.step.${index < chosen ? 'done' : index === chosen ? 'doing' : 'pending'}`, { type: 'button' }));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(index < chosen ? Codicon.check : step.icon)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = `${index + 1}. ${step.label}`;
+			if (index === chosen) {
+				append(row, $('span.picode-whatsnew-row-detail')).textContent = step.detail;
+			}
+			store.add(addDisposableListener(row, EventType.CLICK, () => {
+				chosen = index;
+				draw();
+			}));
+		});
 	};
 	draw();
 }

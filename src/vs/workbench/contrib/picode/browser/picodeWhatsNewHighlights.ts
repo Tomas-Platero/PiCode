@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions' | 'setup';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser' | 'newIsolatedSession';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser' | 'newIsolatedSession' | 'openSetup';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'setup',
+			since: '2.3.0',
+			plan: 'free',
+			icon: Codicon.rocket,
+			title: localize('picodeWhatsNew.setup.title', "A shorter, clearer setup"),
+			summary: localize('picodeWhatsNew.setup.summary', "The first-run setup now takes five steps instead of seven, and every choice you make shows up at once, without the window jumping."),
+			points: [
+				localize('picodeWhatsNew.setup.point1', "Welcome, Layout, Agent, Look and Ready: the agent and its model are chosen together, on one step."),
+				localize('picodeWhatsNew.setup.point2', "Themes preview beside the grid as you point at them; the rarer options wait under Advanced."),
+				localize('picodeWhatsNew.setup.point3', "Escape no longer skips the whole setup, and Skip always means the same thing."),
+			],
+			preview: 'setup',
+			action: 'openSetup',
+		},
 		{
 			id: 'parallelSessions',
 			since: '2.3.0',

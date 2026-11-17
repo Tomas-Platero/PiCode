@@ -892,3 +892,14 @@ button.picode-whatsnew-pick .picode-whatsnew-row-label {
 	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 	gap: 12px;
 }
+
+/* The setup page: its steps are buttons that read as rows. */
+button.picode-whatsnew-row {
+	width: 100%;
+	border: none;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
