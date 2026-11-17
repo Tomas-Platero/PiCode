@@ -180,3 +180,27 @@ test('merging a copy into the base needs the project on that branch and clean', 
 		fs.rmSync(root, { recursive: true, force: true });
 	}
 });
+
+const { changedLines, parseNumstatFiles } = await import('../src/session-worktree');
+
+test('numstat reads per file, and a binary file counts as no lines', () => {
+	const files = parseNumstatFiles('3\t1\ta.txt\n-\t-\timg.png\n');
+	assert.deepStrictEqual(files.get('a.txt'), { added: 3, removed: 1 });
+	assert.deepStrictEqual(files.get('img.png'), { added: 0, removed: 0 });
+});
+
+test('a copy counts its lines added and removed, untracked files included', async () => {
+	const { repo, root } = scratchRepo();
+	try {
+		assert.deepStrictEqual(await changedLines(repo), []);
+		const opened = await openWorktree(repo, 'feat/lines', { create: true });
+		assert.ok(opened.ok);
+		assert.deepStrictEqual(await changedLines(opened.path), []);
+		fs.writeFileSync(path.join(opened.path, 'a.txt'), 'two\nthree\n');
+		fs.writeFileSync(path.join(opened.path, 'new.txt'), 'x\ny\nz');
+		const lines = await changedLines(opened.path);
+		assert.deepStrictEqual(lines.map(f => [f.path, f.status, f.added, f.removed]).sort(), [['a.txt', 'modified', 2, 1], ['new.txt', 'added', 3, 0]]);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});

@@ -11,6 +11,51 @@ import { defaultBranchNow, githubRepoNow, onSessionGitChanged, readSessionGitSto
 import { restoreListingCache, serializeListingCache, takeListingCacheChange, areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionHeader, sessionTurns } from './sessions-provider';
 import { projectSlugsOfWindow, resolveProjectScope, windowSessionScope } from './runtime';
 import { coarseMinute, transcriptDigest } from './sessions-digest';
+import { changedLines, type CopyLineChange } from './session-worktree';
+import { baseSideUri } from './session-actions';
+
+/** How long a copy's changes are trusted before the list reads them again. */
+const COPY_CHANGES_TTL_MS = 30_000;
+const copyChanges = new Map<string, { readonly at: number; readonly files: readonly CopyLineChange[] }>();
+const copyChangesAsked = new Set<string>();
+
+/** A copy's changed files if already read; a stale or missing reading is redone and `onLearned` fires if it changed. */
+function copyChangesNow(folder: string, onLearned: () => void): readonly CopyLineChange[] | undefined {
+	const known = copyChanges.get(folder);
+	if ((known === undefined || Date.now() - known.at > COPY_CHANGES_TTL_MS) && !copyChangesAsked.has(folder)) {
+		copyChangesAsked.add(folder);
+		void changedLines(folder).then(files => {
+			copyChangesAsked.delete(folder);
+			copyChanges.set(folder, { at: Date.now(), files });
+			if (JSON.stringify(files) !== JSON.stringify(known?.files ?? [])) {
+				onLearned();
+			}
+		}, () => copyChangesAsked.delete(folder));
+	}
+	return known?.files;
+}
+
+/** The +/- the row shows for a session in its own copy: each file it changed, which also opens its diff. */
+function rowChangesOf(folder: string, files: readonly CopyLineChange[] | undefined): vscode.ChatSessionChangedFile[] | undefined {
+	if (files === undefined || files.length === 0) {
+		return undefined;
+	}
+	return files.map(file => {
+		const current = vscode.Uri.file(path.join(folder, file.path));
+		return new vscode.ChatSessionChangedFile(
+			current,
+			file.status === 'added' ? undefined : baseSideUri(folder, file.path, file.baseRef),
+			file.status === 'deleted' ? undefined : current,
+			file.added,
+			file.removed,
+		);
+	});
+}
+
+/** One number for a row's changes, so an unchanged row is the same row to the panel. */
+function changesKey(changes: vscode.ChatSessionItem['changes']): string {
+	return (changes ?? []).map(change => `${change.uri.toString()}:${change.insertions}:${change.deletions}`).join('|');
+}
 
 /**
  * pi's own sessions, in the editor's Sessions panel: the one list.
@@ -89,6 +134,8 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 			const built: vscode.ChatSessionItem[] = report.files.map(file => {
 				const record = gitRecords[file.id];
 				const git = record === undefined ? undefined : rowGitFor(record, defaultBranchNow(record.cwd, () => changed.fire()));
+				// A session in its own copy shows what it changed there, like the other agents' rows.
+				const changes = record?.worktree && fs.existsSync(record.cwd) ? rowChangesOf(record.cwd, copyChangesNow(record.cwd, () => changed.fire())) : undefined;
 				return {
 					resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 					// The name the owner gave it, else its first prompt.
@@ -99,6 +146,7 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 					// minute, the grain the panel shows, so a row that only grew is the same row to it.
 					timing: { created: coarseMinute(file.mtime), lastRequestEnded: coarseMinute(file.mtime) },
 					// The branch the conversation worked on, when it is not the default one (`session-git.ts`).
+					...(changes === undefined ? {} : { changes }),
 					...(git === undefined ? {} : { badge: git.badge, metadata: { picodeGit: { branches: git.branches, repo: githubRepoNow(record!.cwd, () => changed.fire()), ...(record!.worktree ? { worktree: true } : {}) } } }),
 				};
 			});
@@ -110,6 +158,7 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 				row => row.resource.toString(),
 				(before, after) => before.label === after.label
 					&& before.badge === after.badge
+					&& changesKey(before.changes) === changesKey(after.changes)
 					&& JSON.stringify(before.metadata) === JSON.stringify(after.metadata)
 					&& before.timing?.created === after.timing?.created
 					&& before.timing?.lastRequestEnded === after.timing?.lastRequestEnded,

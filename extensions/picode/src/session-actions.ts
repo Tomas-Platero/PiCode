@@ -25,6 +25,11 @@ const OPEN_CHAT_ON_WORKTREE_COMMAND = 'picode.agent.newChatOnWorktree';
 /** The base side of a copy's diff: a file at a commit, served by `GitRefContentProvider`. */
 const GIT_REF_SCHEME = 'picode-git';
 
+/** A file of a copy as it was at `ref`, the left side of its diff. */
+export function baseSideUri(folder: string, file: string, ref: string): vscode.Uri {
+	return vscode.Uri.from({ scheme: GIT_REF_SCHEME, path: `/${file}`, query: JSON.stringify({ cwd: folder, ref }) });
+}
+
 /** The session id a row command receives (`pi:/<id>`), from the item or a resource string. */
 function sessionIdOf(item: unknown): string | undefined {
 	const resource = (item as { resource?: unknown } | undefined)?.resource ?? item;
@@ -106,7 +111,7 @@ async function reviewChanges(item: unknown): Promise<void> {
 	}
 	const entries = files.map(file => {
 		const modified = vscode.Uri.file(path.join(copy.folder, file.path));
-		const original = vscode.Uri.from({ scheme: GIT_REF_SCHEME, path: `/${file.path}`, query: JSON.stringify({ cwd: copy.folder, ref: file.baseRef }) });
+		const original = baseSideUri(copy.folder, file.path, file.baseRef);
 		return [modified, file.status === 'added' ? undefined : original, file.status === 'deleted' ? undefined : modified];
 	});
 	await vscode.commands.executeCommand('vscode.changes', vscode.l10n.t('Changes of this session'), entries);

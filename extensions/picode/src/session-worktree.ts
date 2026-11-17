@@ -16,6 +16,7 @@
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { countLines } from './diff-stat';
 
 export const WORKTREES_FOLDER = '.picode-worktrees';
 
@@ -240,6 +241,52 @@ export interface CopyChange {
 	readonly status: 'added' | 'modified' | 'deleted';
 	/** The commit the base side is read from: where the copy left the base. */
 	readonly baseRef: string;
+}
+
+/** A file a copy changed, with its lines added and removed. */
+export interface CopyLineChange extends CopyChange {
+	readonly added: number;
+	readonly removed: number;
+}
+
+/** `git diff --numstat` by file: `12<TAB>3<TAB>path`; a binary file (`-<TAB>-`) counts as no lines. */
+export function parseNumstatFiles(text: string): Map<string, { added: number; removed: number }> {
+	const files = new Map<string, { added: number; removed: number }>();
+	for (const line of text.split(/\r?\n/)) {
+		const [added, removed, file] = line.split('\t');
+		if (file !== undefined && file !== '') {
+			files.set(file, { added: Number(added) || 0, removed: Number(removed) || 0 });
+		}
+	}
+	return files;
+}
+
+/** New files bigger than this count as no lines: they are build output or data, not code. */
+const MAX_NEW_FILE_BYTES = 2 * 1024 * 1024;
+
+/** What a copy changed against its base branch, file by file with its lines; empty when nothing did. */
+export async function changedLines(worktree: string): Promise<CopyLineChange[]> {
+	const base = await defaultBaseOf(worktree);
+	const files = base === undefined ? [] : await changedFiles(worktree, base);
+	if (files.length === 0) {
+		return [];
+	}
+	const numstat = await git(worktree, ['diff', '--numstat', '--no-renames', files[0].baseRef]);
+	const counts = parseNumstatFiles(numstat.ok ? numstat.stdout : '');
+	return Promise.all(files.map(async file => {
+		const known = counts.get(file.path);
+		if (known !== undefined) {
+			return { ...file, ...known };
+		}
+		// An untracked file: every line of it is new.
+		try {
+			const full = path.join(worktree, file.path);
+			const added = (await fs.promises.stat(full)).size <= MAX_NEW_FILE_BYTES ? countLines(await fs.promises.readFile(full, 'utf8')) : 0;
+			return { ...file, added, removed: 0 };
+		} catch {
+			return { ...file, added: 0, removed: 0 };
+		}
+	}));
 }
 
 /** What a copy changed against `base`: its commits since it left it, and what is not committed yet. */
