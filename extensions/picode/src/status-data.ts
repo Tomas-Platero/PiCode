@@ -491,6 +491,17 @@ function readAllMcpServers(runtime: 'internal' | 'external', profileDir: string)
 }
 
 /** Builds the one answer the status tree renders, from the profile in force. */
+/** How long the status page waits for the plan meters before it draws without them. */
+const METER_WAIT_MS = 800;
+
+/** The answer if it comes within `ms`; undefined otherwise (the work goes on, and its cache serves the next reading). */
+function within<T>(ms: number, work: Promise<T>): Promise<T | undefined> {
+	return new Promise(resolve => {
+		const timer = setTimeout(() => resolve(undefined), ms);
+		work.then(value => { clearTimeout(timer); resolve(value); }, () => { clearTimeout(timer); resolve(undefined); });
+	});
+}
+
 export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const runtime = readRuntimeMode();
 	const profileDir = runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot);
@@ -502,18 +513,28 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const usage = getSessionUsage();
 	const mcpServers = readAllMcpServers(runtime, profileDir);
 	const scope = resolveProjectScope();
-	const projects = scope.mode === 'workspace'
-		? await Promise.all(scope.folders.map(async folder => ({
+	const meterModel = usage?.model ?? defaultModel;
+	// Every slow reading at once, not one after another: git, pi's version and the plan meters. The
+	// meters go over the network, so they get a moment and no more: the page draws without them and
+	// the next reading (every few seconds) brings them.
+	const [projects, worktreeGit, piVersion, subscription, subscriptions] = await Promise.all([
+		scope.mode === 'workspace'
+			? Promise.all(scope.folders.map(async folder => ({
 				name: path.basename(folder),
 				...(await readGit(folder)),
 			})))
-		: undefined;
-	// A chat on its own branch shows that branch and its changes (`session-worktree.ts`).
-	const gitInfo = projects === undefined ? await readGit(activeWorktreeFolder() ?? scope.cwd) : {};
+			: Promise.resolve(undefined),
+		// A chat on its own branch shows that branch and its changes (`session-worktree.ts`).
+		scope.mode === 'workspace' ? Promise.resolve(undefined) : readGit(activeWorktreeFolder() ?? scope.cwd),
+		readPiVersion(runtime, deps.distributionRoot),
+		within(METER_WAIT_MS, readSubscription(profileDir, meterModel)),
+		within(METER_WAIT_MS, readAccountSubscriptions(profileDir, meterModel)),
+	]);
+	const gitInfo: Partial<Awaited<ReturnType<typeof readGit>>> = worktreeGit ?? {};
 
 	return {
 		runtime,
-		piVersion: await readPiVersion(runtime, deps.distributionRoot),
+		piVersion,
 		providers: providerInventory(sources.declared, sources.models, sources.credentials, sources.subscriptions),
 		defaultModel,
 		mcpServers,
@@ -538,8 +559,8 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// The provider's own quota for the model in use, never the session's totals above.
 		// The model's subscription meter, read the way the Session Usage row used to be: the lookup
 		// and its one-minute cache belong to `usage-data.ts`, and the block draws what it answered.
-		subscription: await readSubscription(profileDir, usage?.model ?? defaultModel),
-		subscriptions: await readAccountSubscriptions(profileDir, usage?.model ?? defaultModel),
+		subscription,
+		subscriptions,
 		// What the update check last found, read from where the check stored it: the lookup and its
 		// cadence belong to `updates-check.ts`, and this reading only draws the answer it left behind.
 		updates: parseSnapshot(deps.globalState.get<unknown>(UPDATES_STATE_KEY)),
