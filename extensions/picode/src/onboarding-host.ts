@@ -443,7 +443,7 @@ export interface ImportScanAnswer {
 
 export function importScan(paths: SetupPaths, externalProfile: string | undefined): ImportScanAnswer {
 	const profile = typeof externalProfile === 'string' && externalProfile.length > 0 ? externalProfile : externalProfileDir();
-	return { pi: scanPiProfile(profile), vscode: scanVsCode(undefined, paths) };
+	return { pi: scanPiProfile(profile, paths.profileDir), vscode: scanVsCode(undefined, paths) };
 }
 
 /** Keeps only the shape a choice can have: ids per category, or `'all'`. Anything else is dropped. */

@@ -7,6 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSyn
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { isLeftBehindPackage, packageNameOf } from './left-behind-packages';
+import { isProductPackage } from './product-packages';
 import { importProfile, type ImportSelection } from './profile-import';
 import { readEditorSettings, stripJsonComments, writeEditorSettings, type SetupPaths } from './onboarding-settings';
 
@@ -195,26 +196,53 @@ function packageLabel(source: string): { label: string; detail?: string } {
 	return kind === undefined ? { label: value } : { label: value, detail: kind };
 }
 
-/** What the external pi profile holds, item by item. Read-only. */
-export function scanPiProfile(profile: string): SourceCatalog {
+/** What a pi profile already has, by name: its packages, providers, MCP servers and skills. */
+function profileHoldings(profile: string | undefined): { packages: Set<string>; providers: Set<string>; servers: Set<string>; skills: Set<string> } {
+	const settings = profile === undefined ? undefined : readJsonObject(path.join(profile, 'settings.json'));
+	const declared = settings !== undefined && Array.isArray(settings['packages']) ? settings['packages'] : [];
+	const models = profile === undefined ? undefined : readJsonObject(path.join(profile, 'models.json'));
+	const mcp = profile === undefined ? undefined : readJsonObject(path.join(profile, 'mcp.json'));
+	const keys = (value: unknown): string[] => typeof value === 'object' && value !== null ? Object.keys(value) : [];
+	const skillsDir = profile === undefined ? undefined : path.join(profile, 'skills');
+	return {
+		packages: new Set(declared.map(packageSource).filter((source): source is string => source !== undefined).map(packageNameOf)),
+		providers: new Set(keys(models?.['providers'])),
+		servers: new Set(keys(mcp?.['mcpServers'])),
+		skills: new Set(skillsDir === undefined ? [] : listDirectory(skillsDir)),
+	};
+}
+
+/**
+ * What the external pi profile holds, item by item. Read-only.
+ *
+ * Only what PiCode does not have yet is offered: the packages the product ships itself (gentle-pi,
+ * gentle-engram, pi-intercom) and anything PiCode's own profile (`ownProfile`) already holds are left
+ * out, since an import never replaces them. Memory is not offered either: every pi on the machine
+ * shares the same engram store.
+ */
+export function scanPiProfile(profile: string, ownProfile?: string): SourceCatalog {
 	const found = isDirectory(profile);
+	const own = profileHoldings(ownProfile);
 	const settings = found ? readJsonObject(path.join(profile, 'settings.json')) : undefined;
 	const packageEntries = settings !== undefined && Array.isArray(settings['packages']) ? settings['packages'] : [];
 	const packages: CatalogItem[] = [];
 	for (const entry of packageEntries) {
 		const source = packageSource(entry);
-		if (source !== undefined && !isLeftBehindPackage(entry)) {
+		if (source === undefined || isLeftBehindPackage(entry)) {
+			continue;
+		}
+		const name = packageNameOf(source);
+		if (!isProductPackage(name) && !own.packages.has(name)) {
 			packages.push({ id: source, ...packageLabel(source) });
 		}
 	}
 	const preferences = settings === undefined ? 0 : Object.keys(settings).filter(key => key !== 'packages').length;
 	const models = found ? readJsonObject(path.join(profile, 'models.json')) : undefined;
-	const providers = typeof models?.['providers'] === 'object' && models['providers'] !== null ? Object.keys(models['providers'] as object) : [];
+	const providers = (typeof models?.['providers'] === 'object' && models['providers'] !== null ? Object.keys(models['providers'] as object) : []).filter(id => !own.providers.has(id));
 	const mcp = found ? readJsonObject(path.join(profile, 'mcp.json')) : undefined;
-	const servers = typeof mcp?.['mcpServers'] === 'object' && mcp['mcpServers'] !== null ? Object.keys(mcp['mcpServers'] as object) : [];
+	const servers = (typeof mcp?.['mcpServers'] === 'object' && mcp['mcpServers'] !== null ? Object.keys(mcp['mcpServers'] as object) : []).filter(id => !own.servers.has(id));
 	const skillsDir = path.join(profile, 'skills');
-	const skills = found ? listDirectory(skillsDir).filter(name => isDirectory(path.join(skillsDir, name))) : [];
-	const memory = found ? countFiles(path.join(profile, 'memory')) : 0;
+	const skills = found ? listDirectory(skillsDir).filter(name => isDirectory(path.join(skillsDir, name)) && !own.skills.has(name)) : [];
 	const sessions = found ? countFiles(path.join(profile, 'sessions')) : 0;
 	const credentials = found && existsSync(path.join(profile, 'auth.json'));
 
@@ -224,7 +252,6 @@ export function scanPiProfile(profile: string): SourceCatalog {
 		{ id: 'providers', count: providers.length, items: providers.map(id => ({ id, label: id })) },
 		{ id: 'mcp', count: servers.length, items: servers.map(id => ({ id, label: id })) },
 		{ id: 'skills', count: skills.length, items: skills.map(id => ({ id, label: id })) },
-		{ id: 'memory', count: memory, items: [], bulk: true },
 		{ id: 'sessions', count: sessions, items: [], bulk: true },
 		{ id: 'logins', count: credentials ? 1 : 0, items: [], bulk: true, sensitive: true },
 	];
