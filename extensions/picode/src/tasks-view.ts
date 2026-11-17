@@ -23,7 +23,7 @@ import * as vscode from 'vscode';
 import { todoDetail, todoIcon, todoProgress, type TodoBoard, type TodoRow } from './agent-todo';
 import type { AgentTaskRow } from './gentle-agents-store';
 import type { BackgroundJobStatus } from './status-contract';
-import { rowIcon, taskBoard, taskDetail, taskFacts, taskSummary, taskTitle, type TaskBoard, type TaskFact, type TaskRow } from './tasks-rows';
+import { rowIcon, taskBoard, taskDetail, taskFacts, taskSummary, taskTitle, type ChatTurnRow, type TaskBoard, type TaskFact, type TaskRow } from './tasks-rows';
 
 /** The view id, which the manifest also declares: the two must not drift. */
 export const TASKS_VIEW_ID = 'picode.status.tasks';
@@ -59,9 +59,11 @@ export interface TaskDataTodos {
 
 /** The board as plain data; the rows read the same as the tree's. */
 export function taskBoardData(deps: TasksViewDeps): { readonly summary: string; readonly running: readonly TaskDataRow[]; readonly finished: readonly TaskDataRow[]; readonly todos?: TaskDataTodos } {
-	const board = taskBoard(deps.runningJobs(), deps.agents?.() ?? [], deps.finishedJobs?.() ?? []);
+	const board = taskBoard(deps.runningJobs(), deps.agents?.() ?? [], deps.finishedJobs?.() ?? [], deps.chats?.() ?? []);
 	const now = deps.now?.() ?? Date.now();
-	const toData = (row: TaskRow): TaskDataRow => row.kind === 'job'
+	const toData = (row: TaskRow): TaskDataRow => row.kind === 'chat'
+		? { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), facts: taskFacts(row, now) }
+		: row.kind === 'job'
 		? { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), outputFile: row.job.outputPath, tooltip: row.job.command, facts: taskFacts(row, now, deps.explainFailure) }
 		: { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), agentId: row.agent.id, tooltip: row.agent.error ?? (row.agent.lastStep.length > 0 ? row.agent.lastStep : undefined), facts: taskFacts(row, now, deps.explainFailure) };
 	const todos = deps.todos?.();
@@ -95,6 +97,8 @@ export interface TasksViewDeps {
 	readonly finishedJobs?: () => ReadonlyArray<BackgroundJobStatus & { readonly endedAt: number }>;
 	/** The subagents gentle-pi last published. */
 	readonly agents?: () => readonly AgentTaskRow[];
+	/** The chats answering right now. */
+	readonly chats?: () => readonly ChatTurnRow[];
 	/** The task list the agent keeps while it works, when it has one. */
 	readonly todos?: () => TodoBoard | undefined;
 	/** Calls the listener when what the agent is doing changes; returns how to stop. */
@@ -126,7 +130,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 
 	/** Reads the board from the tracker and from what gentle-pi published. */
 	refresh(): void {
-		this.board = taskBoard(this.deps.runningJobs(), this.deps.agents?.() ?? [], this.deps.finishedJobs?.() ?? []);
+		this.board = taskBoard(this.deps.runningJobs(), this.deps.agents?.() ?? [], this.deps.finishedJobs?.() ?? [], this.deps.chats?.() ?? []);
 		this.todos = this.deps.todos?.();
 		this.changed.fire();
 	}
@@ -211,7 +215,10 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 				const item = new vscode.TreeItem(taskTitle(node.row), vscode.TreeItemCollapsibleState.Collapsed);
 				item.description = taskDetail(node.row, this.now());
 				item.iconPath = new vscode.ThemeIcon(rowIcon(node.row));
-				if (node.row.kind === 'job') {
+				if (node.row.kind === 'chat') {
+					item.contextValue = 'picode.tasks.chat';
+					item.tooltip = vscode.l10n.t('A chat answering now. Several chats can answer at the same time.');
+				} else if (node.row.kind === 'job') {
 					item.contextValue = 'picode.tasks.job';
 					const note = vscode.l10n.t('A background job of this chat; its report lands in the conversation when it ends.');
 					item.tooltip = node.row.job.command === undefined ? note : `${node.row.job.command}\n\n${note}`;

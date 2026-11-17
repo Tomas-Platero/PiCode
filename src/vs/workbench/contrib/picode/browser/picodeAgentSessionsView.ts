@@ -9,7 +9,8 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { MenuWorkbenchToolBar } from '../../../../platform/actions/browser/toolbar.js';
 import { MenuId } from '../../../../platform/actions/common/actions.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IChatWidgetService } from '../../chat/browser/chat.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
@@ -30,6 +31,8 @@ import { AgentSessionsFilter, AgentSessionsGrouping } from '../../chat/browser/a
 import { PICODE_LAYOUT_SETTING } from './picodeLayoutStyle.js';
 import { PICODE_AGENT_SEARCH_COMMAND_ID, PICODE_AGENT_SEARCH_ICON, PICODE_CUSTOMIZATION_COMMAND_ID, PICODE_CUSTOMIZATION_ICON } from './picodeAgentSearch.js';
 import { PicodeAgentProjects } from './picodeAgentProjects.js';
+import { setupSessionBranchHover } from './picodeSessionBranchHover.js';
+import { IPicodeConnectorService } from './account/issues/picodeConnectorService.js';
 import { IAuthenticationService } from '../../../services/authentication/common/authentication.js';
 import { PICODE_AUTH_PROVIDER_ID, PICODE_EMAIL_STORAGE_KEY, PICODE_PLAN_STORAGE_KEY } from './picodeAccountProvider.js';
 import { GlobalCompositeBar } from '../../../browser/parts/globalCompositeBar.js';
@@ -66,6 +69,7 @@ class PicodeAgentSessionsView extends ViewPane {
 		@ICommandService private readonly commandService: ICommandService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IStorageService private readonly storageService: IStorageService,
+		@IPicodeConnectorService private readonly connectorService: IPicodeConnectorService,
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
 	}
@@ -84,6 +88,7 @@ class PicodeAgentSessionsView extends ViewPane {
 			append(button, $('span.label')).textContent = label;
 			this._register(addDisposableListener(button, EventType.CLICK, () => void run()));
 		};
+		// Whether a new session works in a worktree is chosen under the chat, with its "Worktree" box.
 		row(Codicon.add, localize('picode.sessions.new', "New session"), createNewChat);
 		row(PICODE_AGENT_SEARCH_ICON, localize('picode.sessions.search', "Search"), () => this.commandService.executeCommand(PICODE_AGENT_SEARCH_COMMAND_ID));
 		row(PICODE_CUSTOMIZATION_ICON, localize('picode.sessions.customization', "Customization"), () => this.commandService.executeCommand(PICODE_CUSTOMIZATION_COMMAND_ID));
@@ -113,6 +118,8 @@ class PicodeAgentSessionsView extends ViewPane {
 			createNewChat,
 			getHoverPosition: () => HoverPosition.RIGHT,
 			trackActiveEditorSession: () => true,
+			// The branch a conversation worked on, and its pull requests (`picodeSessionBranchHover.ts`).
+			badgeHover: (session, target) => setupSessionBranchHover(session, target, this.hoverService, this.connectorService, this.openerService),
 		}));
 		toolbar.context = control;
 		this._register(this.onDidChangeBodyVisibility(visible => control.setVisible(visible)));
@@ -223,3 +230,20 @@ Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
 	// Only the Agent layout has a sessions column; the Editor layout keeps the list inside the chat.
 	when: ContextKeyExpr.equals(`config.${PICODE_LAYOUT_SETTING}`, 'agent'),
 }], container);
+
+/**
+ * "New Session on a Branch…", the editor's half: open a new chat and tell the connector which chat it
+ * is, so that chat (and only it) works in the branch's worktree and is listed under the branch at once.
+ */
+CommandsRegistry.registerCommand('picode.agent.newChatOnWorktree', async (accessor, folder: unknown, branch: unknown, name: unknown) => {
+	const commandService = accessor.get(ICommandService);
+	const chatWidgetService = accessor.get(IChatWidgetService);
+	if (typeof folder !== 'string' || typeof branch !== 'string') {
+		return;
+	}
+	await commandService.executeCommand(ACTION_ID_NEW_CHAT);
+	const resource = chatWidgetService.lastFocusedWidget?.viewModel?.sessionResource;
+	if (resource) {
+		await commandService.executeCommand('picode.session.bindWorktree', resource.toString(), folder, branch, typeof name === 'string' ? name : undefined);
+	}
+});

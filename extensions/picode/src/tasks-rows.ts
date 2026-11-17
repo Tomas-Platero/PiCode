@@ -26,8 +26,18 @@ import type { BackgroundJobStatus } from './status-contract';
 import { l10n } from './l10n.ts';
 import { GENERIC_PROVIDER_ERROR } from './subagent-failure.ts';
 
-/** One row of the Tasks block: a background job, or a subagent. */
+/** A chat answering right now: which session it is, what it is doing, since when. */
+export interface ChatTurnRow {
+	readonly name: string;
+	readonly startedAt: number;
+	readonly activity?: string;
+	/** The branch of its worktree, when it works in one. */
+	readonly branch?: string;
+}
+
+/** One row of the Tasks block: a chat answering, a background job, or a subagent. */
 export type TaskRow =
+	| { readonly kind: 'chat'; readonly chat: ChatTurnRow }
 	| { readonly kind: 'job'; readonly job: BackgroundJobStatus & { readonly endedAt?: number } }
 	| { readonly kind: 'agent'; readonly agent: AgentTaskRow };
 
@@ -51,9 +61,14 @@ export interface TaskBoard {
 	readonly total: number;
 }
 
-/** Builds the board from the chat's running jobs, the subagents' last published state and the jobs that just ended. */
-export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly AgentTaskRow[] = [], endedJobs: ReadonlyArray<BackgroundJobStatus & { readonly endedAt: number }> = []): TaskBoard {
-	const running: TaskRow[] = jobs.map(job => ({ kind: 'job', job }));
+/**
+ * Builds the board from the chat's running jobs, the subagents' last published state and the jobs that just ended.
+ * The chats answering come first, but only when two or more answer at once: one alone is already in front, in
+ * its own chat and above its input, and a row would say it a third time.
+ */
+export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly AgentTaskRow[] = [], endedJobs: ReadonlyArray<BackgroundJobStatus & { readonly endedAt: number }> = [], chats: readonly ChatTurnRow[] = []): TaskBoard {
+	const running: TaskRow[] = chats.length > 1 ? chats.map((chat): TaskRow => ({ kind: 'chat', chat })) : [];
+	running.push(...jobs.map((job): TaskRow => ({ kind: 'job', job })));
 	const finished: TaskRow[] = [];
 	for (const agent of agents) {
 		if (isActive(agent.status)) {
@@ -65,7 +80,7 @@ export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly
 	// Ended jobs sit among the finished agents, newest first; without any, the agents keep the order they came in.
 	if (endedJobs.length > 0) {
 		finished.push(...endedJobs.map((job): TaskRow => ({ kind: 'job', job })));
-		const endedAt = (row: TaskRow): number => (row.kind === 'job' ? row.job.endedAt : row.agent.endedAt) ?? 0;
+		const endedAt = (row: TaskRow): number => (row.kind === 'job' ? row.job.endedAt : row.kind === 'agent' ? row.agent.endedAt : undefined) ?? 0;
 		finished.sort((a, b) => endedAt(b) - endedAt(a));
 	}
 	const shown = finished.slice(0, FINISHED_AGENTS_SHOWN);
@@ -74,6 +89,9 @@ export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly
 
 /** The row's name: the job's or the agent's own label, or what it is. */
 export function taskTitle(row: TaskRow): string {
+	if (row.kind === 'chat') {
+		return row.chat.name;
+	}
 	if (row.kind === 'job') {
 		return row.job.label ?? l10n.t('Background job {0}', row.job.jobNumber);
 	}
@@ -82,6 +100,9 @@ export function taskTitle(row: TaskRow): string {
 
 /** What the row is doing, in one word that is true. */
 export function taskState(row: TaskRow): string {
+	if (row.kind === 'chat') {
+		return l10n.t('answering');
+	}
 	if (row.kind === 'job') {
 		return row.job.endedAt === undefined ? l10n.t('running') : l10n.t('done');
 	}
@@ -101,6 +122,9 @@ export function taskState(row: TaskRow): string {
  * worked or has been working.
  */
 export function taskDetail(row: TaskRow, now: number): string {
+	if (row.kind === 'chat') {
+		return `${row.chat.activity ?? taskState(row)} · ${elapsedLabel(row.chat.startedAt, now)}`;
+	}
 	if (row.kind === 'job') {
 		return `${taskState(row)} · ${elapsedLabel(row.job.startedAt, row.job.endedAt ?? now)}`;
 	}
@@ -139,6 +163,9 @@ export function taskSummary(board: TaskBoard): string {
 
 /** One icon per kind of row: a row's icon is read before its label is. */
 export function rowIcon(row: TaskRow): string {
+	if (row.kind === 'chat') {
+		return 'comment-discussion';
+	}
 	if (row.kind === 'job') {
 		return 'terminal';
 	}
@@ -167,6 +194,16 @@ export interface TaskFact {
  * `explainFailure` says why an agent failed, in the provider's terms, when gentle-pi only recorded that it did.
  */
 export function taskFacts(row: TaskRow, now: number, explainFailure?: (id: string) => string | undefined): TaskFact[] {
+	if (row.kind === 'chat') {
+		const facts: TaskFact[] = [{ label: l10n.t('Answering for'), detail: elapsedLabel(row.chat.startedAt, now), icon: 'watch' }];
+		if (row.chat.activity !== undefined) {
+			facts.push({ label: l10n.t('Now'), detail: row.chat.activity, icon: 'pulse', tooltip: row.chat.activity });
+		}
+		if (row.chat.branch !== undefined) {
+			facts.push({ label: l10n.t('Branch'), detail: row.chat.branch, icon: 'git-branch' });
+		}
+		return facts;
+	}
 	if (row.kind === 'job') {
 		const facts: TaskFact[] = [
 			{ label: row.job.endedAt === undefined ? l10n.t('Running for') : l10n.t('Ran for'), detail: elapsedLabel(row.job.startedAt, row.job.endedAt ?? now), icon: 'watch' },

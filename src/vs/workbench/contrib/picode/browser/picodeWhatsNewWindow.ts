@@ -274,6 +274,10 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.showUsageLimits', "See my plan's limits");
 		case 'openBrowser':
 			return localize('picodeWhatsNew.openBrowser', "Open the browser");
+		case 'newIsolatedSession':
+			return localize('picodeWhatsNew.newWorktreeSession', "Start a session in a worktree");
+		case 'openSetup':
+			return localize('picodeWhatsNew.openSetup', "Open the setup");
 	}
 }
 
@@ -318,6 +322,14 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 		case 'openBrowser':
 			close();
 			void services.commandService.executeCommand('workbench.action.browser.open');
+			return;
+		case 'newIsolatedSession':
+			close();
+			void services.commandService.executeCommand('picode.session.newIsolated');
+			return;
+		case 'openSetup':
+			close();
+			void services.commandService.executeCommand('picode.setup');
 			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
@@ -372,6 +384,9 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	usage: usagePreview,
 	browser: browserPreview,
 	usageAlerts: usageAlertsPreview,
+	sessionBranches: sessionBranchesPreview,
+	parallelSessions: parallelSessionsPreview,
+	setup: setupPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -1172,4 +1187,113 @@ function usageAlertsPreview(parent: HTMLElement, store: DisposableStore): void {
 		}
 	};
 	draw();
+}
+
+function sessionBranchesPreview(parent: HTMLElement, store: DisposableStore): void {
+	// Three made-up sessions: the one on the main branch shows nothing, the others their branch. Picking
+	// one opens the card its badge shows in the sessions column.
+	const sessions = [
+		{ title: localize('picodeWhatsNew.sessionBranches.demoLogin', "Fix the login form"), branch: 'fix/login', pulls: [{ title: localize('picodeWhatsNew.sessionBranches.demoPull1', "Fix the login form on mobile"), state: 'merged' as const, number: 42 }] },
+		{ title: localize('picodeWhatsNew.sessionBranches.demoSearch', "Faster search"), branch: 'feat/search', pulls: [{ title: localize('picodeWhatsNew.sessionBranches.demoPull2', "Search as you type"), state: 'open' as const, number: 57 }] },
+		{ title: localize('picodeWhatsNew.sessionBranches.demoQuestion', "How does the cache work?"), branch: undefined, pulls: [] },
+	];
+	let picked = 0;
+	demoBar(parent, localize('picodeWhatsNew.sessionBranches.demo', "Pick a session to see its branch card."), store);
+	const stage = append(parent, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(stage);
+		sessions.forEach((session, index) => {
+			const row = append(stage, $(`button.picode-whatsnew-row.step.picode-whatsnew-pick${index === picked ? '.picked' : ''}`, { type: 'button' }));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.commentDiscussion)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = session.title;
+			if (session.branch) {
+				const badge = append(row, $('span.picode-whatsnew-row-detail'));
+				append(badge, $(`span${ThemeIcon.asCSSSelector(Codicon.gitBranch)}`));
+				append(badge, $('span')).textContent = ` ${session.branch}`;
+			}
+			store.add(addDisposableListener(row, EventType.CLICK, () => {
+				picked = index;
+				draw();
+			}));
+		});
+		const session = sessions[picked];
+		const card = append(stage, $('.picode-whatsnew-chat'));
+		if (!session.branch) {
+			append(card, $('.picode-whatsnew-bubble.event')).textContent = localize('picodeWhatsNew.sessionBranches.demoMain', "This session stayed on the main branch, so its row shows nothing extra.");
+			return;
+		}
+		const head = append(card, $('.picode-whatsnew-row.head'));
+		append(head, $(`span${ThemeIcon.asCSSSelector(Codicon.gitBranch)}`));
+		append(head, $('span.picode-whatsnew-row-label')).textContent = session.branch;
+		for (const pull of session.pulls) {
+			const row = append(card, $('.picode-whatsnew-row.step.done'));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(pull.state === 'merged' ? Codicon.gitMerge : Codicon.gitPullRequest)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = pull.title;
+			append(row, $('span.picode-whatsnew-row-detail')).textContent = pull.state === 'merged'
+				? localize('picodeWhatsNew.sessionBranches.demoMerged', "Merged · #{0}", pull.number)
+				: localize('picodeWhatsNew.sessionBranches.demoOpen', "Open · #{0}", pull.number);
+		}
+	};
+	draw();
+}
+
+function setupPreview(parent: HTMLElement, store: DisposableStore): void {
+	// The five steps as the setup's rail shows them: pick one to see what it asks.
+	const steps = [
+		{ icon: Codicon.account, label: localize('picodeWhatsNew.setup.stepWelcome', "Welcome"), detail: localize('picodeWhatsNew.setup.stepWelcomeDetail', "Sign in or sign up, or bring your settings from pi or VS Code.") },
+		{ icon: Codicon.layout, label: localize('picodeWhatsNew.setup.stepLayout', "Layout"), detail: localize('picodeWhatsNew.setup.stepLayoutDetail', "Agent or Editor, each drawn with its parts named.") },
+		{ icon: Codicon.hubot, label: localize('picodeWhatsNew.setup.stepAgent', "Agent"), detail: localize('picodeWhatsNew.setup.stepAgentDetail', "Connect a provider and pick a model, with a search box.") },
+		{ icon: Codicon.symbolColor, label: localize('picodeWhatsNew.setup.stepLook', "Look"), detail: localize('picodeWhatsNew.setup.stepLookDetail', "Pick a theme and see it beside the grid.") },
+		{ icon: Codicon.check, label: localize('picodeWhatsNew.setup.stepReady', "Ready"), detail: localize('picodeWhatsNew.setup.stepReadyDetail', "What you chose, and where to start.") },
+	];
+	let chosen = 0;
+	demoBar(parent, localize('picodeWhatsNew.setup.demo', "Pick a step to see what it asks."), store);
+	const list = append(parent, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(list);
+		steps.forEach((step, index) => {
+			const row = append(list, $(`button.picode-whatsnew-row.step.${index < chosen ? 'done' : index === chosen ? 'doing' : 'pending'}`, { type: 'button' }));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(index < chosen ? Codicon.check : step.icon)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = `${index + 1}. ${step.label}`;
+			if (index === chosen) {
+				append(row, $('span.picode-whatsnew-row-detail')).textContent = step.detail;
+			}
+			store.add(addDisposableListener(row, EventType.CLICK, () => {
+				chosen = index;
+				draw();
+			}));
+		});
+	};
+	draw();
+}
+
+function parallelSessionsPreview(parent: HTMLElement, store: DisposableStore): void {
+	// Two sessions, each on its own branch, working through their steps at the same time.
+	const lanes = [
+		{ branch: 'fix/login', steps: [localize('picodeWhatsNew.parallelSessions.demoA1', "Find the bug"), localize('picodeWhatsNew.parallelSessions.demoA2', "Fix the form"), localize('picodeWhatsNew.parallelSessions.demoA3', "Run the tests")] },
+		{ branch: 'feat/search', steps: [localize('picodeWhatsNew.parallelSessions.demoB1', "Read the search code"), localize('picodeWhatsNew.parallelSessions.demoB2', "Add search as you type"), localize('picodeWhatsNew.parallelSessions.demoB3', "Update the docs")] },
+	];
+	let stage: HTMLElement;
+	const play = playDemo(4, store, current => {
+		clearNode(stage);
+		for (const lane of lanes) {
+			const list = append(stage, $('.picode-whatsnew-list'));
+			const head = append(list, $('.picode-whatsnew-row.head'));
+			append(head, $(`span${ThemeIcon.asCSSSelector(Codicon.gitBranch)}`));
+			append(head, $('span.picode-whatsnew-row-label')).textContent = lane.branch;
+			append(head, $('span.picode-whatsnew-row-detail')).textContent = current >= lane.steps.length
+				? localize('picodeWhatsNew.parallelSessions.demoDone', "Done")
+				: localize('picodeWhatsNew.parallelSessions.demoWorking', "Working");
+			lane.steps.forEach((label, index) => {
+				const state = index < current ? 'done' : index === current ? 'doing' : 'pending';
+				const row = append(list, $(`.picode-whatsnew-row.step.${state}`));
+				const icon = state === 'done' ? Codicon.check : state === 'doing' ? Codicon.loading : Codicon.circleOutline;
+				append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(icon)}`));
+				append(row, $('span.picode-whatsnew-row-label')).textContent = label;
+			});
+		}
+	});
+	demoBar(parent, localize('picodeWhatsNew.parallelSessions.demo', "Watch two sessions work at the same time."), store, play);
+	stage = append(parent, $('.picode-whatsnew-parallel'));
+	play();
 }

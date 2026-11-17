@@ -6,7 +6,7 @@
 
 ## 📊 Status
 
-- **18** folders documented · **21** without a README.
+- **19** folders documented · **21** without a README.
 - Root files described: 13.
 
 ## 🌳 Tree
@@ -397,6 +397,10 @@
 │   │   │   ├── picode-light.svg
 │   │   │   ├── picode-status.svg
 │   │   │   └── picode.svg
+│   │   ├── skills/ — Skills that PiCode gives pi on top of the ones in its profile, one folder each with its SKILL.md. They travel inside the editor and pi loads them for…
+│   │   │   ├── web-preview/
+│   │   │   │   └── SKILL.md
+│   │   │   └── README.md
 │   │   ├── src/
 │   │   │   ├── agent-todo.ts
 │   │   │   ├── agent-transcript-panel.ts
@@ -405,6 +409,7 @@
 │   │   │   ├── agents.ts
 │   │   │   ├── background-cards.ts
 │   │   │   ├── background-jobs.ts
+│   │   │   ├── bundled-skills.ts
 │   │   │   ├── chat-commands.ts
 │   │   │   ├── chat-edits.ts
 │   │   │   ├── chat-images.ts
@@ -483,9 +488,14 @@
 │   │   │   ├── providers-list.ts
 │   │   │   ├── providers.ts
 │   │   │   ├── runtime.ts
+│   │   │   ├── session-actions.ts
+│   │   │   ├── session-branch-commands.ts
 │   │   │   ├── session-cwd.ts
 │   │   │   ├── session-folder.ts
+│   │   │   ├── session-git.ts
+│   │   │   ├── session-transcript.ts
 │   │   │   ├── session-usage.ts
+│   │   │   ├── session-worktree.ts
 │   │   │   ├── sessions-backup.ts
 │   │   │   ├── sessions-digest.ts
 │   │   │   ├── sessions-provider.ts
@@ -512,13 +522,14 @@
 │   │   │   ├── voice-worker.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 114 files in total
+│   │   │   └── … 120 files in total
 │   │   ├── test/
 │   │   │   ├── agent-todo.test.ts
 │   │   │   ├── agent-transcript.test.ts
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
 │   │   │   ├── background-jobs.test.ts
+│   │   │   ├── bundled-skills.test.ts
 │   │   │   ├── chat-commands.test.ts
 │   │   │   ├── chat-edits.test.ts
 │   │   │   ├── chat-images.test.ts
@@ -583,8 +594,11 @@
 │   │   │   ├── providers-list.test.ts
 │   │   │   ├── session-cwd.test.ts
 │   │   │   ├── session-folder.test.ts
+│   │   │   ├── session-git.test.ts
 │   │   │   ├── session-listing.test.ts
+│   │   │   ├── session-transcript.test.ts
 │   │   │   ├── session-usage.test.ts
+│   │   │   ├── session-worktree.test.ts
 │   │   │   ├── sessions-backup.test.ts
 │   │   │   ├── sessions-digest.test.ts
 │   │   │   ├── sessions-listing-cache.test.ts
@@ -604,7 +618,7 @@
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 90 files in total
+│   │   │   └── … 94 files in total
 │   │   ├── package.json
 │   │   ├── package.nls.cs.json
 │   │   ├── package.nls.de.json

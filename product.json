@@ -205,6 +205,8 @@
 		"https://github.com",
 		"https://*.github.com",
 		"https://open-vsx.org",
+		"https://auth.atlassian.com",
+		"https://id.atlassian.com",
 		"https://vscodethemes.com",
 		"https://auth.openai.com",
 		"https://claude.ai",
@@ -765,7 +767,7 @@
 			"default": false
 		}
 	},
-	"version": "1.146.9",
-	"picodeVersion": "2.2.9-experimental",
+	"version": "1.146.10",
+	"picodeVersion": "2.3.0-experimental",
 	"hotfixPublicKey": "MCowBQYDK2VwAyEAZes8irGrgqOvvCEWRBn3rwOG6qxSNp+zxWOX3HqXyjo="
 }

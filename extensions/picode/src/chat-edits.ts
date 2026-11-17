@@ -83,138 +83,175 @@ export interface TurnFileEdit {
 	readonly isNew: boolean;
 }
 
-/**
- * The snapshots, keyed by absolute path. A file edited twice in one turn keeps its first
- * "before" — that is the base the whole turn's change is measured against — and its last
- * "after".
- *
- * `null` marks a file that did not exist when the tool started, so a failed read is never
- * re-read (and never mistaken for a pending read).
- */
-const beforeContent = new Map<string, string | null>();
-const afterContent = new Map<string, string>();
-/** The order the files first changed in, so the card lists them as they happened. */
-const changedOrder: string[] = [];
-/** The final ledger, filled by `recordAfter` once both reads have settled. */
-const ledger = new Map<string, TurnFileEdit>();
-
-/**
- * Every read in flight, chained so `whenEditsSettled` can wait for the last one. Reads are
- * fire-and-forget where the events arrive (the subscription is synchronous), but the turn
- * must not end before they land — hence one promise that only ever grows.
- */
-let pendingReads: Promise<void> = Promise.resolve();
-
 /** How many files keep their snapshot. Bounded memory: the oldest give way. */
 const MAX_TRACKED_FILES = 64;
-/** The paths whose snapshot is still held, oldest first — the eviction queue. */
-const snapshotQueue: string[] = [];
-
-/** Clears the per-turn ledger. Called when a turn starts. */
-export function clearTurnEdits(): void {
-	beforeContent.clear();
-	afterContent.clear();
-	changedOrder.length = 0;
-	snapshotQueue.length = 0;
-	ledger.clear();
-	pendingReads = Promise.resolve();
-}
+/** How many turns' snapshots stay servable to the diff editor (turns of several chats run at once). */
+const MAX_SERVED_LEDGERS = 8;
 
 /** Reads a file as UTF-8, or `undefined` when it does not exist or cannot be read. */
 export type FileRead = (absolutePath: string) => Promise<string | undefined>;
 
 /**
- * Snapshots the file before its tool runs. Fire-and-forget: the subscription that calls
- * this is synchronous, so the read chains onto `pendingReads` instead of being awaited.
+ * One turn's ledger. Each turn has its own, so turns of two chats running at the same time never
+ * count each other's files.
  */
-export function snapshotBefore(absolutePath: string, readFile: FileRead): void {
-	if (beforeContent.has(absolutePath)) {
-		return; // The first snapshot of a turn is the one the change is measured against.
-	}
-	beforeContent.set(absolutePath, null); // Reserved: a second tool call on the same file must not re-read.
-	pendingReads = pendingReads.then(async () => {
-		const content = await readFile(absolutePath).catch(() => undefined);
-		if (content === undefined) {
-			beforeContent.set(absolutePath, null);
-			return;
-		}
-		beforeContent.set(absolutePath, content);
-	});
-}
+export class TurnEditLedger {
+	/**
+	 * The snapshots, keyed by absolute path. A file edited twice in one turn keeps its first
+	 * "before" — that is the base the whole turn's change is measured against — and its last
+	 * "after".
+	 *
+	 * `null` marks a file that did not exist when the tool started, so a failed read is never
+	 * re-read (and never mistaken for a pending read).
+	 */
+	private readonly beforeContent = new Map<string, string | null>();
+	private readonly afterContent = new Map<string, string>();
+	/** The order the files first changed in, so the card lists them as they happened. */
+	private readonly changedOrder: string[] = [];
+	/** The final ledger, filled by `recordAfter` once both reads have settled. */
+	private readonly ledger = new Map<string, TurnFileEdit>();
+	/**
+	 * Every read in flight, chained so `whenSettled` can wait for the last one. Reads are
+	 * fire-and-forget where the events arrive (the subscription is synchronous), but the turn
+	 * must not end before they land — hence one promise that only ever grows.
+	 */
+	private pendingReads: Promise<void> = Promise.resolve();
+	/** The paths whose snapshot is still held, oldest first — the eviction queue. */
+	private readonly snapshotQueue: string[] = [];
 
-/**
- * Records the file after its tool ended, and closes its ledger entry once the snapshot read
- * (if any) has landed. A failed tool did not change the file, so only success records.
- */
-export function recordAfter(absolutePath: string, readFile: FileRead): void {
-	pendingReads = pendingReads.then(async () => {
-		const after = await readFile(absolutePath).catch(() => undefined);
-		if (after === undefined) {
-			return;
+	constructor() {
+		servedLedgers.unshift(this);
+		servedLedgers.length = Math.min(servedLedgers.length, MAX_SERVED_LEDGERS);
+	}
+
+	/**
+	 * Snapshots the file before its tool runs. Fire-and-forget: the subscription that calls
+	 * this is synchronous, so the read chains onto `pendingReads` instead of being awaited.
+	 */
+	snapshotBefore(absolutePath: string, readFile: FileRead): void {
+		if (this.beforeContent.has(absolutePath)) {
+			return; // The first snapshot of a turn is the one the change is measured against.
 		}
-		afterContent.set(absolutePath, after);
-		if (!changedOrder.includes(absolutePath)) {
-			changedOrder.push(absolutePath);
-		}
-		if (!snapshotQueue.includes(absolutePath)) {
-			snapshotQueue.push(absolutePath);
-			evictOldest();
-		}
-		const before = beforeContent.get(absolutePath) ?? null;
-		const isNew = before === null;
-		const [added, removed] = isNew
-			? [countLines(after), 0]
-			: countLineChanges(before, after);
-		ledger.set(absolutePath, {
-			path: absolutePath,
-			...(isNew ? {} : { before: before as string }),
-			after,
-			added,
-			removed,
-			isNew,
+		this.beforeContent.set(absolutePath, null); // Reserved: a second tool call on the same file must not re-read.
+		this.pendingReads = this.pendingReads.then(async () => {
+			const content = await readFile(absolutePath).catch(() => undefined);
+			this.beforeContent.set(absolutePath, content === undefined ? null : content);
 		});
-	});
-}
+	}
 
-/** Keeps the snapshot store bounded: the oldest held snapshots give way first.
- *
- * The ledger itself is never trimmed — the card of this turn needs every file —
- * only the heavy "before" text goes, and with it the ability to open that
- * file's diff in the multi-diff editor.
- */
-function evictOldest(): void {
-	while (snapshotQueue.length > MAX_TRACKED_FILES) {
-		const oldest = snapshotQueue.shift();
-		if (oldest === undefined) {
-			return;
+	/**
+	 * Records the file after its tool ended, and closes its ledger entry once the snapshot read
+	 * (if any) has landed. A failed tool did not change the file, so only success records.
+	 */
+	recordAfter(absolutePath: string, readFile: FileRead): void {
+		this.pendingReads = this.pendingReads.then(async () => {
+			const after = await readFile(absolutePath).catch(() => undefined);
+			if (after === undefined) {
+				return;
+			}
+			this.afterContent.set(absolutePath, after);
+			if (!this.changedOrder.includes(absolutePath)) {
+				this.changedOrder.push(absolutePath);
+			}
+			if (!this.snapshotQueue.includes(absolutePath)) {
+				this.snapshotQueue.push(absolutePath);
+				this.evictOldest();
+			}
+			const before = this.beforeContent.get(absolutePath) ?? null;
+			const isNew = before === null;
+			const [added, removed] = isNew
+				? [countLines(after), 0]
+				: countLineChanges(before, after);
+			this.ledger.set(absolutePath, {
+				path: absolutePath,
+				...(isNew ? {} : { before: before as string }),
+				after,
+				added,
+				removed,
+				isNew,
+			});
+		});
+	}
+
+	/** Keeps the snapshot store bounded: the oldest held snapshots give way first.
+	 *
+	 * The ledger itself is never trimmed — the card of this turn needs every file —
+	 * only the heavy "before" text goes, and with it the ability to open that
+	 * file's diff in the multi-diff editor.
+	 */
+	private evictOldest(): void {
+		while (this.snapshotQueue.length > MAX_TRACKED_FILES) {
+			const oldest = this.snapshotQueue.shift();
+			if (oldest === undefined) {
+				return;
+			}
+			this.beforeContent.delete(oldest);
 		}
-		beforeContent.delete(oldest);
+	}
+
+	/**
+	 * Resolves when every snapshot and re-read this turn started has settled. The bridge awaits
+	 * this before ending the turn, so the card never misses a file whose read was still in
+	 * flight — and never waits on one either, because every read catches its own errors.
+	 */
+	whenSettled(): Promise<void> {
+		return this.pendingReads;
+	}
+
+	/** The turn's changed files, in the order they first changed. */
+	edits(): readonly TurnFileEdit[] {
+		return this.changedOrder
+			.map(path => this.ledger.get(path))
+			.filter((entry): entry is TurnFileEdit => entry !== undefined);
+	}
+
+	/** The snapshot this turn holds for a file, if any. */
+	snapshotOf(absolutePath: string): string | undefined {
+		const content = this.beforeContent.get(absolutePath);
+		return typeof content === 'string' ? content : undefined;
 	}
 }
 
-/**
- * Resolves when every snapshot and re-read this turn started has settled. The bridge awaits
- * this before ending the turn, so the card never misses a file whose read was still in
- * flight — and never waits on one either, because every read catches its own errors.
- */
+/** The recent turns whose snapshots the diff editor may still open, newest first. */
+const servedLedgers: TurnEditLedger[] = [];
+
+/** The ledger of the module-level functions below (one turn at a time: resumed conversations and tests). */
+let defaultLedger = new TurnEditLedger();
+
+/** Clears the per-turn ledger. Called when a turn starts. */
+export function clearTurnEdits(): void {
+	defaultLedger = new TurnEditLedger();
+}
+
+export function snapshotBefore(absolutePath: string, readFile: FileRead): void {
+	defaultLedger.snapshotBefore(absolutePath, readFile);
+}
+
+export function recordAfter(absolutePath: string, readFile: FileRead): void {
+	defaultLedger.recordAfter(absolutePath, readFile);
+}
+
 export function whenEditsSettled(): Promise<void> {
-	return pendingReads;
+	return defaultLedger.whenSettled();
 }
 
-/** The turn's changed files, in the order they first changed. */
 export function turnFileEdits(): readonly TurnFileEdit[] {
-	return changedOrder
-		.map(path => ledger.get(path))
-		.filter((entry): entry is TurnFileEdit => entry !== undefined);
+	return defaultLedger.edits();
 }
 
 /**
- * The content a file had before this session touched it, for the before-scheme content
- * provider. `undefined` when there is no snapshot (evicted, or the file is new).
+ * The content a file had before a recent turn touched it, for the before-scheme content
+ * provider: the newest turn that holds a snapshot of it. `undefined` when there is none
+ * (evicted, or the file is new).
  */
 export function beforeContentFor(absolutePath: string): string | undefined {
-	const content = beforeContent.get(absolutePath);
-	return typeof content === 'string' ? content : undefined;
+	for (const ledger of servedLedgers) {
+		const content = ledger.snapshotOf(absolutePath);
+		if (content !== undefined) {
+			return content;
+		}
+	}
+	return undefined;
 }
 
 /** Line count, forgiving the trailing newline every text file ends with. */

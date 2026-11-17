@@ -298,3 +298,19 @@ test('the assignee picture is kept only when it is an https address', () => {
 	const [jira] = mapJiraBoardIssues({ issues: [jiraIssue('ATW-1', 'To Do', 'new', { assignee: { displayName: 'Ana', accountId: 'a1', avatarUrls: { '24x24': 'https://avatar.example/ana.png' } } })] }, SITE);
 	assert.strictEqual(jira.assigneeAvatar, 'https://avatar.example/ana.png');
 });
+
+test('the pull requests of a branch keep title, number, state and link; merged wins over closed', async () => {
+	const { mapGithubPulls } = await import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts');
+	const pulls = mapGithubPulls([
+		{ number: 206, title: 'merge: beta takes the experimental work', state: 'closed', merged_at: '2026-11-10T10:00:00Z', html_url: 'https://github.com/o/r/pull/206', draft: false },
+		{ number: 7, title: 'wip', state: 'open', merged_at: null, html_url: 'https://github.com/o/r/pull/7', draft: true },
+		{ number: 8, title: 'dropped', state: 'closed', merged_at: null, html_url: 'javascript:alert(1)' },
+		{ title: 'no number' },
+	]);
+	assert.deepStrictEqual(pulls, [
+		{ number: 206, title: 'merge: beta takes the experimental work', state: 'merged', url: 'https://github.com/o/r/pull/206' },
+		{ number: 7, title: 'wip', state: 'draft', url: 'https://github.com/o/r/pull/7' },
+		{ number: 8, title: 'dropped', state: 'closed', url: undefined },
+	]);
+	assert.deepStrictEqual(mapGithubPulls({ message: 'Not Found' }), []);
+});
