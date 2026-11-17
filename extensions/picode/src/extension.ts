@@ -47,7 +47,7 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { answeringChatRows, BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { listModels, registerWizardModelCommands } from './wizard-models';
@@ -2792,6 +2792,7 @@ const setupDeps = {
 		runningJobs: runningBackgroundJobs,
 		finishedJobs: finishedBackgroundJobs,
 		agents: () => gentleAgents.current(),
+		chats: answeringChatRows,
 		todos: currentTodos,
 		onWorkChange: listener => {
 			const subscription = onDidChangeAgentWork(listener);

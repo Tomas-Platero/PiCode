@@ -696,6 +696,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// The same line is the pill's "now": what the agent is doing this instant, above
 				// the input where it stays visible while the transcript scrolls on.
 				agentActivity = toolProgress(event.toolName, event.args);
+				turn.activity = agentActivity;
 				notifyAgentStatus();
 				// Work the agent left running: its card says so from the first moment, which is what the
 				// owner asked to be able to see.
@@ -910,6 +911,16 @@ export function isLearnedTerminalOnly(command: PiCommand): boolean {
 /** Where a pi session finds the request in flight: each chat has its own, so two chats' turns never answer into each other. */
 export interface TurnHolder {
 	current?: TurnContext;
+	/** What this chat's turn is doing this instant, as its tool's progress line says it. */
+	activity?: string;
+}
+
+/** The chats answering now, by their turn: the Tasks block lists them when several answer at once. */
+const answeringChats = new Map<TurnHolder, { readonly name: string; readonly startedAt: number; readonly branch?: string }>();
+
+/** The chats answering now, oldest first. */
+export function answeringChatRows(): Array<{ readonly name: string; readonly startedAt: number; readonly activity?: string; readonly branch?: string }> {
+	return [...answeringChats].map(([turn, chat]) => ({ ...chat, ...(turn.activity === undefined ? {} : { activity: turn.activity }) }));
 }
 
 /** The default holder: nothing sets it, so a prompt from a session bound to it (slash-command discovery) has no chat turn to land in. */
@@ -2443,6 +2454,9 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 `);
 					}
 				}
+				// Tasks lists the chats answering at once, each by its name and, in a worktree, its branch.
+				const answeringBranch = chat.worktree === cwd ? await currentBranch(cwd) : undefined;
+				answeringChats.set(chat.turn, { name: chat.sessionManager?.getSessionName() ?? request.prompt.slice(0, 60), startedAt: Date.now(), ...(answeringBranch === undefined ? {} : { branch: answeringBranch }) });
 				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd, attached.images, chat.turn);
 				if (watched !== undefined && slash !== undefined && !token.isCancellationRequested
 					&& await judgeCommandRun(chat.session, slash.name, slash.args, watched, stream)) {
@@ -2450,6 +2464,8 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 			} finally {
 				waitingTurns.delete(waitingTurn);
+				answeringChats.delete(chat.turn);
+				chat.turn.activity = undefined;
 				chat.turnsWaiting--;
 				runningTurns--;
 				if (runningTurns === 0) {
