@@ -529,3 +529,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
   * La rama y sus cambios se ven en la barra del chat, y *Entorno* sigue a la sesión que tienes delante.
   * Detalle: ADR-043, adenda 1.
 * **2026-11-16** · La copia se elige como en Codex y Claude («No entiendo lo de "en una copia aparte"», «revisa eso como lo hace codex o otros programas»): fuera el interruptor de la columna; debajo del chat nuevo hay una casilla *Worktree*, y al enviar el primer mensaje la sesión pasa a trabajar en su propio worktree, con su rama. Detalle: ADR-043, adenda 2.
+* **2026-11-17** · Lo que faltaba de la 2.3.0 («falta más, mira el plan»): una sesión con worktree enseña sus +/- en la lista; *Tasks* dice qué chats están respondiendo cuando hay varios a la vez; entra el setup nuevo de cinco pasos; y *What's New* tiene sus tres páginas, en el editor y en la web. Detalle: ADR-043, adenda 3.
