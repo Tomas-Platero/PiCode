@@ -216,6 +216,12 @@ export interface IAgentSessionRendererOptions {
 	 * disposable resumes updates.
 	 */
 	pauseSessionUpdates?(): IDisposable;
+
+	/**
+	 * PiCode: a hover of the host's own on the row's badge (the session's git branch and its pull
+	 * requests). Returns what removes it, or undefined when the session has nothing to show.
+	 */
+	badgeHover?(session: IAgentSession, target: HTMLElement): IDisposable | undefined;
 }
 
 export class AgentSessionRenderer extends Disposable implements ICompressibleTreeRenderer<IAgentSession, FuzzyScore, IAgentSessionItemTemplate> {
@@ -397,6 +403,19 @@ export class AgentSessionRenderer extends Disposable implements ICompressibleTre
 
 		// Badge
 		const hasBadge = this.renderBadge(session, template);
+		if (hasBadge) {
+			// PiCode: a branch badge keeps its branch icon, and the host may hang its own hover on it.
+			const rawBadge = session.element.badge === undefined ? '' : typeof session.element.badge === 'string' ? session.element.badge : session.element.badge.value;
+			if (/^\$\(git-branch\)/.test(rawBadge)) {
+				const icon = document.createElement('span');
+				icon.className = `agent-session-badge-icon ${ThemeIcon.asClassName(Codicon.gitBranch)}`;
+				template.badge.prepend(icon);
+			}
+			const badgeHover = this.options.badgeHover?.(session.element, template.badge);
+			if (badgeHover) {
+				template.elementDisposable.add(badgeHover);
+			}
+		}
 
 		// Diff information
 		let hasDiff = false;

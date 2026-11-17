@@ -13,7 +13,6 @@ import { externalProfileDir, importProfile, scanExternalProfile, type ImportRepo
 import { NO_KEY_PLACEHOLDER, projectDeclaration } from './declarations';
 import { probeEndpoint, type EndpointProbe } from './endpoint';
 import { externalSdkEntry } from './piLocate';
-import { searchPackages, type PackageSearchRow } from './packages-registry';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piRuntimeRoot } from './distribution-root';
@@ -38,7 +37,6 @@ import {
 	readProfileSettings,
 	setExtras,
 	setModel,
-	setPackages,
 	setRuntime,
 	setTheme,
 	setLayout,
@@ -445,7 +443,7 @@ export interface ImportScanAnswer {
 
 export function importScan(paths: SetupPaths, externalProfile: string | undefined): ImportScanAnswer {
 	const profile = typeof externalProfile === 'string' && externalProfile.length > 0 ? externalProfile : externalProfileDir();
-	return { pi: scanPiProfile(profile), vscode: scanVsCode(undefined, paths) };
+	return { pi: scanPiProfile(profile, paths.profileDir), vscode: scanVsCode(undefined, paths) };
 }
 
 /** Keeps only the shape a choice can have: ids per category, or `'all'`. Anything else is dropped. */
@@ -632,7 +630,6 @@ export type HostCommand =
 	| 'setTheme'
 	| 'setLayout'
 	| 'setRuntime'
-	| 'setPackages'
 	| 'setExtras'
 	| 'setContextMode'
 	| 'clearHandover'
@@ -643,7 +640,6 @@ export type HostCommand =
 	| 'setPendingSession'
 	| 'clearPendingSession'
 	| 'clearPendingCode'
-	| 'searchPackages'
 	| 'subscriptions'
 	| 'availableProviders'
 	| 'gentle'
@@ -664,11 +660,9 @@ export type HostAnswer =
 	| (ImportOutcome & { readonly packagesSettled: boolean })
 	| { readonly report: ImportReport & { packagesSettled?: number }; readonly snapshot: SetupSnapshot }
 	| { readonly providers: readonly ProviderFacts[]; readonly models: readonly string[]; readonly defaultModel?: string; readonly latencyMs: number; readonly snapshot: SetupSnapshot }
-	| { readonly packages: readonly string[]; readonly snapshot: SetupSnapshot }
 	| { readonly extras: Record<string, boolean>; readonly snapshot: SetupSnapshot }
 	| { readonly mode: string; readonly snapshot: SetupSnapshot }
 	| EndpointProbe
-	| readonly PackageSearchRow[]
 	| readonly SubscriptionChoice[]
 	| readonly AvailableProvider[]
 	| GentleSettings
@@ -721,11 +715,6 @@ export async function runHostCommand(paths: SetupPaths, command: string, payload
 		case 'setRuntime':
 			setRuntime(paths, stringOf(payload['runtime']));
 			return { snapshot: setupSnapshot(paths) };
-		case 'setPackages':
-			return {
-				packages: setPackages(paths, { add: listOf(payload['add']), remove: listOf(payload['remove']) }),
-				snapshot: setupSnapshot(paths),
-			};
 		case 'clearPendingCode':
 			clearPendingAccountCode(paths);
 			return { snapshot: setupSnapshot(paths) };
@@ -787,10 +776,6 @@ export async function runHostCommand(paths: SetupPaths, command: string, payload
 			return gentleSettings(paths.profileDir);
 		case 'setGentle':
 			return setGentleSetting(paths.profileDir, { key: payload['key'], value: payload['value'] });
-		case 'searchPackages': {
-			const query = stringOf(payload['query']).trim();
-			return query.length === 0 ? [] : await searchPackages(query);
-		}
 		default:
 			throw new Error(`unknown setup command: ${command}`);
 	}

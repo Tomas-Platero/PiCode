@@ -30,6 +30,7 @@ test("every call the issue panels make is allowed, on the service's own address"
     ["github", "GET", "/repos/Tomas-Platero/PiCode-Website/issues?state=open&sort=updated&per_page=30"],
     ["github", "GET", "/repos/o/r/labels?per_page=100"],
     ["github", "GET", "/repos/o/r/assignees?per_page=100"],
+    ["github", "GET", "/repos/o/r/pulls?state=all&head=o%3Afeat%2Fx&per_page=10"],
     ["github", "PATCH", "/repos/o/r/issues/12", { title: "x" }],
     ["atlassian", "GET", "/oauth/token/accessible-resources"],
     ["atlassian", "GET", `${JIRA}/project/ATW`],
@@ -60,6 +61,8 @@ test("anything else on the same service is refused", () => {
   refused({ service: "github", method: "GET", path: "/user/repos" }, 403);
   refused({ service: "github", method: "GET", path: "/repos/o/r/contents/.env" }, 403);
   refused({ service: "github", method: "POST", path: "/repos/o/r/issues", json: {} }, 403);
+  refused({ service: "github", method: "POST", path: "/repos/o/r/pulls", json: {} }, 403);
+  refused({ service: "github", method: "GET", path: "/repos/o/r/pulls/1/files" }, 403);
   refused({ service: "github", method: "PUT", path: "/repos/o/r/issues/1", json: {} }, 403);
   refused({ service: "github", method: "PATCH", path: "/repos/o/r", json: { private: false } }, 403);
   refused({ service: "atlassian", method: "PUT", path: `${JIRA}/project/ATW`, json: {} }, 403);

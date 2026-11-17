@@ -22,7 +22,7 @@
 				</div>
 			</div>
 
-			<nav id="steps" class="steps" aria-label="Setup steps"></nav>
+			<nav id="steps" class="steps" aria-label="Setup"></nav>
 		</aside>
 
 		<main class="content">
@@ -32,79 +32,12 @@
 				<button id="notice-close" class="notice-close" type="button" title="Dismiss">×</button>
 			</div>
 
-			<!-- 1. Welcome -->
-			<section class="step" data-step="welcome">
-				<div class="welcome">
-					<img class="welcome-mark" src="media/picode.svg" alt="" />
-					<h1 id="welcome-title">Welcome to PiCode</h1>
-					<p id="welcome-line" class="lead"></p>
-					<p id="welcome-how" class="lead-sub"></p>
-					<div id="welcome-account" class="panel account-card" hidden></div>
-				</div>
-			</section>
-
-			<!-- 2. Layout: Agent or Editor -->
-			<section class="step" data-step="layout">
-				<h2 id="layout-title">How you work</h2>
-				<p id="layout-lead" class="lead"></p>
-				<div id="layout-grid" class="layout-grid"></div>
-			</section>
-
-			<!-- 3. Agent -->
-			<section class="step" data-step="pi">
-				<h2 id="pi-title">Choose your agent</h2>
-				<p id="pi-lead" class="lead"></p>
-				<div id="pi-cards" class="cards"></div>
-				<div id="import-card" class="panel" hidden></div>
-			</section>
-
-			<!-- 3. Model -->
-			<section class="step" data-step="model">
-				<h2 id="model-title">A model to talk to</h2>
-				<p id="model-lead" class="lead"></p>
-				<div id="model-tabs" class="tabs" role="tablist"></div>
-				<div id="model-status" class="model-status" hidden></div>
-				<div id="model-subscriptions" class="panel" hidden></div>
-				<div id="model-form" class="panel" hidden></div>
-				<div id="model-local" class="panel" hidden></div>
-				<p id="model-note" class="hint"></p>
-			</section>
-
-			<!-- 5. Look: the theme -->
-			<section class="step" data-step="theme">
-				<h2 id="theme-title">A colour scheme</h2>
-				<p id="theme-lead" class="lead"></p>
-				<div id="theme-grid" class="theme-grid"></div>
-				<button id="theme-all" class="link" type="button"></button>
-			</section>
-
-			<!-- 5. Extras -->
-			<section class="step" data-step="extras">
-				<h2 id="extras-title">A few extras</h2>
-				<p id="extras-lead" class="lead"></p>
-				<div id="extras-list" class="panels"></div>
-			</section>
-
-			<!-- 6. Ready -->
-			<section class="step" data-step="done">
-				<h2 id="done-title">Ready</h2>
-				<p id="done-lead" class="lead"></p>
-				<div id="done-summary" class="summary"></div>
-
-				<div class="panel">
-					<div class="panel-head">
-						<span class="panel-title" id="done-start-title"></span>
-					</div>
-					<div id="start-cards" class="cards start-cards"></div>
-					<div id="clone-row" class="clone" hidden>
-						<input id="clone-url" type="text" spellcheck="false" placeholder="https://github.com/user/repo" />
-						<button id="clone" class="secondary" type="button">Clone</button>
-					</div>
-					<p class="hint" id="start-hint"></p>
-				</div>
-
-				<p class="pro" id="pro-note"></p>
-			</section>
+			<!-- The five steps: painted from data by onboarding.js. -->
+			<section class="step" data-step="welcome" hidden></section>
+			<section class="step" data-step="layout" hidden></section>
+			<section class="step" data-step="agent" hidden></section>
+			<section class="step" data-step="look" hidden></section>
+			<section class="step" data-step="done" hidden></section>
 			</div>
 
 			<footer class="footer">

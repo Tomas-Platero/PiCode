@@ -54,7 +54,7 @@ const agent = (id: string, status: AgentTaskRow['status'], extra: Partial<AgentT
 
 test('agents still going are running rows, after the jobs; the ones that ended are listed apart', () => {
 	const board = taskBoard([job('1', 'lint')], [agent('a', 'running'), agent('b', 'queued'), agent('c', 'waiting'), agent('d', 'completed', { endedAt: 4_000 }), agent('e', 'failed', { endedAt: 3_000 })]);
-	assert.deepEqual(board.running.map(row => row.kind === 'job' ? row.job.jobNumber : row.agent.id), ['1', 'a', 'b', 'c']);
+	assert.deepEqual(board.running.map(row => row.kind === 'job' ? row.job.jobNumber : row.kind === 'agent' ? row.agent.id : ''), ['1', 'a', 'b', 'c']);
 	assert.deepEqual(board.finished.map(row => row.kind === 'agent' ? row.agent.id : ''), ['d', 'e']);
 	assert.equal(board.total, 6);
 });
@@ -119,4 +119,18 @@ test('an agent opens to its state, role, time and steps, and a failure says one 
 		['Problem', 'The provider refused the key'],
 	]);
 	assert.equal(taskFacts(row, 100_000).at(-1)?.detail, 'assistant reported an error');
+});
+
+test('chats answering show only when several answer at once, first, by name, branch and what they do', () => {
+	const one = taskBoard([], [], [], [{ name: 'Fix login', startedAt: 1_000 }]);
+	assert.equal(one.running.length, 0);
+	const two = taskBoard([job('1', 'lint')], [], [], [{ name: 'Fix login', startedAt: 1_000, activity: 'read a.ts', branch: 'picode/fix-login' }, { name: 'Docs', startedAt: 2_000 }]);
+	assert.deepEqual(two.running.map(row => row.kind), ['chat', 'chat', 'job']);
+	const [first, second] = two.running;
+	assert.equal(taskTitle(first), 'Fix login');
+	assert.equal(taskDetail(first, 61_000), 'read a.ts · 1m');
+	assert.equal(taskDetail(second, 61_000), 'answering · 59s');
+	assert.equal(rowIcon(first), 'comment-discussion');
+	assert.deepEqual(taskFacts(first, 61_000).map(fact => fact.detail), ['1m', 'read a.ts', 'picode/fix-login']);
+	assert.equal(taskSummary(two), '3 running');
 });

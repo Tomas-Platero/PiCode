@@ -40,6 +40,8 @@ const ALLOWED: Record<ConnectService, ReadonlyArray<{ readonly method: ProxyMeth
     { method: "GET", path: new RegExp(`^${REPO}/issues$`) },
     { method: "GET", path: new RegExp(`^${REPO}/labels$`) },
     { method: "GET", path: new RegExp(`^${REPO}/assignees$`) },
+    // The pull requests of a branch, for the session rows of the Agent layout (read only).
+    { method: "GET", path: new RegExp(`^${REPO}/pulls$`) },
     { method: "PATCH", path: new RegExp(`^${REPO}/issues/\\d{1,12}$`) },
   ],
   atlassian: [

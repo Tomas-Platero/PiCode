@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions' | 'setup';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser' | 'newIsolatedSession' | 'openSetup';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,65 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'setup',
+			since: '2.3.0',
+			plan: 'free',
+			icon: Codicon.rocket,
+			title: localize('picodeWhatsNew.setup.title', "A shorter, clearer setup"),
+			summary: localize('picodeWhatsNew.setup.summary', "The first-run setup now takes five steps instead of seven, and every choice you make shows up at once, without the window jumping."),
+			points: [
+				localize('picodeWhatsNew.setup.point1', "Welcome, Layout, Agent, Look and Ready: the agent and its model are chosen together, on one step."),
+				localize('picodeWhatsNew.setup.point2', "Themes preview beside the grid as you point at them; the rarer options wait under Advanced."),
+				localize('picodeWhatsNew.setup.point3', "Escape no longer skips the whole setup, and Skip always means the same thing."),
+			],
+			preview: 'setup',
+			action: 'openSetup',
+		},
+		{
+			id: 'parallelSessions',
+			since: '2.3.0',
+			plan: 'free',
+			icon: Codicon.gitBranch,
+			title: localize('picodeWhatsNew.parallelSessions.title', "Several sessions at once, each on its own branch"),
+			summary: localize('picodeWhatsNew.parallelSessions.summaryWorktree', "Tick \"Worktree\" under a new chat and the session works in its own copy of the project, on its own branch, so several can work at the same time without touching each other's files."),
+			points: [
+				localize('picodeWhatsNew.parallelSessions.pointName', "The branch is named after your first message, and you can rename the session from its row."),
+				localize('picodeWhatsNew.parallelSessions.point2', "Two chats answer at the same time, each with its own questions and its own changed files."),
+				localize('picodeWhatsNew.parallelSessions.pointFinishWorktree', "From the session's row: review its changes, create a pull request or merge it. Archiving it offers to remove the worktree."),
+			],
+			preview: 'parallelSessions',
+			action: 'newIsolatedSession',
+		},
+		{
+			id: 'sessionBranches',
+			since: '2.3.0',
+			plan: 'free',
+			icon: Codicon.gitPullRequest,
+			title: localize('picodeWhatsNew.sessionBranches.title', "Each session shows its branch"),
+			summary: localize('picodeWhatsNew.sessionBranches.summary', "In the Agent layout, a session that worked on a branch other than the main one shows it on its row. Point at it to see the branches it went through."),
+			points: [
+				localize('picodeWhatsNew.sessionBranches.point1', "The branch is saved after every answer, so older sessions keep the branch they really used."),
+				localize('picodeWhatsNew.sessionBranches.point2', "With GitHub connected (Pro), the card also lists the branch's pull requests: open, merged or closed."),
+				localize('picodeWhatsNew.sessionBranches.point3', "Click a pull request to open it on GitHub."),
+			],
+			preview: 'sessionBranches',
+		},
+		{
+			id: 'usageAlerts',
+			since: '2.2.9',
+			plan: 'free',
+			icon: Codicon.bell,
+			title: localize('picodeWhatsNew.usageAlerts.title', "Alerts for your plan's limits"),
+			summary: localize('picodeWhatsNew.usageAlerts.summary', "Set alerts on each model in Usage limits, like alarms on a phone: PiCode tells you when a window passes the percentage you chose."),
+			points: [
+				localize('picodeWhatsNew.usageAlerts.point1', "Add as many as you want to each model, each with its own percentage."),
+				localize('picodeWhatsNew.usageAlerts.point2', "A mark on the bars shows where each alert will go off; switch one off without removing it."),
+				localize('picodeWhatsNew.usageAlerts.point3', "Each alert goes off once per window, and also as a system notification when PiCode is in the background."),
+			],
+			preview: 'usageAlerts',
+			action: 'showUsageLimits',
+		},
 		{
 			id: 'browser',
 			since: '2.2.8',
