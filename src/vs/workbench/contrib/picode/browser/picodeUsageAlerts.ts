@@ -15,7 +15,7 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { AICustomizationManagementSection } from '../../chat/common/aiCustomizationWorkspaceService.js';
-import { addAlert, evaluateAlerts, IAlertMeter, ITriggeredAlert, IUsageAlert, readAlerts, readFired } from './picodeUsageAlertsData.js';
+import { addAlert, evaluateAlerts, IAlertMeter, ITriggeredAlert, IUsageAlert, readAlerts, readFired, splitAcrossWindows } from './picodeUsageAlertsData.js';
 
 /**
  * Plan usage alerts in the editor: where they are kept, and the watcher that reads the plans and
@@ -40,14 +40,23 @@ function storeAlerts(storageService: IStorageService, alerts: readonly IUsageAle
 	storageService.store(USAGE_ALERTS_STORAGE_KEY, JSON.stringify(alerts), StorageScope.PROFILE, StorageTarget.USER);
 }
 
-export function addUsageAlert(storageService: IStorageService, provider: string, meter: string | undefined, percent: number): boolean {
+export function addUsageAlert(storageService: IStorageService, provider: string, meter: string | undefined, window: string, percent: number): boolean {
 	const alerts = getUsageAlerts(storageService);
-	const next = addAlert(alerts, provider, meter, percent, generateUuid());
+	const next = addAlert(alerts, provider, meter, window, percent, generateUuid());
 	if (next.length === alerts.length) {
 		return false;
 	}
 	storeAlerts(storageService, next);
 	return true;
+}
+
+/** Gives a model's alerts from before windows had their own one copy per window; stores only if something changed. */
+export function splitUsageAlerts(storageService: IStorageService, provider: string, meter: string | undefined, windows: readonly string[]): void {
+	const alerts = getUsageAlerts(storageService);
+	const next = splitAcrossWindows(alerts, provider, meter, windows, generateUuid);
+	if (next !== alerts) {
+		storeAlerts(storageService, next);
+	}
 }
 
 export function toggleUsageAlert(storageService: IStorageService, id: string): void {

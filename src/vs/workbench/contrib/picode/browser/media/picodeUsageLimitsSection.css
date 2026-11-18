@@ -268,9 +268,12 @@
 
 .picode-limits-window-top {
 	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
+	align-items: center;
 	gap: 8px;
+}
+
+.picode-limits-window-top .picode-limits-window-label {
+	margin-right: auto;
 }
 
 .picode-limits-window-label {
@@ -369,7 +372,7 @@
 	margin-bottom: 6px;
 }
 
-/* --------------------------------------------------------- alerts (per model) */
+/* -------------------------------------------------------- alerts (per window) */
 
 .picode-limits-bar {
 	position: relative;
@@ -391,47 +394,74 @@
 	opacity: 0.25;
 }
 
-.picode-limits-alerts {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	margin: auto -14px -12px;
-	padding: 10px 14px 12px;
-	border-top: 1px solid var(--picode-limits-border);
-	border-radius: 0 0 6px 6px;
-	background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
+/* The bell beside a window: quiet until the tile is pointed at, and showing what is set once it is. */
+.picode-limits-window-bell {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 20px;
+	padding: 0 6px;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: none;
+	color: var(--vscode-descriptionForeground);
+	font: inherit;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
 }
 
-.picode-limits-alerts-head {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	min-height: 22px;
+.picode-limits-window-bell .codicon {
 	font-size: 12px;
 }
 
-.picode-limits-alerts-head .grow {
-	flex: 1 1 auto;
+.picode-limits-tile:hover .picode-limits-window-bell,
+.picode-limits-window-bell:focus-visible,
+.picode-limits-window-bell.set,
+.picode-limits-window-bell.open {
+	opacity: 1;
 }
 
-.picode-limits-alerts-icon {
-	display: inline-flex;
+.picode-limits-window-bell:hover,
+.picode-limits-window-bell.open {
+	background: var(--vscode-toolbar-hoverBackground);
+	color: var(--vscode-foreground);
+}
+
+.picode-limits-window-bell.set {
 	color: var(--vscode-textLink-foreground);
+	background: color-mix(in srgb, var(--vscode-textLink-foreground) 10%, transparent);
 }
 
-.picode-limits-alerts-title {
-	font-weight: 600;
+.picode-limits-window-bell:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
 }
 
-.picode-limits-alerts-count {
-	min-width: 16px;
-	padding: 0 5px;
+.picode-limits-alerts {
+	display: none;
+}
+
+.picode-limits-alerts.open {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 4px;
+	padding: 10px;
+	border: 1px solid var(--picode-limits-border);
 	border-radius: 8px;
-	font-size: 10px;
-	line-height: 16px;
-	text-align: center;
-	background: var(--vscode-badge-background);
-	color: var(--vscode-badge-foreground);
+	background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
+}
+
+.picode-limits-alerts-lead {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-limits-alert-form .grow {
+	flex: 1 1 auto;
 }
 
 .picode-limits-alerts-list,
@@ -477,10 +507,6 @@
 	border-color: var(--vscode-textLink-foreground);
 }
 
-.picode-limits-alert-toggle .codicon {
-	color: var(--vscode-textLink-foreground);
-}
-
 .picode-limits-alert-percent {
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
@@ -510,10 +536,6 @@
 .picode-limits-alert.off {
 	border-color: var(--picode-limits-border);
 	background: transparent;
-	color: var(--vscode-descriptionForeground);
-}
-
-.picode-limits-alert.off .picode-limits-alert-toggle .codicon {
 	color: var(--vscode-descriptionForeground);
 }
 
@@ -552,19 +574,6 @@
 .picode-limits-alerts .picode-limits-alert-remove:hover {
 	color: var(--picode-limits-danger);
 	border-color: var(--picode-limits-danger);
-}
-
-.picode-limits-alert-lead {
-	font-size: 12px;
-	color: var(--vscode-descriptionForeground);
-}
-
-.picode-limits-alerts .picode-limits-alert-add {
-	color: var(--vscode-textLink-foreground);
-}
-
-.picode-limits-alerts .picode-limits-alert-add:hover {
-	color: var(--vscode-textLink-activeForeground);
 }
 
 .picode-limits-alerts .picode-limits-alert-preset {
@@ -632,15 +641,14 @@
 	background: var(--vscode-button-hoverBackground);
 }
 
-.picode-limits-alerts .picode-limits-alert-cancel {
-	justify-content: center;
-	width: 22px;
-	height: 22px;
-	border-radius: 6px;
+.picode-limits-alerts .picode-limits-alert-done {
+	height: 26px;
+	padding: 0 10px;
+	border-radius: 8px;
 	color: var(--vscode-descriptionForeground);
 }
 
-.picode-limits-alerts .picode-limits-alert-cancel:hover {
+.picode-limits-alerts .picode-limits-alert-done:hover {
 	background: var(--vscode-toolbar-hoverBackground);
 	color: var(--vscode-foreground);
 }
