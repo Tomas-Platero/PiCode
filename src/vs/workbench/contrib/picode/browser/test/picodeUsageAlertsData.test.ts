@@ -13,7 +13,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { addAlert, alertsOf, evaluateAlerts, IAlertMeter, IUsageAlert, parseAlertPercent, readAlerts, readFired } from '../picodeUsageAlertsData.js';
+import { addAlert, alertsOf, evaluateAlerts, IAlertMeter, IUsageAlert, parseAlertPercent, readAlerts, readFired, splitAcrossWindows } from '../picodeUsageAlertsData.js';
 
 const NOW = 1_000_000;
 const alert = (id: string, percent: number, enabled = true, provider = 'openai-codex'): IUsageAlert => ({ id, provider, percent, enabled });
@@ -75,11 +75,11 @@ test('records of removed alerts are forgotten', () => {
 });
 
 test('the same percentage is never added twice to a model, but another model can have it', () => {
-	const one = addAlert([], 'nan', 'qwen3.6', 50, 'a');
-	assert.deepStrictEqual(one, [{ id: 'a', provider: 'nan', meter: 'qwen3.6', percent: 50, enabled: true }]);
-	assert.strictEqual(addAlert(one, 'nan', 'qwen3.6', 50, 'b').length, 1);
-	assert.strictEqual(addAlert(one, 'nan', 'glm5.3', 50, 'c').length, 2);
-	assert.strictEqual(addAlert(one, 'anthropic', undefined, 50, 'd').length, 2);
+	const one = addAlert([], 'nan', 'qwen3.6', 'billing period', 50, 'a');
+	assert.deepStrictEqual(one, [{ id: 'a', provider: 'nan', meter: 'qwen3.6', window: 'billing period', percent: 50, enabled: true }]);
+	assert.strictEqual(addAlert(one, 'nan', 'qwen3.6', 'billing period', 50, 'b').length, 1);
+	assert.strictEqual(addAlert(one, 'nan', 'glm5.3', 'billing period', 50, 'c').length, 2);
+	assert.strictEqual(addAlert(one, 'anthropic', undefined, 'billing period', 50, 'd').length, 2);
 	assert.deepStrictEqual(alertsOf([alert('x', 80), alert('y', 20), alert('z', 50, true, 'nan')], 'openai-codex', 'ChatGPT Plus').map(a => a.percent), [20, 80]);
 });
 
@@ -100,6 +100,34 @@ test('an alert saved for the whole plan still watches every model', () => {
 	];
 	assert.strictEqual(evaluateAlerts([alert('p', 50, true, 'nan')], meters, {}, NOW).triggered.length, 2);
 	assert.strictEqual(alertsOf([alert('p', 50, true, 'nan')], 'nan', 'glm5.3').length, 1);
+});
+
+test('an alert of one window leaves the other windows of the model alone', () => {
+	const weekly: IUsageAlert = { id: 'w', provider: 'openai-codex', meter: 'ChatGPT Plus', window: 'weekly window', percent: 50, enabled: true };
+	assert.deepStrictEqual(evaluateAlerts([weekly], [chatgpt(90, 10)], {}, NOW).triggered, []);
+	assert.deepStrictEqual(evaluateAlerts([weekly], [chatgpt(10, 60)], {}, NOW).triggered.map(t => t.window.label), ['weekly window']);
+});
+
+test('the same percentage can be set on two windows of one model, but not twice on one window', () => {
+	const one = addAlert([], 'openai-codex', 'ChatGPT Plus', '5h window', 80, 'a');
+	const two = addAlert(one, 'openai-codex', 'ChatGPT Plus', 'weekly window', 80, 'b');
+	assert.strictEqual(two.length, 2);
+	assert.strictEqual(addAlert(two, 'openai-codex', 'ChatGPT Plus', 'weekly window', 80, 'c').length, 2);
+	assert.deepStrictEqual(alertsOf(two, 'openai-codex', 'ChatGPT Plus', 'weekly window').map(a => a.id), ['b']);
+});
+
+test('a model alert saved before windows had their own is split into one per window, and only once', () => {
+	let n = 0;
+	const old: IUsageAlert = { id: 'old', provider: 'openai-codex', meter: 'ChatGPT Plus', percent: 75, enabled: false };
+	const plan = alert('plan', 60);
+	const split = splitAcrossWindows([old, plan], 'openai-codex', 'ChatGPT Plus', ['5h window', 'weekly window'], () => `n${++n}`);
+	assert.deepStrictEqual(split, [
+		plan,
+		{ id: 'n1', provider: 'openai-codex', meter: 'ChatGPT Plus', percent: 75, enabled: false, window: '5h window' },
+		{ id: 'n2', provider: 'openai-codex', meter: 'ChatGPT Plus', percent: 75, enabled: false, window: 'weekly window' },
+	]);
+	const again = splitAcrossWindows(split, 'openai-codex', 'ChatGPT Plus', ['5h window', 'weekly window'], () => 'x');
+	assert.strictEqual(again, split);
 });
 
 test('percentages people can type', () => {

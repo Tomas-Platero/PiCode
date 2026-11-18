@@ -7,9 +7,10 @@
  * Plan usage alerts, without the editor around them: which alerts there are, and which of them a
  * fresh reading of the plans sets off.
  *
- * An alert belongs to a provider's plan and watches every window of it (5-hour, weekly, billing
- * period…). It goes off once per window when that window reaches its percentage, and is ready again
- * when the window drops below it or starts over (its reset time has passed).
+ * An alert belongs to one model of a provider's plan and to one of its windows (5-hour, weekly,
+ * billing period…). It goes off once when that window reaches its percentage, and is ready again
+ * when the window drops below it or starts over (its reset time has passed). Alerts saved before
+ * windows had their own alerts carry none, and watch every window.
  */
 
 export interface IUsageAlert {
@@ -18,7 +19,9 @@ export interface IUsageAlert {
 	readonly provider: string;
 	/** The model (meter) it watches; none means every model of the plan (alerts saved before 2026-11-16). */
 	readonly meter?: string;
-	/** Goes off when a window reaches this much used, 1 to 100. */
+	/** The window it watches, by its label; none means every window (alerts saved before 2026-11-18). */
+	readonly window?: string;
+	/** Goes off when the window reaches this much used, 1 to 100. */
 	readonly percent: number;
 	readonly enabled: boolean;
 }
@@ -69,6 +72,7 @@ export function readAlerts(raw: string | undefined): IUsageAlert[] {
 	return parsed.filter((item): item is IUsageAlert => typeof item === 'object' && item !== null
 		&& typeof item.id === 'string' && typeof item.provider === 'string' && typeof item.enabled === 'boolean'
 		&& (item.meter === undefined || typeof item.meter === 'string')
+		&& (item.window === undefined || typeof item.window === 'string')
 		&& Number.isInteger(item.percent) && item.percent >= 1 && item.percent <= 100);
 }
 
@@ -77,17 +81,39 @@ export function watches(alert: IUsageAlert, provider: string | undefined, meter:
 	return alert.provider === provider && (alert.meter === undefined || alert.meter === (meter ?? ''));
 }
 
-/** The alerts of one model, lowest percentage first. */
-export function alertsOf(alerts: readonly IUsageAlert[], provider: string, meter: string | undefined): IUsageAlert[] {
-	return alerts.filter(alert => watches(alert, provider, meter)).sort((a, b) => a.percent - b.percent);
+/** Whether an alert watches this window. */
+export function watchesWindow(alert: IUsageAlert, window: string): boolean {
+	return alert.window === undefined || alert.window === window;
 }
 
-/** Adds an alert to a model; a model already watching that percentage keeps the one it has. */
-export function addAlert(alerts: readonly IUsageAlert[], provider: string, meter: string | undefined, percent: number, id: string): IUsageAlert[] {
-	if (alerts.some(alert => watches(alert, provider, meter) && alert.percent === percent)) {
+/** The alerts of one model (of one of its windows, when named), lowest percentage first. */
+export function alertsOf(alerts: readonly IUsageAlert[], provider: string, meter: string | undefined, window?: string): IUsageAlert[] {
+	return alerts
+		.filter(alert => watches(alert, provider, meter) && (window === undefined || watchesWindow(alert, window)))
+		.sort((a, b) => a.percent - b.percent);
+}
+
+/** Adds an alert to a model's window; a window already watching that percentage keeps the one it has. */
+export function addAlert(alerts: readonly IUsageAlert[], provider: string, meter: string | undefined, window: string, percent: number, id: string): IUsageAlert[] {
+	if (alerts.some(alert => watches(alert, provider, meter) && watchesWindow(alert, window) && alert.percent === percent)) {
 		return [...alerts];
 	}
-	return [...alerts, { id, provider, meter: meter ?? '', percent, enabled: true }];
+	return [...alerts, { id, provider, meter: meter ?? '', window, percent, enabled: true }];
+}
+
+/**
+ * Gives a model's window-less alerts one copy per window, so each window shows and edits its own.
+ * Alerts saved for the whole plan (no model) are left as they are: they watch other models too.
+ * Returns the same array when there is nothing to split.
+ */
+export function splitAcrossWindows(alerts: readonly IUsageAlert[], provider: string, meter: string | undefined, windows: readonly string[], newId: () => string): readonly IUsageAlert[] {
+	const loose = alerts.filter(alert => alert.window === undefined && alert.provider === provider && alert.meter !== undefined && alert.meter === (meter ?? ''));
+	if (loose.length === 0 || windows.length === 0) {
+		return alerts;
+	}
+	const kept = alerts.filter(alert => !loose.includes(alert));
+	const copies = loose.flatMap(alert => windows.map(window => ({ ...alert, id: newId(), window })));
+	return [...kept, ...copies];
 }
 
 export function readFired(raw: string | undefined): Record<string, number | null> {
@@ -132,6 +158,9 @@ export function evaluateAlerts(alerts: readonly IUsageAlert[], meters: readonly 
 				continue;
 			}
 			for (const window of meter.windows) {
+				if (!watchesWindow(alert, window.label)) {
+					continue;
+				}
 				const key = firedKey(alert, meter, window);
 				const percent = Math.max(0, Math.min(100, Math.round(window.usedPercent)));
 				if (percent < alert.percent) {
