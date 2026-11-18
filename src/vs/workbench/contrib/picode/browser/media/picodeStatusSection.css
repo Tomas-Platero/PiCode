@@ -338,9 +338,6 @@
 	cursor: progress;
 }
 
-.picode-status-btn.monaco-button.busy .codicon {
-	animation: codicon-spin 1.5s steps(30) infinite;
-}
 
 /* ------------------------------------------------------------------ pills */
 
