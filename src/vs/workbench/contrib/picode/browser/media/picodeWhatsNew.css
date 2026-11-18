@@ -387,7 +387,8 @@
 	font-weight: 600;
 }
 
-.picode-whatsnew-row.doing .picode-whatsnew-row-icon {
+/* Only the spinner turns: a step's own icon (globe, robot…) marked as the current one stays still. */
+.picode-whatsnew-row.doing .picode-whatsnew-row-icon.codicon-loading {
 	animation: codicon-spin 1.5s steps(30) infinite;
 }
 

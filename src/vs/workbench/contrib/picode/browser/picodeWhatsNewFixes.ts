@@ -24,6 +24,18 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.3.1',
+			text: localize('picodeWhatsNew.fix.windowAlerts', "**Usage alerts belong to each window.** Every limit (5-hour, weekly, billing period…) has its own bell: set an alert on the weekly window without the 5-hour one going off too. The alerts you had are copied to each window of their model."),
+		},
+		{
+			since: '2.3.1',
+			text: localize('picodeWhatsNew.fix.updateSpinner', "**Update all no longer spins its cloud.** While PiCode updates, the button shows a progress spinner instead, and the memory engine is restarted once instead of twice."),
+		},
+		{
+			since: '2.3.1',
+			text: localize('picodeWhatsNew.fix.stillIcons', "**What's New icons stay still.** The step you pick in a demo kept its icon spinning; now only progress spinners turn."),
+		},
+		{
 			since: '2.2.7',
 			text: localize('picodeWhatsNew.fix.engineOrphan', "**The memory engine closes with PiCode.** When PiCode was opened and closed quickly, the memory engine could stay running on its own and keep files busy. Now the last window to close always stops the engine PiCode started, and so does PiCode itself when it quits."),
 		},
