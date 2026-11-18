@@ -289,7 +289,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			return;
 		}
 		this.running.add(key);
-		this.setBusy(button, true);
+		this.setBusy(button, action, true);
 		try {
 			await this.commandService.executeCommand(action.command, ...(action.args ?? []));
 		} catch {
@@ -297,15 +297,17 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 		} finally {
 			this.running.delete(key);
 			if (!this._store.isDisposed) {
-				this.setBusy(button, false);
+				this.setBusy(button, action, false);
 				void this.refresh(true);
 			}
 		}
 	}
 
-	private setBusy(button: Button, busy: boolean): void {
+	/** A busy button swaps its own icon for a spinner: a spinning cloud or folder reads as a glitch. */
+	private setBusy(button: Button, action: IAction, busy: boolean): void {
 		button.enabled = !busy;
 		button.element.classList.toggle('busy', busy);
+		button.label = `$(${busy ? `${Codicon.loading.id}~spin` : action.icon.id}) ${action.label}`;
 	}
 
 	private render(data: IStatusData | undefined): void {
@@ -726,7 +728,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 		button.element.classList.add('picode-status-btn');
 		button.element.classList.toggle('danger', action.danger === true);
 		if (this.running.has(`${action.command}:${JSON.stringify(action.args ?? [])}`)) {
-			this.setBusy(button, true);
+			this.setBusy(button, action, true);
 		}
 		this.rowDisposables.add(button.onDidClick(() => void this.run(action, button)));
 		return button;

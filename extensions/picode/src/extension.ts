@@ -2297,10 +2297,6 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 			if (result.restart === true) {
 				engineRestarted = await restartMemory(line => report(`updates: ${line}`)) === 'restarted';
 			}
-			// The old engine keeps serving until it is restarted: do it now, so the update takes effect.
-			if (result.restart === true) {
-				engineRestarted = await restartMemory(line => report(`updates: ${line}`)) === 'restarted';
-			}
 		}
 		// The optimistic clear: the new version is on disk, the reload loads it, and the check
 		// that runs after the reload rebuilds the truth from scratch.
