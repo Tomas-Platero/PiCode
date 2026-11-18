@@ -20,7 +20,7 @@ import { defaultButtonStyles } from '../../../../platform/theme/browser/defaultS
 import { aiCustomizationManagementSectionRegistry, IAICustomizationManagementSectionContribution, IAICustomizationManagementSectionWidget } from '../../chat/browser/aiCustomization/aiCustomizationManagementSectionRegistry.js';
 import { AICustomizationManagementSection } from '../../chat/common/aiCustomizationWorkspaceService.js';
 import { createServiceLogo } from './picodeServiceLogo.js';
-import { addUsageAlert, getUsageAlerts, removeUsageAlert, toggleUsageAlert, USAGE_ALERTS_STORAGE_KEY } from './picodeUsageAlerts.js';
+import { addUsageAlert, getUsageAlerts, removeUsageAlert, splitUsageAlerts, toggleUsageAlert, USAGE_ALERTS_STORAGE_KEY } from './picodeUsageAlerts.js';
 import { alertsOf, parseAlertPercent } from './picodeUsageAlertsData.js';
 
 /**
@@ -64,8 +64,13 @@ type Tone = 'ok' | 'warn' | 'danger';
 interface IAlertSlot {
 	readonly provider: string;
 	readonly meter: string | undefined;
-	readonly element: HTMLElement;
-	readonly bars: readonly HTMLElement[];
+	/** The window's label, as the alerts store it. */
+	readonly window: string;
+	readonly windowName: string;
+	readonly bell: HTMLElement;
+	readonly bar: HTMLElement;
+	/** Where the window's alerts open, under its bar. */
+	readonly panel: HTMLElement;
 }
 
 /** One tap to add the alerts most people want. */
@@ -138,11 +143,11 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 	private readAt: number | undefined;
 	private layoutTimer: ReturnType<typeof setTimeout> | undefined;
 	private readonly interval: ReturnType<typeof setInterval>;
-	/** Each model's alerts block and bars, repainted on their own when the alerts change. */
+	/** Each window's bell, bar and alerts, repainted on their own when the alerts change. */
 	private readonly alertSlots = new Map<string, IAlertSlot>();
 	private readonly alertDisposables = this._register(new DisposableMap<string, DisposableStore>());
-	/** The model whose "add alert" row is open, with what is typed so far. */
-	private adding: { key: string; value: string; error?: string } | undefined;
+	/** The window whose alerts are open, with what is typed so far. */
+	private open: { key: string; value: string; error?: string; focus?: boolean } | undefined;
 
 	get element(): HTMLElement {
 		return this.root;
@@ -358,8 +363,9 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 	}
 
 	/**
-	 * A model's alerts, like alarms on a phone: as many as wanted, each switched on or off, or
-	 * removed, and each one marked on the bars so it is clear where it will go off.
+	 * One window's alerts, like alarms on a phone: as many as wanted, each switched on or off, or
+	 * removed. The bell beside the window says which are on, the marks on its bar say where they
+	 * go off, and the bell opens the list to change them. Only one window's list is open at a time.
 	 */
 	private paintAlerts(key: string): void {
 		const slot = this.alertSlots.get(key);
@@ -368,49 +374,55 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 		}
 		const store = new DisposableStore();
 		this.alertDisposables.set(key, store);
-		const alerts = alertsOf(getUsageAlerts(this.storageService), slot.provider, slot.meter);
+		const alerts = alertsOf(getUsageAlerts(this.storageService), slot.provider, slot.meter, slot.window);
+		const enabled = alerts.filter(alert => alert.enabled);
+		const open = this.open?.key === key ? this.open : undefined;
 		const onClick = (element: HTMLElement, run: () => void) => store.add(DOM.addDisposableListener(element, DOM.EventType.CLICK, (event: MouseEvent) => {
 			event.preventDefault();
 			run();
 		}));
 
-		// The marks on the bars: where each alert sits.
-		for (const bar of slot.bars) {
-			bar.querySelectorAll('.picode-limits-bar-mark').forEach(mark => mark.remove());
-			for (const alert of alerts) {
-				const mark = DOM.append(bar, $('span.picode-limits-bar-mark'));
-				mark.classList.toggle('off', !alert.enabled);
-				mark.style.left = `${alert.percent}%`;
-			}
+		// The marks on the bar: where each alert sits.
+		slot.bar.querySelectorAll('.picode-limits-bar-mark').forEach(mark => mark.remove());
+		for (const alert of alerts) {
+			const mark = DOM.append(slot.bar, $('span.picode-limits-bar-mark'));
+			mark.classList.toggle('off', !alert.enabled);
+			mark.style.left = `${alert.percent}%`;
 		}
 
-		const element = slot.element;
-		DOM.clearNode(element);
-		const head = DOM.append(element, $('.picode-limits-alerts-head'));
-		DOM.append(head, $('span.picode-limits-alerts-icon')).appendChild(renderIcon(Codicon.bell));
-		DOM.append(head, $('span.picode-limits-alerts-title')).textContent = localize('picodeUsageAlertsTitle', "Alerts");
-		if (alerts.length > 0) {
-			DOM.append(head, $('span.picode-limits-alerts-count')).textContent = String(alerts.filter(alert => alert.enabled).length);
+		// The bell: which alerts are on, and the way in.
+		const bell = slot.bell;
+		DOM.clearNode(bell);
+		bell.classList.toggle('set', enabled.length > 0);
+		bell.classList.toggle('open', open !== undefined);
+		bell.setAttribute('aria-expanded', String(open !== undefined));
+		bell.appendChild(renderIcon(enabled.length > 0 ? Codicon.bellDot : Codicon.bell));
+		if (enabled.length > 0) {
+			DOM.append(bell, $('span')).textContent = enabled.map(alert => `${alert.percent}%`).join(' · ');
 		}
-		DOM.append(head, $('span.grow'));
-		const adding = this.adding?.key === key ? this.adding : undefined;
-		if (alerts.length > 0 && adding === undefined) {
-			const add = DOM.append(head, $('button.picode-limits-alert-add', { type: 'button' }));
-			add.appendChild(renderIcon(Codicon.add));
-			DOM.append(add, $('span')).textContent = localize('picodeUsageAlertsAdd', "Add alert");
-			onClick(add, () => {
-				this.adding = { key, value: '' };
-				this.paintAllAlerts();
-			});
-		}
+		bell.title = alerts.length === 0
+			? localize('picodeUsageAlertsAddTitle', "Get an alert when this window reaches a percentage")
+			: localize('picodeUsageAlertsEditTitle', "Change the alerts of this window");
+		bell.setAttribute('aria-label', bell.title);
 
+		const panel = slot.panel;
+		DOM.clearNode(panel);
+		panel.classList.toggle('open', open !== undefined);
+		if (open === undefined) {
+			return;
+		}
+		const close = () => {
+			this.open = undefined;
+			this.paintAlerts(key);
+		};
+
+		DOM.append(panel, $('.picode-limits-alerts-lead')).textContent = localize('picodeUsageAlertsLead', "Notify me when this window reaches");
 		if (alerts.length > 0) {
-			const list = DOM.append(element, $('.picode-limits-alerts-list'));
+			const list = DOM.append(panel, $('.picode-limits-alerts-list'));
 			for (const alert of alerts) {
 				const chip = DOM.append(list, $('.picode-limits-alert'));
 				chip.classList.toggle('off', !alert.enabled);
 				const toggle = DOM.append(chip, $('button.picode-limits-alert-toggle', { type: 'button', role: 'switch', 'aria-checked': String(alert.enabled) }));
-				toggle.appendChild(renderIcon(alert.enabled ? Codicon.bell : Codicon.bellSlash));
 				DOM.append(toggle, $('span.picode-limits-alert-percent')).textContent = `${alert.percent}%`;
 				DOM.append(toggle, $('span.picode-limits-alert-switch'));
 				toggle.title = alert.enabled
@@ -426,21 +438,15 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 			}
 		}
 
-		// No alerts yet, or "Add alert" open: the usual percentages one tap away, and any other typed in.
-		if (alerts.length > 0 && adding === undefined) {
-			return;
-		}
-		const row = DOM.append(element, $('.picode-limits-alert-form'));
-		if (alerts.length === 0 && adding === undefined) {
-			DOM.append(row, $('span.picode-limits-alert-lead')).textContent = localize('picodeUsageAlertsNotifyAt', "Notify me at");
-		}
+		// The usual percentages one tap away, and any other typed in.
+		const row = DOM.append(panel, $('.picode-limits-alert-form'));
 		const tryAdd = (percent: number | undefined, value: string) => {
 			if (percent === undefined) {
-				this.adding = { key, value, error: localize('picodeUsageAlertsInvalid', "Type a whole number from 1 to 100.") };
-			} else if (!addUsageAlert(this.storageService, slot.provider, slot.meter, percent)) {
-				this.adding = { key, value, error: localize('picodeUsageAlertsDuplicate', "There is already an alert at {0}%.", percent) };
+				this.open = { key, value, error: localize('picodeUsageAlertsInvalid', "Type a whole number from 1 to 100.") };
+			} else if (!addUsageAlert(this.storageService, slot.provider, slot.meter, slot.window, percent)) {
+				this.open = { key, value, error: localize('picodeUsageAlertsDuplicate', "There is already an alert at {0}%.", percent) };
 			} else {
-				this.adding = undefined;
+				this.open = { key, value: '' };
 			}
 			this.paintAlerts(key);
 		};
@@ -453,28 +459,21 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 		}
 		const field = DOM.append(row, $('.picode-limits-alert-field'));
 		const input = DOM.append(field, $<HTMLInputElement>('input', { type: 'number', min: '1', max: '100', step: '1', placeholder: localize('picodeUsageAlertsOther', "Other") }));
-		input.value = adding?.value ?? '';
+		input.value = open.value;
 		input.setAttribute('aria-label', localize('picodeUsageAlertsPercent', "Percentage used"));
 		DOM.append(field, $('span')).textContent = '%';
 		const save = DOM.append(row, $('button.picode-limits-alert-save', { type: 'button' }));
 		save.textContent = localize('picodeUsageAlertsSave', "Add");
 		onClick(save, () => tryAdd(parseAlertPercent(input.value), input.value));
-		const close = () => {
-			this.adding = undefined;
-			this.paintAlerts(key);
-		};
-		if (adding !== undefined && alerts.length > 0) {
-			const cancel = DOM.append(row, $('button.picode-limits-alert-cancel', { type: 'button' }));
-			cancel.appendChild(renderIcon(Codicon.close));
-			cancel.title = localize('picodeUsageAlertsCancel', "Cancel");
-			cancel.setAttribute('aria-label', cancel.title);
-			onClick(cancel, close);
-		}
-		if (adding?.error !== undefined) {
-			DOM.append(element, $('.picode-limits-alert-error')).textContent = adding.error;
+		DOM.append(row, $('span.grow'));
+		const done = DOM.append(row, $('button.picode-limits-alert-done', { type: 'button' }));
+		done.textContent = localize('picodeUsageAlertsDone', "Done");
+		onClick(done, close);
+		if (open.error !== undefined) {
+			DOM.append(panel, $('.picode-limits-alert-error')).textContent = open.error;
 		}
 		store.add(DOM.addDisposableListener(input, DOM.EventType.INPUT, () => {
-			this.adding = { key, value: input.value };
+			this.open = { key, value: input.value };
 		}));
 		store.add(DOM.addDisposableListener(input, DOM.EventType.KEY_DOWN, (event: KeyboardEvent) => {
 			if (event.key === 'Enter') {
@@ -486,7 +485,8 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 				close();
 			}
 		}));
-		if (adding !== undefined) {
+		if (open.focus === true) {
+			this.open = { key, value: open.value };
 			input.focus();
 		}
 	}
@@ -510,7 +510,10 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 			DOM.append(head, $('span.picode-limits-badge.danger')).textContent = localize('picodeUsageLimitsReached', "Limit reached");
 		}
 
-		const bars: HTMLElement[] = [];
+		// Alerts saved for the whole model become one per window, so each window shows its own.
+		if (meter.provider !== undefined) {
+			splitUsageAlerts(this.storageService, meter.provider, meter.meter, meter.windows.map(window => window.label));
+		}
 		for (const window of meter.windows) {
 			const percent = clampPercent(window.usedPercent);
 			const windowTone = toneOf(percent, meter.limitReached === true && percent >= 100);
@@ -520,6 +523,7 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 			const label = DOM.append(top, $('span.picode-limits-window-label'));
 			label.appendChild(renderIcon(window.label.startsWith('billing') ? Codicon.calendar : Codicon.clock));
 			DOM.append(label, $('span')).textContent = windowName(window.label);
+			const bell = meter.provider === undefined ? undefined : DOM.append(top, $('button.picode-limits-window-bell', { type: 'button' }));
 			const value = DOM.append(top, $('span.picode-limits-window-value'));
 			DOM.append(value, $('strong')).textContent = `${percent}%`;
 			DOM.append(value, $('span')).textContent = localize('picodeUsageLimitsUsed', "used");
@@ -531,7 +535,6 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 			bar.setAttribute('aria-valuenow', String(percent));
 			bar.setAttribute('aria-label', `${name.textContent} · ${windowName(window.label)}`);
 			DOM.append(bar, $('.picode-limits-bar-fill')).style.width = `${percent}%`;
-			bars.push(bar);
 
 			const foot = DOM.append(row, $('.picode-limits-window-foot'));
 			const left = DOM.append(foot, $('span'));
@@ -546,12 +549,18 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 				reset.textContent = localize('picodeUsageLimitsResetsIn', "Resets in {0}", formatResetIn(window.resetAt));
 				reset.title = new Date(window.resetAt).toLocaleString();
 			}
-		}
 
-		if (meter.provider !== undefined) {
-			const key = `${meter.provider}\u0000${meter.meter ?? ''}`;
-			this.alertSlots.set(key, { provider: meter.provider, meter: meter.meter, element: DOM.append(tile, $('.picode-limits-alerts')), bars });
-			this.paintAlerts(key);
+			if (meter.provider !== undefined && bell !== undefined) {
+				const key = `${meter.provider}\u0000${meter.meter ?? ''}\u0000${window.label}`;
+				const panel = DOM.append(row, $('.picode-limits-alerts'));
+				this.alertSlots.set(key, { provider: meter.provider, meter: meter.meter, window: window.label, windowName: windowName(window.label), bell, bar, panel });
+				this.renderDisposables.add(DOM.addDisposableListener(bell, DOM.EventType.CLICK, (event: MouseEvent) => {
+					event.preventDefault();
+					this.open = this.open?.key === key ? undefined : { key, value: '', focus: true };
+					this.paintAllAlerts();
+				}));
+				this.paintAlerts(key);
+			}
 		}
 	}
 }
