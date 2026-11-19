@@ -108,7 +108,7 @@
 	providerWait: 'Nothing saved until you press Connect.',
 	providerConnectedDone: '{0} is connected: {1} models are ready.',
 	layoutTitle: 'How you work',
-	layoutLead: 'Two ways to arrange PiCode. Pick the one that suits you; you can change it any time with the robot button at the top right.',
+	layoutLead: "Two ways to arrange PiCode. Pick the one that suits you; you can change it any time with the Agent / Editor switch at the top right.",
 	layoutAgent: 'Agent',
 	layoutAgentNote: 'Tell pi what you want and watch it work',
 	layoutAgentPoints: ['The chat is front and centre', 'Your past conversations are always at hand', 'A side panel shows what changed and what is running'],
