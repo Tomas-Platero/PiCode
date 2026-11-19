@@ -25,7 +25,7 @@ const CHATS_SETTING = 'picode.sync.chats';
 
 /** What the user can switch on or off, in the order they read it, said in plain words. */
 const CATEGORIES: readonly { readonly resource: SyncResource; readonly label: string; readonly description: string }[] = [
-	{ resource: SyncResource.PiProfile, label: localize('picodeSyncAgents', "Agents and skills"), description: localize('picodeSyncAgentsDescription', "Your agents, subagents and skills.") },
+	{ resource: SyncResource.PiProfile, label: localize('picodeSyncAgents', "Agents and skills"), description: localize('picodeSyncAgentsDescription', "Your agents, subagents, skills and agent profiles.") },
 	{ resource: SyncResource.Settings, label: localize('picodeSyncSettings', "Settings"), description: localize('picodeSyncSettingsDescription', "Your editor preferences.") },
 	{ resource: SyncResource.Keybindings, label: localize('picodeSyncShortcuts', "Keyboard shortcuts"), description: localize('picodeSyncShortcutsDescription', "The keys you changed.") },
 	{ resource: SyncResource.Snippets, label: localize('picodeSyncSnippets', "Snippets"), description: localize('picodeSyncSnippetsDescription', "Text you insert with a short word.") },

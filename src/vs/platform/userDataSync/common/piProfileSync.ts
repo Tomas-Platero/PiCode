@@ -53,7 +53,11 @@ const PI_PROFILE_DATA_VERSION = 1;
 const PI_PROFILE_DISTRIBUTION_SUBPATH = ['data', 'pi-agent'];
 const PI_PROFILE_SYNCED_FOLDERS = ['agents', 'subagents', 'skills', 'memory', 'chains', 'specpi'];
 // Root-level config files of the pi profile, synced alongside the folders.
-const PI_PROFILE_ROOT_FILES = ['settings.json', 'models.json', 'subagents.json', 'trust.json', 'mcp-adapter.json'];
+// Gentle AI's choices travel too: its agent profiles, their backup models, the agents' models, how
+// it talks and how new chats start. Only these files: the rest of `gentle-ai/` is Gentle's own
+// bookkeeping for this machine (managed assets, scratch space).
+const GENTLE_SYNCED_FILES = ['profiles.json', 'profile-fallbacks.json', 'models.json', 'persona.json', 'permission-mode.json'].map(name => `gentle-ai/${name}`);
+const PI_PROFILE_ROOT_FILES = ['settings.json', 'models.json', 'subagents.json', 'trust.json', 'mcp-adapter.json', ...GENTLE_SYNCED_FILES];
 // Credentials are machine/session-bound (OAuth token rotation breaks across
 // machines) and never leave the device.
 const EXCLUDED_FILES = new Set(['auth.json', 'auth.json.bak-omniroute-only', 'crashes.json', 'models.json.bak-before-nan', 'models.json.bak-omniroute-only']);
@@ -115,7 +119,7 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 		super({ syncResource: SyncResource.PiProfile, profile }, collection, fileService, environmentService, storageService, userDataSyncStoreService, userDataSyncLocalStoreService, userDataSyncEnablementService, telemetryService, logService, configurationService, uriIdentityService);
 		this.piProfileFolder = URI.file(resolvePiProfileFolder(environmentService));
 		this.logService.info(`${this.syncResourceLogLabel}: Using pi profile at ${this.piProfileFolder.fsPath}`);
-		for (const folder of PI_PROFILE_SYNCED_FOLDERS) {
+		for (const folder of [...PI_PROFILE_SYNCED_FOLDERS, 'gentle-ai']) {
 			this._register(this.fileService.watch(this.extUri.joinPath(this.piProfileFolder, folder)));
 		}
 		this._register(Event.filter(this.fileService.onDidFilesChange, e => e.affects(this.piProfileFolder))(() => this.triggerLocalChange()));
