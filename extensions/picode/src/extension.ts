@@ -61,6 +61,7 @@ import { explainTaskFailure } from './subagent-failure';
 import { applyIntercomBroker } from './intercom-config';
 import { traceChildPi } from './child-trace';
 import { distributionRootOf } from './distribution-root';
+import { userDataPathOf } from './user-data-path';
 import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
@@ -2701,10 +2702,9 @@ const setupDeps = {
 		voice: () => voice.status(),
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
-		// `<userData>/User/globalStorage/<extension>` → three levels up. The account hand-over is
-		// written straight into that `User/settings.json`, because its keys are hidden from Settings
-		// and the configuration service therefore refuses to write them.
-		userDataPath: path.dirname(path.dirname(path.dirname(context.globalStorageUri.fsPath))),
+		// The account hand-over is written straight into `<userData>/User/settings.json`, because its
+		// keys are hidden from Settings and the configuration service therefore refuses to write them.
+		userDataPath: userDataPathOf(context.globalStorageUri.fsPath),
 		globalState: context.globalState,
 		// The Tasks block lists the background jobs the chat itself launched, from the same tracker the
 		// pill above the chat input reads — one holder of the truth, two surfaces.
