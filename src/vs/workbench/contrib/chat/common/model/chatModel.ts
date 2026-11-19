@@ -1479,7 +1479,11 @@ export class ChatResponseModel extends Disposable implements IChatResponseModel 
 				// because an old transcript contains a lingering confirmation/tool gate.
 				const current = this._modelState.read(reader).value;
 				if (current === ResponseModelState.Pending || current === ResponseModelState.NeedsInput) {
-					this._modelState.set({ value: ResponseModelState.NeedsInput }, undefined);
+					// Write only on a real transition: the state is compared by identity, so
+					// re-setting NeedsInput here would re-trigger this derived forever.
+					if (current === ResponseModelState.Pending) {
+						this._modelState.set({ value: ResponseModelState.NeedsInput }, undefined);
+					}
 					if (!lastStartedWaitingAt) {
 						lastStartedWaitingAt = pending.startedWaitingAt;
 					}
