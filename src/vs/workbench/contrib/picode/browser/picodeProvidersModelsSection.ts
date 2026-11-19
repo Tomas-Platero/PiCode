@@ -17,7 +17,7 @@ import { defaultButtonStyles, defaultInputBoxStyles } from '../../../../platform
 import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
 import { IContextMenuService, IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
-import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
+import { IQuickInputButton, IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../platform/quickinput/common/quickInput.js';
 import { Action, IAction, Separator } from '../../../../base/common/actions.js';
 import {
 	aiCustomizationManagementSectionRegistry,
@@ -120,8 +120,19 @@ interface IAgentProfile {
 	readonly name: string;
 	readonly routes: Readonly<Record<string, IProfileRoute>>;
 	readonly mode: 'organic' | 'full-delegation';
-	readonly fallbacks: number;
+	/** Backup models by agent (`*` for every agent without its own), in the order they are tried. */
+	readonly fallbacks: Readonly<Record<string, readonly IFallbackStep[]>>;
 }
+
+/** One backup model: what an agent moves to when its model runs out or fails. */
+interface IFallbackStep {
+	readonly model: string;
+	readonly thinking?: string;
+}
+
+/** Gentle's key for the backups of every agent without its own, and its longest list. */
+const EVERY_AGENT = '*';
+const MAX_FALLBACKS = 8;
 
 /** What the connector says about the agent profiles (`picode.agentProfiles.state`). */
 interface IAgentProfilesView {
@@ -1227,6 +1238,27 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			return select;
 		};
 
+		// The button on a row that opens its backup models: a count when it has some.
+		const backupsButton = (container: HTMLElement, agent: string, who: string) => {
+			const chain = profile.fallbacks[agent] ?? [];
+			const button = append(container, $('button.picode-ap-backups'));
+			button.setAttribute('type', 'button');
+			append(button, $('span' + ThemeIcon.asCSSSelector(Codicon.arrowSwap)));
+			if (chain.length > 0) {
+				append(button, $('span')).textContent = String(chain.length);
+				button.classList.add('has');
+			}
+			button.title = chain.length > 0
+				? localize('picodePm.backupsSome', "Backup models for {0}: {1}", who, chain.map(step => catalogue.get(step.model)?.name ?? step.model).join(' → '))
+				: localize('picodePm.backupsNone', "Add backup models for {0}", who);
+			button.setAttribute('aria-label', button.title);
+			this.store.add(addDisposableListener(button, 'click', () => void this.editBackups(profile.name, agent, who, catalogue)));
+		};
+
+		const everyone = append(detail, $('.picode-ap-every'));
+		append(everyone, $('span')).textContent = localize('picodePm.backupsEvery', "Backups for every agent without its own");
+		backupsButton(everyone, EVERY_AGENT, localize('picodePm.everyAgent', "every agent"));
+
 		const list = append(detail, $('.picode-pm-models'));
 		for (const agent of view.agents) {
 			const route = profile.routes[agent] ?? {};
@@ -1245,6 +1277,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			append(fastLabel, $('span')).textContent = localize('picodePm.fast', "Fast");
 			fastLabel.title = localize('picodePm.fastTip', "Fast mode, where the model offers it. It uses more of your plan.");
 			line.append(model, thinking, fastLabel);
+			backupsButton(line, agent, main ? localize('picodePm.mainAgent', "Main agent") : agent);
 			const save = () => {
 				void this.editProfiles({ type: 'route', name: profile.name, agent, model: model.value, thinking: thinking.value, ...(fast.checked ? { tier: 'fast' } : {}) }, this.savedNote(view, profile));
 			};
@@ -1252,9 +1285,71 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			this.store.add(addDisposableListener(thinking, 'change', save));
 			this.store.add(addDisposableListener(fast, 'change', save));
 		}
-		if (profile.fallbacks > 0) {
-			append(detail, $('p.picode-pm-hint')).textContent = localize('picodePm.fallbacks', "Backup models in this profile: {0}. When a model runs out or fails, the agent moves to the next one.", profile.fallbacks);
-		}
+	}
+
+	/**
+	 * The backup models of one agent, in the order they are tried: each can move up or go, and
+	 * "Add a backup model" appends one from the models the editor can reach.
+	 */
+	private async editBackups(profileName: string, agent: string, who: string, catalogue: ReadonlyMap<string, { name: string; provider: string }>): Promise<void> {
+		type Item = IQuickPickItem & { readonly index?: number; readonly add?: true };
+		const chainNow = (): readonly IFallbackStep[] => this.profilesView?.profiles.find(profile => profile.name === profileName)?.fallbacks[agent] ?? [];
+		const save = (chain: readonly IFallbackStep[]) => this.editProfiles({ type: 'fallbacks', name: profileName, agent, chain }, localize('picodePm.backupsSaved', "Saved. When a model runs out or fails, the agent moves to the next one."));
+		const up: IQuickInputButton = { iconClass: ThemeIcon.asClassName(Codicon.arrowUp), tooltip: localize('picodePm.backupUp', "Try earlier") };
+		const remove: IQuickInputButton = { iconClass: ThemeIcon.asClassName(Codicon.close), tooltip: localize('picodePm.backupRemove', "Remove") };
+		const picker = this.quickInputService.createQuickPick<Item>({ useSeparators: true });
+		picker.title = localize('picodePm.backupsTitle', "Backup models for {0}", who);
+		picker.placeholder = localize('picodePm.backupsHint', "When a model runs out or fails, the agent moves to the next one, top first.");
+		const fill = () => {
+			const chain = chainNow();
+			const items: Array<Item | IQuickPickSeparator> = chain.map((step, index) => ({
+				label: `${index + 1}. ${catalogue.get(step.model)?.name ?? step.model}`,
+				description: step.thinking === undefined ? step.model : `${step.model} · ${step.thinking}`,
+				buttons: index === 0 ? [remove] : [up, remove],
+				index,
+			}));
+			if (chain.length < MAX_FALLBACKS) {
+				if (items.length > 0) {
+					items.push({ type: 'separator' });
+				}
+				items.push({ label: `$(add) ${localize('picodePm.backupAdd', "Add a backup model...")}`, add: true });
+			}
+			picker.items = items;
+		};
+		fill();
+		const store = new DisposableStore();
+		store.add(picker.onDidTriggerItemButton(async ({ item, button }) => {
+			const chain = [...chainNow()];
+			const index = item.index;
+			if (index === undefined) {
+				return;
+			}
+			if (button === remove) {
+				chain.splice(index, 1);
+			} else if (index > 0) {
+				[chain[index - 1], chain[index]] = [chain[index], chain[index - 1]];
+			}
+			await save(chain);
+			fill();
+		}));
+		store.add(picker.onDidAccept(async () => {
+			if (picker.selectedItems[0]?.add !== true) {
+				return;
+			}
+			const chain = chainNow();
+			const taken = new Set(chain.map(step => step.model));
+			picker.hide();
+			const chosen = await this.quickInputService.pick(
+				[...catalogue].filter(([ref]) => !taken.has(ref)).sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([ref, { name, provider }]) => ({ label: name, description: `${provider} · ${ref}`, ref })),
+				{ title: picker.title, placeHolder: localize('picodePm.backupPick', "Model to try next"), matchOnDescription: true },
+			);
+			if (chosen !== undefined) {
+				await save([...chain, { model: chosen.ref }]);
+			}
+			void this.editBackups(profileName, agent, who, catalogue);
+		}));
+		store.add(picker.onDidHide(() => { store.dispose(); picker.dispose(); }));
+		picker.show();
 	}
 
 	/** What a saved change says: the default reaches the chat at once, any other profile when it is used. */

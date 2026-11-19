@@ -1276,3 +1276,37 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 	color: var(--vscode-descriptionForeground);
 	cursor: pointer;
 }
+
+/* The backups button at the end of an agent's row: an icon, and the count when it has some. */
+.picode-ap-backups {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex-shrink: 0;
+	padding: 2px 6px;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	cursor: pointer;
+}
+
+.picode-ap-backups:hover {
+	color: var(--vscode-foreground);
+	border-color: var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+}
+
+.picode-ap-backups.has {
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-ap-every {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 4px 10px;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+}

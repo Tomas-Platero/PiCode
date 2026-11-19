@@ -60,7 +60,7 @@ test('the saved profiles are read in Gentle\'s shape: routes, fast tier, way of 
 	const state = agentProfilesState(profileDir, repo);
 	assert.equal(state.unsaved, false);
 	assert.equal(state.active, 'work');
-	assert.deepEqual(state.profiles.map(profile => [profile.name, profile.mode, profile.fallbacks]), [['cheap', 'full-delegation', 0], ['work', 'organic', 2]]);
+	assert.deepEqual(state.profiles.map(profile => [profile.name, profile.mode, profile.fallbacks]), [['cheap', 'full-delegation', {}], ['work', 'organic', { writer: [{ model: 'a/b' }, { model: 'c/d' }] }]]);
 	assert.deepEqual(state.profiles[1].routes['writer'], { model: 'openai/gpt-5', tier: 'fast' });
 });
 
@@ -112,7 +112,7 @@ test('renaming carries the default, the way of working, the backups and the pins
 	editAgentProfiles(profileDir, repo, { type: 'pin', source: 'local', name: 'work' });
 	const state = editAgentProfiles(profileDir, repo, { type: 'rename', name: 'work', to: 'job' });
 	assert.equal(state.active, 'job');
-	assert.deepEqual(state.profiles.map(profile => [profile.name, profile.mode, profile.fallbacks]), [['job', 'full-delegation', 1]]);
+	assert.deepEqual(state.profiles.map(profile => [profile.name, profile.mode, profile.fallbacks]), [['job', 'full-delegation', { writer: [{ model: 'c/d' }] }]]);
 	assert.equal(state.pins.local, 'job');
 });
 
@@ -166,4 +166,45 @@ test('outside a repository nothing can be pinned', () => {
 	writeProfiles({ kind: 'gentle-pi.agent_model_profiles', version: 1, active: 'work', profiles: { work: {} } });
 	assert.equal(agentProfilesState(profileDir, plain).pinnable, false);
 	assert.throws(() => editAgentProfiles(profileDir, plain, { type: 'pin', source: 'local', name: 'work' }), /Git repository/);
+});
+
+function readFallbacksFile(): Record<string, unknown> {
+	return JSON.parse(fs.readFileSync(path.join(profileDir, 'gentle-ai', 'profile-fallbacks.json'), 'utf8'));
+}
+
+test("backup models are saved in Gentle's own file and shape, in order, and an empty list removes them", () => {
+	writeProfiles({ kind: 'gentle-pi.agent_model_profiles', version: 1, active: 'work', profiles: { work: {} } });
+	const state = editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: 'writer', chain: [{ model: 'anthropic/opus', thinking: 'high' }, { model: 'zai/glm' }] });
+	assert.deepEqual(state.profiles[0].fallbacks, { writer: [{ model: 'anthropic/opus', thinking: 'high' }, { model: 'zai/glm' }] });
+	assert.deepEqual(readFallbacksFile(), { kind: 'gentle-pi.profile_model_fallbacks', version: 1, profiles: { work: { writer: [{ model: 'anthropic/opus', thinking: 'high' }, { model: 'zai/glm' }] } } });
+	editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: '*', chain: [{ model: 'a/b' }] });
+	assert.deepEqual(agentProfilesState(profileDir, repo).profiles[0].fallbacks['*'], [{ model: 'a/b' }]);
+	editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: 'writer', chain: [] });
+	editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: '*', chain: [] });
+	assert.deepEqual(readFallbacksFile(), { kind: 'gentle-pi.profile_model_fallbacks', version: 1, profiles: {} });
+});
+
+test("a backup chain follows Gentle's rules: real models, no repeats, at most eight", () => {
+	writeProfiles({ kind: 'gentle-pi.agent_model_profiles', version: 1, active: 'work', profiles: { work: {} } });
+	assert.throws(() => editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: 'writer', chain: [{ model: 'no slash' }] }), ProfileEditError);
+	assert.throws(() => editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: 'writer', chain: [{ model: 'a/b' }, { model: 'a/b' }] }), /already a backup/);
+	assert.throws(() => editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: 'writer', chain: Array.from({ length: 9 }, (_, i) => ({ model: `p/m${i}` })) }), /up to 8/);
+	assert.throws(() => editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'nope', agent: 'writer', chain: [] }), ProfileEditError);
+	assert.equal(fs.existsSync(path.join(profileDir, 'gentle-ai', 'profile-fallbacks.json')), false, 'a refused chain writes nothing');
+});
+
+test('a copy brings its backups, and deleting a profile takes its backups with it', () => {
+	writeProfiles({ kind: 'gentle-pi.agent_model_profiles', version: 1, active: 'work', profiles: { work: {} } });
+	editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: 'writer', chain: [{ model: 'a/b' }] });
+	editAgentProfiles(profileDir, repo, { type: 'create', name: 'copy', from: 'work' });
+	assert.deepEqual(agentProfilesState(profileDir, repo).profiles.find(profile => profile.name === 'copy')?.fallbacks, { writer: [{ model: 'a/b' }] });
+	editAgentProfiles(profileDir, repo, { type: 'delete', name: 'copy' });
+	assert.deepEqual(Object.keys((readFallbacksFile()['profiles'] as Record<string, unknown>)), ['work']);
+});
+
+test('a backups file the editor cannot read is never overwritten', () => {
+	writeProfiles({ kind: 'gentle-pi.agent_model_profiles', version: 1, active: 'work', profiles: { work: {} } });
+	fs.writeFileSync(path.join(profileDir, 'gentle-ai', 'profile-fallbacks.json'), '{ broken');
+	assert.throws(() => editAgentProfiles(profileDir, repo, { type: 'fallbacks', name: 'work', agent: 'writer', chain: [{ model: 'a/b' }] }), ProfileEditError);
+	assert.equal(fs.readFileSync(path.join(profileDir, 'gentle-ai', 'profile-fallbacks.json'), 'utf8'), '{ broken');
 });

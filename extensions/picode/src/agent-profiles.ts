@@ -53,9 +53,20 @@ export interface AgentProfile {
 	/** Agent → route, with `orchestrator` for the main agent. */
 	readonly routes: Readonly<Record<string, ProfileRoute>>;
 	readonly mode: OrchestratorMode;
-	/** How many backup models the profile lists, over all its agents. */
-	readonly fallbacks: number;
+	/** The backup models, by agent (`*` for every agent without its own), in the order they are tried. */
+	readonly fallbacks: Readonly<Record<string, readonly FallbackStep[]>>;
 }
+
+/** One backup model: what an agent moves to when its model runs out or fails. */
+export interface FallbackStep {
+	readonly model: string;
+	readonly thinking?: ThinkingLevel;
+}
+
+/** Gentle's key for the chain of every agent that has none of its own. */
+export const EVERY_AGENT = '*';
+/** Gentle's longest chain. */
+export const MAX_FALLBACKS = 8;
 
 export interface AgentProfilesState {
 	readonly profiles: readonly AgentProfile[];
@@ -159,22 +170,61 @@ function modeOf(raw: Json, name: string): OrchestratorMode {
 	return isRecord(entry) && entry['orchestratorMode'] === 'full-delegation' ? 'full-delegation' : 'organic';
 }
 
-function fallbackCounts(profileDir: string): Map<string, number> {
-	const counts = new Map<string, number>();
+function chainOf(value: unknown): FallbackStep[] {
+	const steps: FallbackStep[] = [];
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			const model = isRecord(entry) ? modelRefOf(entry['model']) : undefined;
+			if (model !== undefined) {
+				steps.push(isRecord(entry) && isThinkingLevel(entry['thinking']) ? { model, thinking: entry['thinking'] } : { model });
+			}
+		}
+	}
+	return steps;
+}
+
+/** The backup chains of every profile, as Gentle keeps them. */
+function readFallbacks(profileDir: string): Map<string, Record<string, FallbackStep[]>> {
+	const chains = new Map<string, Record<string, FallbackStep[]>>();
 	const read = readJson(fallbacksFile(profileDir));
 	const profiles = read.status === 'ok' ? read.raw['profiles'] : undefined;
 	if (isRecord(profiles)) {
-		for (const [name, chains] of Object.entries(profiles)) {
-			let count = 0;
-			if (isRecord(chains)) {
-				for (const chain of Object.values(chains)) {
-					count += Array.isArray(chain) ? chain.length : 0;
+		for (const [name, byAgent] of Object.entries(profiles)) {
+			const record: Record<string, FallbackStep[]> = {};
+			if (isRecord(byAgent)) {
+				for (const [agent, chain] of Object.entries(byAgent)) {
+					const steps = chainOf(chain);
+					if (steps.length > 0) {
+						record[agent] = steps;
+					}
 				}
 			}
-			counts.set(name, count);
+			chains.set(name, record);
 		}
 	}
-	return counts;
+	return chains;
+}
+
+/**
+ * Rewrites Gentle's fallbacks file with `change` applied to its profiles map. Gentle refuses the
+ * whole file over one unknown key, so only its own three keys are written.
+ */
+function editFallbacks(profileDir: string, change: (profiles: Record<string, Record<string, FallbackStep[]>>) => void): void {
+	const read = readJson(fallbacksFile(profileDir));
+	if (read.status === 'invalid' || (read.status === 'ok' && read.raw['kind'] !== FALLBACKS_KIND)) {
+		throw new ProfileEditError(l10n.t('The backup models could not be read. Fix or delete their file, then try again.'));
+	}
+	const profiles: Record<string, Record<string, FallbackStep[]>> = Object.fromEntries(readFallbacks(profileDir));
+	change(profiles);
+	for (const [name, byAgent] of Object.entries(profiles)) {
+		if (Object.keys(byAgent).length === 0) {
+			delete profiles[name];
+		}
+	}
+	if (read.status === 'missing' && Object.keys(profiles).length === 0) {
+		return;
+	}
+	writeJson(fallbacksFile(profileDir), { kind: FALLBACKS_KIND, version: 1, profiles });
 }
 
 /* ------------------------------------------------------------------ pins */
@@ -250,7 +300,7 @@ export function agentProfilesState(profileDir: string, cwd?: string): AgentProfi
 		const models = readAgentModels(profileDir);
 		const routes = models.status === 'ok' ? routesOf(models.models) : {};
 		return {
-			profiles: [{ name: CURRENT_PROFILE, routes, mode: 'organic', fallbacks: 0 }],
+			profiles: [{ name: CURRENT_PROFILE, routes, mode: 'organic', fallbacks: {} }],
 			active: CURRENT_PROFILE,
 			unsaved: true,
 			invalid: false,
@@ -259,12 +309,12 @@ export function agentProfilesState(profileDir: string, cwd?: string): AgentProfi
 		};
 	}
 	const raw = read.raw;
-	const counts = fallbackCounts(profileDir);
+	const chains = readFallbacks(profileDir);
 	const stored = isRecord(raw['profiles']) ? raw['profiles'] : {};
 	const profiles = Object.keys(stored)
 		.filter(isProfileName)
 		.sort((a, b) => a.localeCompare(b))
-		.map(name => ({ name, routes: routesOf(stored[name]), mode: modeOf(raw, name), fallbacks: counts.get(name) ?? 0 }));
+		.map(name => ({ name, routes: routesOf(stored[name]), mode: modeOf(raw, name), fallbacks: chains.get(name) ?? {} }));
 	const active = typeof raw['active'] === 'string' && profiles.some(profile => profile.name === raw['active']) ? raw['active'] as string : undefined;
 	return { profiles, ...(active === undefined ? {} : { active }), unsaved: false, invalid: false, pins, pinnable: repository !== undefined };
 }
@@ -279,6 +329,8 @@ export type ProfileEdit =
 	| { readonly type: 'route'; readonly name: string; readonly agent: string; readonly model?: string; readonly thinking?: string; readonly tier?: string }
 	| { readonly type: 'mode'; readonly name: string; readonly mode: string }
 	| { readonly type: 'pin'; readonly source: PinSource; readonly name?: string }
+	/** The backup models of one agent (or `*`, every agent), in order; an empty list removes them. */
+	| { readonly type: 'fallbacks'; readonly name: string; readonly agent: string; readonly chain: readonly { readonly model?: unknown; readonly thinking?: unknown }[] }
 	/** Only the default marker, for when no chat runs to let Gentle apply it (Gentle writes it too). */
 	| { readonly type: 'active'; readonly name: string };
 
@@ -383,6 +435,15 @@ export function editAgentProfiles(profileDir: string, cwd: string | undefined, e
 			}
 			const source = edit.from === undefined ? undefined : requireProfile(profiles, edit.from);
 			profiles[name] = source ?? {};
+			if (edit.from !== undefined) {
+				const from = edit.from;
+				// A copy brings its backups along.
+				editFallbacks(profileDir, chains => {
+					if (chains[from] !== undefined) {
+						chains[name] = structuredClone(chains[from]);
+					}
+				});
+			}
 			if (edit.from !== undefined && modeOf(file, edit.from) === 'full-delegation') {
 				file['workflow'] = { ...(isRecord(file['workflow']) ? file['workflow'] : {}), [name]: { orchestratorMode: 'full-delegation' } };
 			}
@@ -413,6 +474,8 @@ export function editAgentProfiles(profileDir: string, cwd: string | undefined, e
 			}
 			delete profiles[edit.name];
 			file['workflow'] = dropKey(file['workflow'], edit.name);
+			const gone = edit.name;
+			editFallbacks(profileDir, chains => { delete chains[gone]; });
 			break;
 		}
 		case 'route': {
@@ -453,6 +516,37 @@ export function editAgentProfiles(profileDir: string, cwd: string | undefined, e
 				throw new ProfileEditError(l10n.t('That is not a way of working.'));
 			}
 			file['workflow'] = workflow;
+			break;
+		}
+		case 'fallbacks': {
+			requireProfile(profiles, edit.name);
+			if (edit.agent !== EVERY_AGENT && !SAFE_AGENT.test(edit.agent)) {
+				throw new ProfileEditError(l10n.t('That is not an agent name.'));
+			}
+			if (!Array.isArray(edit.chain) || edit.chain.length > MAX_FALLBACKS) {
+				throw new ProfileEditError(l10n.t('A profile can list up to {0} backup models per agent.', MAX_FALLBACKS));
+			}
+			const steps: FallbackStep[] = [];
+			for (const entry of edit.chain) {
+				const model = modelRefOf(entry?.model);
+				if (model === undefined) {
+					throw new ProfileEditError(l10n.t('Write the model as provider/model, without spaces.'));
+				}
+				if (steps.some(step => step.model === model)) {
+					throw new ProfileEditError(l10n.t('{0} is already a backup for this agent.', model));
+				}
+				steps.push(isThinkingLevel(entry?.thinking) ? { model, thinking: entry.thinking } : { model });
+			}
+			const { name, agent } = edit;
+			editFallbacks(profileDir, chains => {
+				const byAgent = { ...(chains[name] ?? {}) };
+				if (steps.length === 0) {
+					delete byAgent[agent];
+				} else {
+					byAgent[agent] = steps;
+				}
+				chains[name] = byAgent;
+			});
 			break;
 		}
 		case 'active': {
