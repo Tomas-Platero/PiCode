@@ -794,6 +794,7 @@
 	"picodeWhatsNew.fix.jira": "**连接 Jira 不再依赖你的浏览器。** 有些浏览器在你于 Atlassian 页面同意后，再也不会重新打开 PiCode。现在 PiCode 页面会显示连接到哪个账户，你在那里确认，编辑器会自动发现。",
 	"picodeWhatsNew.fix.language": "**“新功能”现在使用你的语言。** 修复列表已翻译，窗口会同时保留这个版本系列的新功能和此后的所有修复。",
 	"picodeWhatsNew.fix.lostFolder": "**文件夹已不存在的对话现在会先询问。** 打开时可以在当前打开的文件夹中继续，或把对话复制到该文件夹，而不是悄悄继续。",
+	"picodeWhatsNew.fix.questionFreeze": "**pi 向你提问时，聊天不再卡住。** pi 回答期间收到的问题或确认，可能在问题显示之前就让整个窗口卡住。现在问题会正常显示并等待你的回答。",
 	"picodeWhatsNew.fix.statusTidy": "**状态页更整齐了。** 卡片按行排列，不再出现空的“更新”卡片，所有颜色都跟随你的主题。",
 	"picodeWhatsNew.fix.stillIcons": "**新增功能里的图标不再转动。** 演示中选中的步骤图标会一直转；现在只有进度指示器会转。",
 	"picodeWhatsNew.fix.updateAccess": "**更新不再卡在“访问被拒绝”。** PiCode 自带的内存引擎会在更新替换其文件夹之前关闭。",
