@@ -48,6 +48,8 @@ interface LiveSession {
 	readonly pi: ProfilesPi;
 	readonly context: object;
 	used: number;
+	/** The profile this editor last moved the chat to, when it did. */
+	profile?: string;
 }
 
 /** Every chat's live session, by the chat's key. */
@@ -96,6 +98,11 @@ export function agentProfilesExtension(chatKey: string): ProfilesInlineExtension
 /** Whether a chat is running, so a profile can be applied right now. */
 export function hasLiveSession(): boolean {
 	return live.size > 0;
+}
+
+/** The profile the chat in front was moved to by the editor, if it was. */
+export function frontChatProfile(): string | undefined {
+	return frontSession()?.profile;
 }
 
 /** The chat the owner used last: "this chat". */
@@ -174,7 +181,11 @@ export async function applyAgentProfile(profile: string, mode: ApplyMode, confir
 		return { status: 'unavailable' };
 	}
 	try {
-		return resultOf(await service.apply({ profile, mode, ...(confirmation === undefined ? {} : { confirmation }) }));
+		const result = resultOf(await service.apply({ profile, mode, ...(confirmation === undefined ? {} : { confirmation }) }));
+		if (result.status === 'applied') {
+			session.profile = profile;
+		}
+		return result;
 	} catch {
 		return { status: 'unavailable' };
 	} finally {

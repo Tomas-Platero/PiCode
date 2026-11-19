@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { agentProfilesState, editAgentProfiles, ORCHESTRATOR, ProfileEditError, resolvedProfile, type AgentProfilesState, type ProfileEdit } from './agent-profiles';
-import { applyAgentProfile, applyConfirmed, deferDefault, hasLiveSession, type ApplyResult } from './agent-profiles-live';
+import { applyAgentProfile, applyConfirmed, deferDefault, frontChatProfile, hasLiveSession, type ApplyResult } from './agent-profiles-live';
 import { listAgents } from './gentle-models';
 
 /** What the settings page and the chat's chip read. */
@@ -26,6 +26,8 @@ export interface AgentProfilesView extends AgentProfilesState {
 	readonly editorProfile?: string;
 	/** A chat is running, so a choice reaches it at once. */
 	readonly live: boolean;
+	/** The profile the chat in front was moved to from the editor, when it was. */
+	readonly chat?: string;
 }
 
 function workspaceFolder(): string | undefined {
@@ -46,6 +48,7 @@ function view(profileDir: string): AgentProfilesView {
 		resolved: resolvedProfile(state),
 		...(editorProfile === undefined ? {} : { editorProfile }),
 		live: hasLiveSession(),
+		...(frontChatProfile() === undefined ? {} : { chat: frontChatProfile() }),
 	};
 }
 

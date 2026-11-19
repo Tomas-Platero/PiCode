@@ -24,6 +24,7 @@ import './picodeStatusSection.js';
 import './picodeUsageLimitsSection.js';
 import './picodeUsageMeter.js';
 import './picodeChatBranchChip.js';
+import './picodeChatProfileChip.js';
 import './picodeUsageAlerts.js';
 import './picodeAgentStatusPill.js';
 import './picodeUsageStatus.js';

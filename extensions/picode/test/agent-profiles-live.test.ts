@@ -123,3 +123,14 @@ test('a default chosen while no chat runs is applied when the next chat starts',
 	await new Promise(resolve => setTimeout(resolve, 10));
 	assert.equal(again.applied.length, 0, 'only once');
 });
+
+test('the chat in front remembers the profile it was moved to', async () => {
+	const { frontChatProfile } = await import('../src/agent-profiles-live.ts');
+	const session = fakeSession('a', { asks: false });
+	session.start();
+	assert.equal(frontChatProfile(), undefined);
+	await applyAgentProfile('cheap', 'session');
+	assert.equal(frontChatProfile(), 'cheap');
+	await applyAgentProfile('missing', 'session');
+	assert.equal(frontChatProfile(), 'cheap', 'a refused profile changes nothing');
+});

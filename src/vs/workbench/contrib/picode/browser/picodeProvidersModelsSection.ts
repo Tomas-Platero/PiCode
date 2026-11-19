@@ -135,6 +135,8 @@ interface IAgentProfilesView {
 	readonly resolved: { readonly name?: string; readonly source: 'local' | 'repo' | 'default' };
 	readonly editorProfile?: string;
 	readonly live: boolean;
+	/** The profile the chat in front was moved to from the editor, when it was. */
+	readonly chat?: string;
 }
 
 /** Gentle's reserved name for the main agent inside a profile. */
@@ -1110,6 +1112,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			}
 			if (view.resolved.source !== 'default' && view.resolved.name === profile.name) {
 				mark(localize('picodePm.markProject', "This project"), 'project', localize('picodePm.markProjectTip', "Subagents in this project use this profile. The main agent follows the default."));
+			}
+			if (view.chat === profile.name && view.chat !== view.resolved.name) {
+				mark(localize('picodePm.markChat', "This chat"), 'chat', localize('picodePm.markChatTip', "The chat you used last uses this profile."));
 			}
 			if (view.editorProfile === profile.name) {
 				mark(localize('picodePm.markEditorProfile', "Editor profile"), 'editor', localize('picodePm.markEditorProfileTip', "Your current editor profile uses this profile."));
