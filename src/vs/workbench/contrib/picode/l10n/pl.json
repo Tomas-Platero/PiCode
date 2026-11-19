@@ -794,6 +794,7 @@
 	"picodeWhatsNew.fix.jira": "**Łączenie z Jirą nie zależy już od przeglądarki.** Niektóre przeglądarki nigdy nie otwierały ponownie PiCode po wyrażeniu zgody na stronie Atlassian. Teraz strona PiCode pokazuje, z jakim kontem zostanie nawiązane połączenie, potwierdzasz to tam, a edytor sam to zauważa.",
 	"picodeWhatsNew.fix.language": "**Nowości mówią teraz w Twoim języku.** Lista poprawek jest przetłumaczona, a okno zachowuje nowości tej linii wersji razem ze wszystkimi poprawkami od tamtej pory.",
 	"picodeWhatsNew.fix.lostFolder": "**Rozmowy, których folder zniknął, teraz najpierw pytają.** Przy otwarciu możesz kontynuować w otwartym folderze albo skopiować do niego rozmowę, zamiast kontynuować po cichu.",
+	"picodeWhatsNew.fix.questionFreeze": "**Czat nie zawiesza się już, gdy pi o coś pyta.** Pytanie lub potwierdzenie, które przyszło w trakcie odpowiedzi pi, mogło zawiesić całe okno, zanim pytanie się pojawiło. Teraz się pojawia i czeka na Twoją odpowiedź.",
 	"picodeWhatsNew.fix.statusTidy": "**Stan jest bardziej uporządkowany.** Karty układają się w rzędy, pusta karta Aktualizacje już się nie pojawia, a wszystkie kolory podążają za motywem.",
 	"picodeWhatsNew.fix.stillIcons": "**Ikony w Nowościach stoją w miejscu.** Krok wybrany w demonstracji miał kręcącą się ikonę; teraz kręcą się tylko wskaźniki postępu.",
 	"picodeWhatsNew.fix.updateAccess": "**Aktualizacja nie zatrzymuje się już na «Odmowa dostępu».** Silnik pamięci dołączony do PiCode zamyka się tuż przed tym, jak aktualizacja zastąpi jego folder.",

@@ -794,6 +794,7 @@
 	"picodeWhatsNew.fix.jira": "**Jira'ya bağlanmak artık tarayıcınıza bağlı değil.** Bazı tarayıcılar, Atlassian sayfasında onay verdikten sonra PiCode'u bir daha açmıyordu. Artık bir PiCode sayfası bağlantının hangi hesaba yapılacağını gösteriyor, onu orada onaylıyorsunuz ve editör bunu kendisi fark ediyor.",
 	"picodeWhatsNew.fix.language": "**Yenilikler artık sizin dilinizi konuşuyor.** Düzeltme listesi çevrildi ve pencere, bu sürüm hattının yeniliklerini o zamandan beri gelen tüm düzeltmelerle birlikte koruyor.",
 	"picodeWhatsNew.fix.lostFolder": "**Klasörü kaybolan konuşmalar artık önce soruyor.** Açarken, açık olan klasörde devam edebilir ya da konuşmayı oraya kopyalayabilirsiniz; sessizce devam etmez.",
+	"picodeWhatsNew.fix.questionFreeze": "**pi size bir şey sorduğunda sohbet artık donmuyor.** pi yanıt verirken gelen bir soru veya onay, soru görünmeden önce tüm pencereyi kilitleyebiliyordu. Artık soru görünüyor ve yanıtınızı bekliyor.",
 	"picodeWhatsNew.fix.statusTidy": "**Durum daha düzenli.** Kartlar satırlar halinde dizilir, boş bir Güncellemeler kartı artık görünmez ve tüm renkler temanızı izler.",
 	"picodeWhatsNew.fix.stillIcons": "**Yenilikler simgeleri artık dönmüyor.** Bir tanıtımda seçtiğiniz adımın simgesi dönmeye devam ediyordu; artık yalnızca ilerleme göstergeleri dönüyor.",
 	"picodeWhatsNew.fix.updateAccess": "**Güncelleme artık «Erişim reddedildi» hatasında takılmıyor.** PiCode'un içindeki bellek motoru, güncelleme klasörünü değiştirmeden hemen önce kapatılıyor.",
