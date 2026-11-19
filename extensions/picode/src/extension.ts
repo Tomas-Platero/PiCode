@@ -50,8 +50,8 @@ import {
 import { answeringChatRows, BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
-import { listModels, registerWizardModelCommands } from './wizard-models';
-import { AGENT_MODELS_COMMAND, chooseAgentModels, registerAgentModelsStateCommands } from './gentle-models-ui';
+import { registerWizardModelCommands } from './wizard-models';
+import { AGENT_MODELS_COMMAND, registerAgentModelsStateCommands } from './gentle-models-ui';
 import { registerPiSessionsProvider } from './sessions-register';
 import { setSessionGitProfile } from './session-git';
 import { registerSessionBranchCommands } from './session-branch-commands';
@@ -62,6 +62,7 @@ import { applyIntercomBroker } from './intercom-config';
 import { traceChildPi } from './child-trace';
 import { distributionRootOf } from './distribution-root';
 import { userDataPathOf } from './user-data-path';
+import { registerAgentProfilesCommands } from './agent-profiles-ui';
 import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
@@ -2590,28 +2591,21 @@ export function activate(context: vscode.ExtensionContext): void {
 	// The chat's profile is resolved per request by the agent (see `agent.ts`), so a
 	// runtime switch takes effect without a window reload. What PiCode projects for pi
 	// keeps going to PiCode's own profile either way.
-	// Which model each Gentle agent answers with: the same pickers from the chat's `/gentle:models`
-	// and from the status view's row.
-	const chooseModelsOfAgents = (): Promise<string | undefined> => chooseAgentModels({
-		profileDir: profileDirectory(context.extensionUri),
-		listModels: () => listModels({
-			distributionRoot: distributionRoot(context.extensionUri),
-			profileDir: profileDirectory(context.extensionUri),
-			refreshModels: () => undefined,
-		}),
-		onSaved: resetChatSession,
-	});
-	context.subscriptions.push(vscode.commands.registerCommand(AGENT_MODELS_COMMAND, async () => {
-		const done = await chooseModelsOfAgents();
-		if (done !== undefined) {
-			void vscode.window.showInformationMessage(done.split('\n')[0]!);
-		}
-	}));
+	// Which model each Gentle agent answers with: the status view's row opens the agent profiles page,
+	// the same page the chat's `/gentle:profiles` opens.
+	context.subscriptions.push(vscode.commands.registerCommand(AGENT_MODELS_COMMAND, () => vscode.commands.executeCommand('picode.providersModels.open', 'agents')));
 	context.subscriptions.push(...registerAgentModelsStateCommands(profileDirectory(context.extensionUri), resetChatSession));
+	// Gentle's agent profiles: the settings page, the chat's chip and each editor profile's own choice.
+	context.subscriptions.push(...registerAgentProfilesCommands(profileDirectory(context.extensionUri)));
 	const piParticipant = registerPiAgent(context, {
 		distributionRoot: distributionRoot(context.extensionUri),
 		log: line => console.error(`[pi] ${line}`),
-		chooseAgentModels: chooseModelsOfAgents,
+		// `/gentle:profiles` (and the older `/gentle:models`) open the editor's agent profiles page,
+		// the version of Gentle's terminal screen this editor can draw.
+		chooseAgentModels: async () => {
+			await vscode.commands.executeCommand('picode.providersModels.open', 'agents');
+			return vscode.l10n.t('Opened your agent profiles.');
+		},
 	});
 
 	// pi's own extension commands (`/omni` and its fellows) in the input's slash list,

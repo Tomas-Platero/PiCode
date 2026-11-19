@@ -170,6 +170,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			order: 3,
 			markdownDescription: localize('picode.pi.thinkingLevel', "How hard pi thinks before answering. Its own setting is used when this is left alone."),
 		},
+		// Not APPLICATION on purpose: each editor profile keeps its own, which is the point of it.
+		'picode.agents.profile': {
+			type: 'string',
+			default: '',
+			order: 3.5,
+			markdownDescription: localize('picode.agents.profile', "The agent profile this editor profile uses. Switching to this editor profile makes it the default for your agents. Leave it empty to keep whichever profile is in use. [Manage agent profiles](command:picode.providersModels.open?%22agents%22)."),
+		},
 		[PICODE_REASONING_SETTING]: {
 			type: 'string',
 			enum: ['hide', 'show'],
