@@ -14,12 +14,12 @@ Rama: `feat/agent-profiles` (desde `experimental`). Entrega: commits por fase. P
 
 | ID | Specs | Ruta | Estado | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | S1 | inline | en curso | |
-| T2 | S2, S4 | inline | pendiente | |
-| T3 | S2, S4 | inline | pendiente | |
-| T4 | S3 | inline | pendiente | |
-| T5 | S4 | inline | pendiente | |
-| T6 | S1–S4 | inline | pendiente | |
+| T1 | S1 | inline | hecho | `f64fc45c` |
+| T2 | S2, S4 | inline | hecho (sin canal de control: el servicio de perfiles de Gentle se alcanza desde una extensión del chat) | `ea4db50a` |
+| T3 | S2, S4 | inline | hecho | `ea4db50a`, `2123c2eb` |
+| T4 | S3 | inline | hecho | `ea4db50a`, `2123c2eb` |
+| T5 | S4 | inline | hecho (nube); fijar a proyecto va en T3 | `2f64b5ce` |
+| T6 | S1–S4 | inline + traducción en paralelo | hecho (13 idiomas, `l10n check` limpio); What's New con la release | ver commit de docs |
 
 - T1: fallos de perfiles del editor (ruta de datos del usuario, estado que debe ser de toda la app).
 - T2: medir y activar el canal de control de Gentle sin ruido en el chat.
@@ -38,3 +38,6 @@ Rama: `feat/agent-profiles` (desde `experimental`). Entrega: commits por fase. P
   - `extension.ts:2707` calcula la carpeta de datos subiendo tres niveles desde `globalStorageUri`; en un perfil que no es el de serie acaba en `User/profiles`.
   - Aplicar un perfil de Gentle reescribe varios ficheros con rollback; solo hay API para ello en el canal de control (`gentle-desktop-rpc.ts`), que hoy se filtra (`product-packages.ts:76`).
   - La sincronización no lleva `gentle-ai/` (`piProfileSync.ts:54-56`).
+- **L4** (2026-11-19) · Cambio de plan en T2: no hace falta activar el canal de control de Gentle Desktop. `gentle-ai.ts` responde al servicio `gentle:desktop:profiles-service` en el bus de eventos de pi, y pi comparte un bus por sesión entre las extensiones de los paquetes y las del editor (`resource-loader.js`, `loadExtensionFromFactory`). Una extensión mínima por chat guarda el contexto de la sesión y pide a Gentle que aplique.
+- **L5** · Pruebas: `agent-profiles.test.ts` (13) y `agent-profiles-live.test.ts` (9) pasan; el conector entero, 977/978. El que falla (`status-layout.test.ts:93`) mira `picodeStatusSection.ts`, que esta rama no toca. Comprobación de tipos del editor y del conector, limpias.
+- **L6** · Pendiente o sin verificar: no se probó en una build en marcha (el canal con Gentle de verdad, el botón del chat y la fila de *Profiles*); los modelos de respaldo se ven pero no se editan; exportar e importar perfiles a fichero sigue en el terminal; *What's New* se añade con la release. En un repositorio fijado, Gentle hace que *Make default* cambie solo la fijación local, no el predeterminado global.
