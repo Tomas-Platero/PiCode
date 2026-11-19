@@ -1955,3 +1955,5 @@ usuario; la App da lectura de issues y solo en los repos que el usuario elija al
 - Los modelos de respaldo se ven (cuántos tiene cada perfil), pero aún no se editan desde el editor.
 - Exportar e importar un perfil a fichero sigue solo en el terminal de Gentle.
 - *What's New* lleva su página cuando salga en una release.
+- **gentle-pi 4.9.0** (2026-11-19): los chats nuevos usan el agente principal de su perfil sin tocar el predeterminado, así que un perfil fijado a un proyecto ya mueve también el agente principal en los chats que empiezan ahí. El servicio de perfiles (`gentle-pi.desktop-profiles-service/v1`) no cambia. Sus extensiones nuevas `gentle-desktop-feed.ts`, `gentle-herdr-desktop-status.ts` y `gentle-tower.ts` quedan en el filtro de `product-packages.ts` (`node build/pins.mjs audit gentle-pi 4.8.0 4.9.0` solo marcaba esas tres).
+
