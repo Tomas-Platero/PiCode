@@ -794,6 +794,7 @@
 	"picodeWhatsNew.fix.jira": "**Connecting Jira no longer depends on your browser.** Some browsers never opened PiCode again after you agreed on Atlassian's page. Now a PiCode page shows which account gets the connection, you confirm it there, and the editor notices by itself.",
 	"picodeWhatsNew.fix.language": "**What's New now speaks your language.** The list of fixes is translated, and the window keeps the news of this version line together with every fix since.",
 	"picodeWhatsNew.fix.lostFolder": "**Conversations whose folder is gone now ask first.** Opening one lets you continue in the folder that is open or copy the conversation into it, instead of carrying on silently.",
+	"picodeWhatsNew.fix.questionFreeze": "**The chat no longer freezes when pi asks you something.** A question or a confirmation arriving while pi was answering could hang the whole window before the question was shown. It now appears and waits for your answer.",
 	"picodeWhatsNew.fix.statusTidy": "**Status is tidier.** The cards line up in rows, an Updates card no longer shows up empty, and every colour follows your theme.",
 	"picodeWhatsNew.fix.stillIcons": "**What's New icons stay still.** The step you pick in a demo kept its icon spinning; now only progress spinners turn.",
 	"picodeWhatsNew.fix.updateAccess": "**Updating no longer stops at \"Access denied\".** The memory engine that PiCode carries now closes right before the update replaces its folder.",
