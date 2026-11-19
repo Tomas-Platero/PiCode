@@ -4,27 +4,29 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * The agent profile of the chat in front, beside the effort level in the chat input: `🤖 work ▾`.
- * Clicking it lists the profiles; picking one makes it the default and moves this chat to it, and
- * "Only for this chat" moves this chat alone. With a single profile there is nothing to switch, so
- * the chip is not there.
+ * The agent profile of the chat in front, beside the effort level in the chat input: `🤖 work`.
+ * Clicking it opens the same kind of dropdown as the effort level. With a single profile there is
+ * nothing to switch, so the chip is not there.
  */
 
-import './media/picodeChatProfileChip.css';
-import { $, addDisposableListener, append, EventType } from '../../../../base/browser/dom.js';
-import { BaseActionViewItem } from '../../../../base/browser/ui/actionbar/actionViewItems.js';
-import { IAction } from '../../../../base/common/actions.js';
+import { $, reset } from '../../../../base/browser/dom.js';
+import { renderLabelWithIcons } from '../../../../base/browser/ui/iconLabel/iconLabels.js';
+import { Action, IAction } from '../../../../base/common/actions.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Emitter } from '../../../../base/common/event.js';
-import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize, localize2 } from '../../../../nls.js';
+import { ActionWidgetDropdownActionViewItem } from '../../../../platform/actions/browser/actionWidgetDropdownActionViewItem.js';
 import { IActionViewItemService } from '../../../../platform/actions/browser/actionViewItemService.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { IActionWidgetService } from '../../../../platform/actionWidget/browser/actionWidget.js';
+import { IActionWidgetDropdownAction, IActionWidgetDropdownActionProvider } from '../../../../platform/actionWidget/browser/actionWidgetDropdown.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
-import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../platform/quickinput/common/quickInput.js';
+import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { IChatWidgetService } from '../../chat/browser/chat.js';
@@ -83,108 +85,107 @@ class ProfileChipModel extends Disposable {
 	}
 }
 
-class ProfileChipActionViewItem extends BaseActionViewItem {
+/**
+ * The chip, with the same dropdown under it as the effort level beside it: the profiles with a check
+ * on the one in use; picking one makes it the default and moves this chat, and the button on a row
+ * moves this chat alone. "Manage agent profiles" sits at the bottom.
+ */
+class ProfileChipActionViewItem extends ActionWidgetDropdownActionViewItem {
 	private host: HTMLElement | undefined;
-	private chip: HTMLElement | undefined;
 
 	constructor(
 		action: IAction,
 		private readonly model: ProfileChipModel,
-		@IQuickInputService private readonly quickInputService: IQuickInputService,
-		@ICommandService private readonly commandService: ICommandService,
+		@ICommandService commandService: ICommandService,
+		@IActionWidgetService actionWidgetService: IActionWidgetService,
+		@IKeybindingService keybindingService: IKeybindingService,
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@ITelemetryService telemetryService: ITelemetryService,
 	) {
-		super(undefined, action);
+		const use = (name: string, mode: 'default' | 'session') => async () => {
+			await commandService.executeCommand('picode.agentProfiles.use', { name, mode, ask: false });
+			await model.refresh();
+		};
+		const actionProvider: IActionWidgetDropdownActionProvider = {
+			getActions: () => {
+				const view = model.view;
+				const current = model.current();
+				return (view?.profiles ?? []).map(profile => ({
+					...action,
+					id: `picode.agentProfile.${profile.name}`,
+					label: profile.name,
+					tooltip: '',
+					enabled: true,
+					checked: profile.name === current,
+					...(profile.name === view?.active ? { description: localize('picode.profileChip.default', "Default") } : {}),
+					toolbarActions: [new Action(
+						`picode.agentProfile.${profile.name}.here`,
+						localize('picode.profileChip.onlyHereShort', "Only for this chat"),
+						ThemeIcon.asClassName(Codicon.commentDiscussion),
+						true,
+						use(profile.name, 'session'),
+					)],
+					run: use(profile.name, 'default'),
+				} satisfies IActionWidgetDropdownAction));
+			},
+		};
+		super(action, {
+			actionProvider,
+			actionBarActions: [new Action(
+				'picode.agentProfile.manage',
+				localize('picode.profileChip.manage', "Manage agent profiles"),
+				ThemeIcon.asClassName(Codicon.settingsGear),
+				true,
+				() => commandService.executeCommand('picode.providersModels.open', 'agents'),
+			)],
+			reporter: { id: 'PicodeAgentProfilePicker', name: 'PicodeAgentProfilePicker' },
+			listOptions: { minWidth: 220 },
+		}, actionWidgetService, keybindingService, contextKeyService, telemetryService);
 		this._register(model.onDidChange(() => this.paint()));
 	}
 
 	override render(container: HTMLElement): void {
 		super.render(container);
 		this.host = container;
-		this.chip = append(container, $('a.picode-profile-chip'));
-		this.chip.setAttribute('role', 'button');
-		this.chip.tabIndex = 0;
-		this._register(addDisposableListener(this.chip, EventType.CLICK, () => void this.pick()));
-		this._register(addDisposableListener(this.chip, EventType.KEY_DOWN, event => {
-			if (event.key === 'Enter' || event.key === ' ') {
-				event.preventDefault();
-				void this.pick();
-			}
-		}));
+		container.classList.add('chat-input-picker-item', 'picode-profile-chip-item');
 		this.paint();
 	}
 
+	/** Shown only when there is a profile to switch to. */
 	private paint(): void {
 		const view = this.model.view;
-		if (!this.chip || !this.host) {
-			return;
-		}
 		const shown = view !== undefined && !view.invalid && !view.unsaved && view.profiles.length > 1;
-		this.host.style.display = shown ? '' : 'none';
-		this.chip.replaceChildren();
-		if (!shown) {
-			return;
+		if (this.host) {
+			this.host.style.display = shown ? '' : 'none';
 		}
+		if (this.element) {
+			this.renderLabel(this.element);
+		}
+	}
+
+	protected override renderLabel(element: HTMLElement): IDisposable | null {
+		this.setAriaLabelAttributes(element);
 		const name = this.model.current() ?? '';
-		append(this.chip, $(`span${ThemeIcon.asCSSSelector(Codicon.robot)}`));
-		append(this.chip, $('span.picode-profile-chip-name')).textContent = name;
-		append(this.chip, $(`span${ThemeIcon.asCSSSelector(Codicon.chevronDown)}`));
-		this.chip.title = localize('picode.profileChip.hint', "Agent profile: {0}. Click to switch.", name);
-		this.chip.setAttribute('aria-label', this.chip.title);
-	}
-
-	/** Where the profile in use comes from, in the words of the picker's title. */
-	private origin(view: IProfilesView): string {
-		if (view.chat !== undefined && view.chat !== view.resolved.name) {
-			return localize('picode.profileChip.fromChat', "Agent profile · chosen for this chat");
-		}
-		switch (view.resolved.source) {
-			case 'local': return localize('picode.profileChip.fromLocal', "Agent profile · pinned to this project");
-			case 'repo': return localize('picode.profileChip.fromRepo', "Agent profile · shared with this repository");
-			default: return view.editorProfile === view.active
-				? localize('picode.profileChip.fromEditor', "Agent profile · from your editor profile")
-				: localize('picode.profileChip.fromDefault', "Agent profile · your default");
-		}
-	}
-
-	private async pick(): Promise<void> {
-		await this.model.refresh();
+		reset(element, ...renderLabelWithIcons(`$(${Codicon.robot.id})`), $('span.chat-input-picker-label', undefined, name));
 		const view = this.model.view;
-		if (view === undefined) {
-			return;
-		}
-		type Item = IQuickPickItem & { readonly run: () => Promise<unknown> };
-		const current = this.model.current();
-		const use = (name: string, mode: 'default' | 'session') => async () => {
-			await this.commandService.executeCommand('picode.agentProfiles.use', { name, mode, ask: false });
-			await this.model.refresh();
-		};
-		const items: Array<Item | IQuickPickSeparator> = view.profiles.map(profile => ({
-			label: profile.name,
-			iconClass: profile.name === current ? ThemeIcon.asClassName(Codicon.check) : undefined,
-			description: profile.name === view.active ? localize('picode.profileChip.default', "Default") : undefined,
-			run: use(profile.name, 'default'),
-		}));
-		items.push({ type: 'separator' });
-		items.push({
-			label: localize('picode.profileChip.onlyHere', "Only for this chat..."),
-			iconClass: ThemeIcon.asClassName(Codicon.commentDiscussion),
-			run: async () => {
-				const chosen = await this.quickInputService.pick(view.profiles.map(profile => ({ label: profile.name })), {
-					title: localize('picode.profileChip.onlyHereTitle', "Agent profile for this chat only"),
-					placeHolder: localize('picode.profileChip.onlyHereHint', "New chats keep {0}", view.active ?? ''),
-				});
-				if (chosen !== undefined) {
-					await use(chosen.label, 'session')();
-				}
-			},
-		});
-		items.push({
-			label: localize('picode.profileChip.manage', "Manage agent profiles"),
-			iconClass: ThemeIcon.asClassName(Codicon.settingsGear),
-			run: () => this.commandService.executeCommand('picode.providersModels.open', 'agents'),
-		});
-		const chosen = await this.quickInputService.pick(items, { title: this.origin(view), placeHolder: localize('picode.profileChip.placeholder', "Switch the agents to another profile") }) as Item | undefined;
-		await chosen?.run();
+		const hint = view === undefined ? name : `${origin(view)}: ${name}`;
+		element.setAttribute('aria-label', localize('picode.profileChip.hint', "Agent profile: {0}. Click to switch.", name));
+		element.title = hint;
+		return null;
+	}
+}
+
+/** Where the profile in use comes from, in a few words. */
+function origin(view: IProfilesView): string {
+	if (view.chat !== undefined && view.chat !== view.resolved.name) {
+		return localize('picode.profileChip.fromChat', "Agent profile · chosen for this chat");
+	}
+	switch (view.resolved.source) {
+		case 'local': return localize('picode.profileChip.fromLocal', "Agent profile · pinned to this project");
+		case 'repo': return localize('picode.profileChip.fromRepo', "Agent profile · shared with this repository");
+		default: return view.editorProfile === view.active
+			? localize('picode.profileChip.fromEditor', "Agent profile · from your editor profile")
+			: localize('picode.profileChip.fromDefault', "Agent profile · your default");
 	}
 }
 
