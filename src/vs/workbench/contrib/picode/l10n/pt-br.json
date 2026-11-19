@@ -794,6 +794,7 @@
 	"picodeWhatsNew.fix.jira": "**Conectar o Jira não depende mais do seu navegador.** Alguns navegadores nunca voltavam a abrir o PiCode depois que você aceitava na página da Atlassian. Agora uma página do PiCode mostra a qual conta a conexão será feita, você confirma ali e o editor percebe sozinho.",
 	"picodeWhatsNew.fix.language": "**As novidades agora falam o seu idioma.** A lista de correções está traduzida e a janela mantém as novidades desta linha de versões junto com todas as correções desde então.",
 	"picodeWhatsNew.fix.lostFolder": "**As conversas cuja pasta não existe mais agora perguntam antes.** Ao abrir uma, você pode continuar na pasta aberta ou copiar a conversa para ela, em vez de seguir sem avisar.",
+	"picodeWhatsNew.fix.questionFreeze": "**O chat não trava mais quando o pi pergunta algo.** Uma pergunta ou confirmação que chegava enquanto o pi respondia podia travar a janela inteira antes de a pergunta aparecer. Agora ela aparece e espera sua resposta.",
 	"picodeWhatsNew.fix.statusTidy": "**Status está mais organizado.** Os cartões se alinham em linhas, um cartão Atualizações vazio não aparece mais e todas as cores seguem o seu tema.",
 	"picodeWhatsNew.fix.stillIcons": "**Os ícones de Novidades ficam parados.** A etapa escolhida em uma demonstração mantinha o ícone girando; agora só os indicadores de progresso giram.",
 	"picodeWhatsNew.fix.updateAccess": "**Atualizar não para mais em «Acesso negado».** O mecanismo de memória que o PiCode traz é fechado logo antes de a atualização substituir sua pasta.",
