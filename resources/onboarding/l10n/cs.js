@@ -108,7 +108,7 @@
 	providerWait: 'Nic se neuloží, dokud nestisknete Připojit.',
 	providerConnectedDone: '{0} je připojeno: {1} modelů je připraveno.',
 	layoutTitle: 'Jak pracujete',
-	layoutLead: 'Dvě podoby PiCode. Vyberte tu, která vám sedne; kdykoli ji změníte tlačítkem s robotem vpravo nahoře.',
+	layoutLead: "Dva způsoby, jak uspořádat PiCode. Vyberte si ten, který vám vyhovuje; kdykoli ho můžete změnit přepínačem Agent / Editor vpravo nahoře.",
 	layoutAgent: 'Agent',
 	layoutAgentNote: 'Řekněte pi, co chcete, a sledujte, jak to dělá',
 	layoutAgentPoints: ['Chat je uprostřed', 'Minulé konverzace máte vždy po ruce', 'Postranní panel ukazuje, co se změnilo a co běží'],

@@ -15,7 +15,10 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
 import { defaultButtonStyles, defaultInputBoxStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
-import { IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
+import { IContextMenuService, IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
+import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
+import { IQuickInputButton, IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../platform/quickinput/common/quickInput.js';
+import { Action, IAction, Separator } from '../../../../base/common/actions.js';
 import {
 	aiCustomizationManagementSectionRegistry,
 	IAICustomizationManagementSectionContribution,
@@ -105,12 +108,50 @@ function hostOf(endpoint: string): string {
 /** The two sub-tabs of this section. */
 type PanelTab = 'providers' | 'models' | 'agents';
 
-/** What the connector says about Gentle's agents: who they are and what each is set to. */
-interface IAgentModelsState {
-	readonly agents: readonly string[];
-	readonly models: Readonly<Record<string, { readonly model?: string; readonly thinking?: string }>>;
-	readonly invalid: boolean;
+/** One route of an agent profile: the model an agent answers with, how hard it thinks, fast mode. */
+interface IProfileRoute {
+	readonly model?: string;
+	readonly thinking?: string;
+	readonly tier?: 'standard' | 'fast';
 }
+
+/** One of Gentle's agent profiles, as the connector reads it (`agent-profiles.ts`). */
+interface IAgentProfile {
+	readonly name: string;
+	readonly routes: Readonly<Record<string, IProfileRoute>>;
+	readonly mode: 'organic' | 'full-delegation';
+	/** Backup models by agent (`*` for every agent without its own), in the order they are tried. */
+	readonly fallbacks: Readonly<Record<string, readonly IFallbackStep[]>>;
+}
+
+/** One backup model: what an agent moves to when its model runs out or fails. */
+interface IFallbackStep {
+	readonly model: string;
+	readonly thinking?: string;
+}
+
+/** Gentle's key for the backups of every agent without its own, and its longest list. */
+const EVERY_AGENT = '*';
+const MAX_FALLBACKS = 8;
+
+/** What the connector says about the agent profiles (`picode.agentProfiles.state`). */
+interface IAgentProfilesView {
+	readonly profiles: readonly IAgentProfile[];
+	readonly active?: string;
+	readonly unsaved: boolean;
+	readonly invalid: boolean;
+	readonly pins: { readonly local?: string; readonly repo?: string };
+	readonly pinnable: boolean;
+	readonly agents: readonly string[];
+	readonly resolved: { readonly name?: string; readonly source: 'local' | 'repo' | 'default' };
+	readonly editorProfile?: string;
+	readonly live: boolean;
+	/** The profile the chat in front was moved to from the editor, when it was. */
+	readonly chat?: string;
+}
+
+/** Gentle's reserved name for the main agent inside a profile. */
+const ORCHESTRATOR = 'orchestrator';
 
 /** Gentle's own preferences: how it talks and what new sessions start with. */
 interface IGentleSettings {
@@ -151,9 +192,12 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	/** The providers the **profile** has, as the connector reports them (`picode.setup.status`). */
 	private profileProviders: readonly IProfileProvider[] = [];
 	private profileLoaded = false;
-	/** Gentle's agents and their models; `undefined` until the connector has answered. */
-	private agentState: IAgentModelsState | undefined;
+	/** Gentle's agent profiles; `undefined` until the connector has answered. */
+	private profilesView: IAgentProfilesView | undefined;
+	/** The profile open on the right; the default one when nothing was picked. */
+	private selectedProfile: string | undefined;
 	private agentNote = '';
+	private agentNoteIsError = false;
 	private gentleState: IGentleSettings | undefined;
 	/**
 	 * The model the chat runs on, as this panel believes it.
@@ -181,6 +225,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
 		@IContextViewService private readonly contextViewService: IContextViewService,
 		@ICommandService private readonly commandService: ICommandService,
+		@IQuickInputService private readonly quickInputService: IQuickInputService,
+		@IDialogService private readonly dialogService: IDialogService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 	) {
 		super();
 
@@ -875,12 +922,12 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 
 	/* --------------------------------------------------------------------- agents */
 
-	/** Asks the connector for Gentle's agents and what each is set to. */
+	/** Asks the connector for the agent profiles and Gentle's own preferences. */
 	private async loadAgents(): Promise<void> {
 		try {
-			this.agentState = await this.commandService.executeCommand<IAgentModelsState>('picode.agents.models');
+			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.state');
 		} catch {
-			this.agentState = { agents: [], models: {}, invalid: false };
+			this.profilesView = undefined;
 		}
 		try {
 			this.gentleState = await this.commandService.executeCommand<IGentleSettings>('picode.gentle.settings');
@@ -892,26 +939,69 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		}
 	}
 
-	/** One of Gentle's own preferences (`persona` or `permissions`). */
-	private async saveGentle(key: string, value: string): Promise<void> {
+	/** One edit to the profiles; the connector answers with the state after it, or why it refused. */
+	private async editProfiles(edit: Record<string, unknown>, saved?: string): Promise<boolean> {
+		let answer: IAgentProfilesView | { readonly error: string } | undefined;
 		try {
-			this.gentleState = await this.commandService.executeCommand<IGentleSettings>('picode.gentle.setSetting', { key, value });
-			this.agentNote = localize('picodePm.agentSaved', "Saved. The agents use it from your next message.");
+			answer = await this.commandService.executeCommand<IAgentProfilesView | { readonly error: string }>('picode.agentProfiles.edit', edit);
 		} catch (error) {
-			this.agentNote = localize('picodePm.agentFailed', "It could not be saved: {0}", error instanceof Error ? error.message : String(error));
+			answer = { error: error instanceof Error ? error.message : String(error) };
+		}
+		const ok = answer !== undefined && !('error' in answer);
+		if (answer !== undefined && 'error' in answer) {
+			this.agentNote = answer.error;
+			this.agentNoteIsError = true;
+		} else if (answer !== undefined) {
+			this.profilesView = answer;
+			this.agentNote = saved ?? '';
+			this.agentNoteIsError = false;
+		}
+		if (this.tab === 'agents') {
+			this.render();
+		}
+		return ok;
+	}
+
+	/** Uses a profile: by default (and in the chat in front), or only in the chat in front. */
+	private async useProfile(name: string, mode: 'default' | 'session'): Promise<void> {
+		try {
+			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.use', { name, mode });
+			this.agentNote = mode === 'session' ? localize('picodePm.profileUsedHere', "This chat now uses {0}.", name) : '';
+			this.agentNoteIsError = false;
+		} catch {
+			// The connector said why in a notification.
 		}
 		if (this.tab === 'agents') {
 			this.render();
 		}
 	}
 
-	/** One change: an agent (or all of them), its model and its effort, as the rows now say. */
-	private async saveAgent(agent: string, model: string, thinking: string): Promise<void> {
+	/** Asks for a profile name, with Gentle's rule checked while it is typed. */
+	private async askProfileName(title: string, value: string): Promise<string | undefined> {
+		const taken = new Set(this.profilesView?.profiles.map(profile => profile.name));
+		const name = await this.quickInputService.input({
+			title,
+			value,
+			placeHolder: localize('picodePm.profileNamePlaceholder', "work"),
+			validateInput: async text => {
+				if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(text) || ['__proto__', 'constructor', 'prototype'].includes(text)) {
+					return localize('picodePm.profileNameRule', "Use letters, numbers, dots, dashes or underscores, up to 64, starting with a letter or number.");
+				}
+				return taken.has(text) && text !== value ? localize('picodePm.profileNameTaken', "A profile called {0} already exists.", text) : undefined;
+			},
+		});
+		return name === undefined || name === value ? undefined : name;
+	}
+
+	/** One of Gentle's own preferences (`persona` or `permissions`). */
+	private async saveGentle(key: string, value: string): Promise<void> {
 		try {
-			this.agentState = await this.commandService.executeCommand<IAgentModelsState>('picode.agents.setModel', { agent, model, thinking });
+			this.gentleState = await this.commandService.executeCommand<IGentleSettings>('picode.gentle.setSetting', { key, value });
 			this.agentNote = localize('picodePm.agentSaved', "Saved. The agents use it from your next message.");
+			this.agentNoteIsError = false;
 		} catch (error) {
 			this.agentNote = localize('picodePm.agentFailed', "It could not be saved: {0}", error instanceof Error ? error.message : String(error));
+			this.agentNoteIsError = true;
 		}
 		if (this.tab === 'agents') {
 			this.render();
@@ -964,23 +1054,151 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		}
 	}
 
+	/**
+	 * The agent profiles: the list on the left, the open profile on the right (its way of working and
+	 * one row per agent), Gentle's own preferences under them. Gentle's terminal `/gentle:profiles`
+	 * screen, drawn the editor's way.
+	 */
 	private renderAgents(): void {
-		const state = this.agentState;
-		if (state === undefined) {
+		const view = this.profilesView;
+		if (view === undefined) {
 			append(this.body, $('p.picode-pm-empty')).textContent = localize('picodePm.agentsReading', "Reading Gentle's agents...");
 			return;
 		}
-		this.renderGentleBehaviour();
-		if (state.invalid) {
-			append(this.body, $('p.picode-pm-empty')).textContent = localize('picodePm.agentsInvalid', "The agents' model list could not be read. Delete it and try again.");
+		if (view.invalid) {
+			append(this.body, $('p.picode-pm-empty')).textContent = localize('picodePm.profilesInvalid', "Your agent profiles could not be read. Fix or delete the file, then come back.");
+			this.renderGentleBehaviour();
 			return;
 		}
-		if (state.agents.length === 0) {
+		if (view.agents.length <= 1) {
 			append(this.body, $('p.picode-pm-empty')).textContent = localize('picodePm.agentsNone', "The agents are not ready yet. Send a message in the chat once, then come back.");
 			return;
 		}
+		const selected = view.profiles.find(profile => profile.name === this.selectedProfile)
+			?? view.profiles.find(profile => profile.name === view.active)
+			?? view.profiles[0];
+		this.selectedProfile = selected?.name;
 
-		// Every model the editor can reach, by provider; a model the file names that is not in the list is kept.
+		const layout = append(this.body, $('.picode-ap'));
+		this.renderProfileList(append(layout, $('.picode-ap-list')), view, selected);
+		const detail = append(layout, $('.picode-ap-detail'));
+		if (selected !== undefined) {
+			this.renderProfile(detail, view, selected);
+		}
+		this.renderGentleBehaviour();
+	}
+
+	/** The profiles, each with the marks that say where it is in use. */
+	private renderProfileList(list: HTMLElement, view: IAgentProfilesView, selected: IAgentProfile | undefined): void {
+		const head = append(list, $('.picode-ap-list-head'));
+		append(head, $('span.picode-ap-list-title')).textContent = localize('picodePm.profilesTitle', "Agent profiles");
+		const add = append(head, $('button.picode-ap-icon-button' + ThemeIcon.asCSSSelector(Codicon.add)));
+		add.setAttribute('type', 'button');
+		add.title = localize('picodePm.newProfileFrom', "New profile, starting from {0}", selected?.name ?? '');
+		add.setAttribute('aria-label', add.title);
+		this.store.add(addDisposableListener(add, 'click', async () => {
+			const name = await this.askProfileName(localize('picodePm.newProfile', "New agent profile"), '');
+			if (name !== undefined && await this.editProfiles({ type: 'create', name, ...(selected === undefined ? {} : { from: selected.name }) })) {
+				this.selectedProfile = name;
+				this.render();
+			}
+		}));
+
+		for (const profile of view.profiles) {
+			const item = append(list, $('button.picode-ap-item'));
+			item.setAttribute('type', 'button');
+			item.classList.toggle('selected', profile.name === selected?.name);
+			item.setAttribute('aria-pressed', profile.name === selected?.name ? 'true' : 'false');
+			const title = append(item, $('.picode-ap-item-title'));
+			append(title, $('span' + ThemeIcon.asCSSSelector(profile.mode === 'full-delegation' ? Codicon.organization : Codicon.robot)));
+			append(title, $('span.picode-ap-item-name')).textContent = profile.name;
+			const marks = append(item, $('.picode-ap-marks'));
+			const mark = (text: string, kind: string, tooltip?: string) => {
+				const element = append(marks, $(`span.picode-ap-mark.${kind}`));
+				element.textContent = text;
+				if (tooltip !== undefined) {
+					element.title = tooltip;
+				}
+			};
+			if (profile.name === view.active) {
+				mark(localize('picodePm.markDefault', "Default"), 'default', localize('picodePm.markDefaultTip', "New chats start with this profile."));
+			}
+			if (view.resolved.source !== 'default' && view.resolved.name === profile.name) {
+				mark(localize('picodePm.markProject', "This project"), 'project', localize('picodePm.markProjectTip', "New chats in this project start with this profile, main agent included."));
+			}
+			if (view.chat === profile.name && view.chat !== view.resolved.name) {
+				mark(localize('picodePm.markChat', "This chat"), 'chat', localize('picodePm.markChatTip', "The chat you used last uses this profile."));
+			}
+			if (view.editorProfile === profile.name) {
+				mark(localize('picodePm.markEditorProfile', "Editor profile"), 'editor', localize('picodePm.markEditorProfileTip', "Your current editor profile uses this profile."));
+			}
+			this.store.add(addDisposableListener(item, 'click', () => {
+				this.selectedProfile = profile.name;
+				this.agentNote = '';
+				this.render();
+			}));
+		}
+	}
+
+	/** One profile: what it is used for, its actions, its way of working and a row per agent. */
+	private renderProfile(detail: HTMLElement, view: IAgentProfilesView, profile: IAgentProfile): void {
+		const head = append(detail, $('.picode-ap-head'));
+		const name = append(head, $('h3.picode-ap-name'));
+		append(name, $('span' + ThemeIcon.asCSSSelector(Codicon.robot)));
+		append(name, $('span')).textContent = profile.name;
+		const actions = append(head, $('.picode-ap-actions'));
+		if (profile.name !== view.active) {
+			const makeDefault = this.store.add(new Button(actions, { ...defaultButtonStyles }));
+			makeDefault.label = localize('picodePm.makeDefault', "Make default");
+			makeDefault.setTitle(localize('picodePm.makeDefaultTip', "New chats start with this profile, and this chat moves to it."));
+			this.store.add(makeDefault.onDidClick(() => void this.useProfile(profile.name, 'default')));
+		}
+		if (view.live && !view.unsaved) {
+			const here = this.store.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
+			here.label = localize('picodePm.useHere', "Use in this chat");
+			here.setTitle(localize('picodePm.useHereTip', "Only the chat you used last changes. New chats keep the default."));
+			this.store.add(here.onDidClick(() => void this.useProfile(profile.name, 'session')));
+		}
+		const more = append(actions, $('button.picode-ap-icon-button' + ThemeIcon.asCSSSelector(Codicon.ellipsis)));
+		more.setAttribute('type', 'button');
+		more.setAttribute('aria-label', localize('picodePm.profileMore', "More actions"));
+		more.title = more.getAttribute('aria-label')!;
+		this.store.add(addDisposableListener(more, 'click', () => this.showProfileMenu(more, view, profile)));
+
+		if (view.unsaved) {
+			append(detail, $('p.picode-pm-hint')).textContent = localize('picodePm.profilesUnsaved', "These are the models your agents use now. Change one, or add a profile, and they are saved as your first profile.");
+		} else if (view.resolved.name !== undefined) {
+			const where = view.resolved.source === 'local'
+				? localize('picodePm.resolvedLocal', "New chats in this project use {0}, pinned on this computer.", view.resolved.name)
+				: view.resolved.source === 'repo'
+					? localize('picodePm.resolvedRepo', "New chats in this project use {0}, shared with the repository.", view.resolved.name)
+					: localize('picodePm.resolvedDefault', "New chats use {0}, your default.", view.resolved.name);
+			append(detail, $('p.picode-pm-hint')).textContent = where;
+		}
+
+		// The way of working: Gentle's two orchestrator modes.
+		const modes = append(detail, $('.picode-ap-modes'));
+		for (const [mode, label, tip] of [
+			['organic', localize('picodePm.modeOrganic', "Organic"), localize('picodePm.modeOrganicTip', "The main agent can do small work itself and hands the rest to subagents.")],
+			['full-delegation', localize('picodePm.modeDelegation', "Full delegation"), localize('picodePm.modeDelegationTip', "The main agent hands every piece of work to a subagent.")],
+		] as const) {
+			const chip = append(modes, $('button.picode-pm-chip'));
+			chip.setAttribute('type', 'button');
+			chip.textContent = label;
+			chip.title = tip;
+			chip.setAttribute('aria-pressed', profile.mode === mode ? 'true' : 'false');
+			this.store.add(addDisposableListener(chip, 'click', () => {
+				if (profile.mode !== mode) {
+					void this.editProfiles({ type: 'mode', name: profile.name, mode }, this.savedNote(view, profile));
+				}
+			}));
+		}
+
+		if (this.agentNote.length > 0) {
+			append(detail, $(this.agentNoteIsError ? 'p.picode-pm-error' : 'p.picode-pm-saved')).textContent = this.agentNote;
+		}
+
+		// Every model the editor can reach, by provider; a model the profile names that is not in the list is kept.
 		const catalogue = new Map<string, { name: string; provider: string }>();
 		for (const modelId of this.languageModelsService.getLanguageModelIds()) {
 			const metadata = this.languageModelsService.lookupLanguageModel(modelId);
@@ -996,14 +1214,14 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 				select.append(new Option(current, current));
 			}
 			const byProvider = new Map<string, Array<[string, string]>>();
-			for (const [ref, { name, provider }] of catalogue) {
-				byProvider.set(provider, [...(byProvider.get(provider) ?? []), [ref, name]]);
+			for (const [ref, { name: modelName, provider }] of catalogue) {
+				byProvider.set(provider, [...(byProvider.get(provider) ?? []), [ref, modelName]]);
 			}
 			for (const provider of [...byProvider.keys()].sort((left, right) => left.localeCompare(right))) {
 				const group = document.createElement('optgroup');
 				group.label = provider;
-				for (const [ref, name] of byProvider.get(provider)!.sort((left, right) => left[1].localeCompare(right[1]))) {
-					group.append(new Option(name, ref));
+				for (const [ref, modelName] of byProvider.get(provider)!.sort((left, right) => left[1].localeCompare(right[1]))) {
+					group.append(new Option(modelName, ref));
 				}
 				select.append(group);
 			}
@@ -1012,7 +1230,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		};
 		const thinkingSelect = (current: string): HTMLSelectElement => {
 			const select = document.createElement('select');
-			select.className = 'picode-pm-select picode-pm-agent-select';
+			select.className = 'picode-pm-select picode-ap-thinking';
 			select.setAttribute('aria-label', localize('picodePm.agentThinking', "How much it thinks"));
 			select.append(new Option(localize('picodePm.agentThinkingDefault', "Default effort"), ''));
 			for (const level of THINKING_LEVELS) {
@@ -1022,39 +1240,174 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			return select;
 		};
 
-		append(this.body, $('p.picode-pm-hint')).textContent = localize(
-			'picodePm.agentsNote',
-			"The model each of Gentle's agents answers with. An agent on the same model as the rest uses the model new conversations open with.",
-		);
-		const toolbar = append(this.body, $('.picode-pm-toolbar'));
-		append(toolbar, $('span.picode-pm-agent-all')).textContent = localize('picodePm.agentAll', "Every agent");
-		const all = modelSelect('', localize('picodePm.agentAllPlaceholder', "Set them all to..."));
-		all.setAttribute('aria-label', localize('picodePm.agentAllLabel', "Set every agent to one model"));
-		toolbar.appendChild(all);
-		this.store.add(addDisposableListener(all, 'change', () => {
-			if (all.value.length > 0) {
-				void this.saveAgent('all', all.value, '');
+		// The button on a row that opens its backup models: a count when it has some.
+		const backupsButton = (container: HTMLElement, agent: string, who: string) => {
+			const chain = profile.fallbacks[agent] ?? [];
+			const button = append(container, $('button.picode-ap-backups'));
+			button.setAttribute('type', 'button');
+			append(button, $('span' + ThemeIcon.asCSSSelector(Codicon.arrowSwap)));
+			if (chain.length > 0) {
+				append(button, $('span')).textContent = String(chain.length);
+				button.classList.add('has');
 			}
-		}));
-		if (this.agentNote.length > 0) {
-			append(this.body, $('p.picode-pm-note')).textContent = this.agentNote;
-		}
+			button.title = chain.length > 0
+				? localize('picodePm.backupsSome', "Backup models for {0}: {1}", who, chain.map(step => catalogue.get(step.model)?.name ?? step.model).join(' → '))
+				: localize('picodePm.backupsNone', "Add backup models for {0}", who);
+			button.setAttribute('aria-label', button.title);
+			this.store.add(addDisposableListener(button, 'click', () => void this.editBackups(profile.name, agent, who, catalogue)));
+		};
 
-		const list = append(this.body, $('.picode-pm-models'));
-		for (const agent of state.agents) {
-			const saved = state.models[agent] ?? {};
+		const everyone = append(detail, $('.picode-ap-every'));
+		append(everyone, $('span')).textContent = localize('picodePm.backupsEvery', "Backups for every agent without its own");
+		backupsButton(everyone, EVERY_AGENT, localize('picodePm.everyAgent', "every agent"));
+
+		const list = append(detail, $('.picode-pm-models'));
+		for (const agent of view.agents) {
+			const route = profile.routes[agent] ?? {};
 			const line = append(list, $('.picode-pm-agent'));
-			const name = append(line, $('.picode-pm-agent-name'));
-			append(name, $('span' + ThemeIcon.asCSSSelector(Codicon.hubot)));
-			append(name, $('span')).textContent = agent;
-			const model = modelSelect(saved.model ?? '', localize('picodePm.agentSame', "Same model as the rest"));
-			model.setAttribute('aria-label', localize('picodePm.agentModelLabel', "Model for {0}", agent));
-			const thinking = thinkingSelect(saved.thinking ?? '');
-			line.append(model, thinking);
-			const save = () => { void this.saveAgent(agent, model.value, thinking.value); };
+			const label = append(line, $('.picode-pm-agent-name'));
+			const main = agent === ORCHESTRATOR;
+			append(label, $('span' + ThemeIcon.asCSSSelector(main ? Codicon.star : Codicon.hubot)));
+			append(label, $('span')).textContent = main ? localize('picodePm.mainAgent', "Main agent") : agent;
+			const model = modelSelect(route.model ?? '', main ? localize('picodePm.mainAgentModel', "The chat's model") : localize('picodePm.agentSame', "Same model as the rest"));
+			model.setAttribute('aria-label', localize('picodePm.agentModelLabel', "Model for {0}", main ? localize('picodePm.mainAgent', "Main agent") : agent));
+			const thinking = thinkingSelect(route.thinking ?? '');
+			const fastLabel = $('label.picode-ap-fast');
+			const fast = append(fastLabel, $<HTMLInputElement>('input'));
+			fast.type = 'checkbox';
+			fast.checked = route.tier === 'fast';
+			append(fastLabel, $('span')).textContent = localize('picodePm.fast', "Fast");
+			fastLabel.title = localize('picodePm.fastTip', "Fast mode, where the model offers it. It uses more of your plan.");
+			line.append(model, thinking, fastLabel);
+			backupsButton(line, agent, main ? localize('picodePm.mainAgent', "Main agent") : agent);
+			const save = () => {
+				void this.editProfiles({ type: 'route', name: profile.name, agent, model: model.value, thinking: thinking.value, ...(fast.checked ? { tier: 'fast' } : {}) }, this.savedNote(view, profile));
+			};
 			this.store.add(addDisposableListener(model, 'change', save));
 			this.store.add(addDisposableListener(thinking, 'change', save));
+			this.store.add(addDisposableListener(fast, 'change', save));
 		}
+	}
+
+	/**
+	 * The backup models of one agent, in the order they are tried: each can move up or go, and
+	 * "Add a backup model" appends one from the models the editor can reach.
+	 */
+	private async editBackups(profileName: string, agent: string, who: string, catalogue: ReadonlyMap<string, { name: string; provider: string }>): Promise<void> {
+		type Item = IQuickPickItem & { readonly index?: number; readonly add?: true };
+		const chainNow = (): readonly IFallbackStep[] => this.profilesView?.profiles.find(profile => profile.name === profileName)?.fallbacks[agent] ?? [];
+		const save = (chain: readonly IFallbackStep[]) => this.editProfiles({ type: 'fallbacks', name: profileName, agent, chain }, localize('picodePm.backupsSaved', "Saved. When a model runs out or fails, the agent moves to the next one."));
+		const up: IQuickInputButton = { iconClass: ThemeIcon.asClassName(Codicon.arrowUp), tooltip: localize('picodePm.backupUp', "Try earlier") };
+		const remove: IQuickInputButton = { iconClass: ThemeIcon.asClassName(Codicon.close), tooltip: localize('picodePm.backupRemove', "Remove") };
+		const picker = this.quickInputService.createQuickPick<Item>({ useSeparators: true });
+		picker.title = localize('picodePm.backupsTitle', "Backup models for {0}", who);
+		picker.placeholder = localize('picodePm.backupsHint', "When a model runs out or fails, the agent moves to the next one, top first.");
+		const fill = () => {
+			const chain = chainNow();
+			const items: Array<Item | IQuickPickSeparator> = chain.map((step, index) => ({
+				label: `${index + 1}. ${catalogue.get(step.model)?.name ?? step.model}`,
+				description: step.thinking === undefined ? step.model : `${step.model} · ${step.thinking}`,
+				buttons: index === 0 ? [remove] : [up, remove],
+				index,
+			}));
+			if (chain.length < MAX_FALLBACKS) {
+				if (items.length > 0) {
+					items.push({ type: 'separator' });
+				}
+				items.push({ label: `$(add) ${localize('picodePm.backupAdd', "Add a backup model...")}`, add: true });
+			}
+			picker.items = items;
+		};
+		fill();
+		const store = new DisposableStore();
+		store.add(picker.onDidTriggerItemButton(async ({ item, button }) => {
+			const chain = [...chainNow()];
+			const index = item.index;
+			if (index === undefined) {
+				return;
+			}
+			if (button === remove) {
+				chain.splice(index, 1);
+			} else if (index > 0) {
+				[chain[index - 1], chain[index]] = [chain[index], chain[index - 1]];
+			}
+			await save(chain);
+			fill();
+		}));
+		store.add(picker.onDidAccept(async () => {
+			if (picker.selectedItems[0]?.add !== true) {
+				return;
+			}
+			const chain = chainNow();
+			const taken = new Set(chain.map(step => step.model));
+			picker.hide();
+			const chosen = await this.quickInputService.pick(
+				[...catalogue].filter(([ref]) => !taken.has(ref)).sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([ref, { name, provider }]) => ({ label: name, description: `${provider} · ${ref}`, ref })),
+				{ title: picker.title, placeHolder: localize('picodePm.backupPick', "Model to try next"), matchOnDescription: true },
+			);
+			if (chosen !== undefined) {
+				await save([...chain, { model: chosen.ref }]);
+			}
+			void this.editBackups(profileName, agent, who, catalogue);
+		}));
+		store.add(picker.onDidHide(() => { store.dispose(); picker.dispose(); }));
+		picker.show();
+	}
+
+	/** What a saved change says: the default reaches the chat at once, any other profile when it is used. */
+	private savedNote(view: IAgentProfilesView, profile: IAgentProfile): string {
+		return profile.name === view.active || view.unsaved
+			? localize('picodePm.agentSaved', "Saved. The agents use it from your next message.")
+			: localize('picodePm.profileSaved', "Saved in {0}.", profile.name);
+	}
+
+	/** Rename, duplicate, pin to the project, share with the repository, delete. */
+	private showProfileMenu(anchor: HTMLElement, view: IAgentProfilesView, profile: IAgentProfile): void {
+		const actions: IAction[] = [];
+		const run = (id: string, label: string, enabled: boolean, handler: () => Promise<unknown>) => {
+			actions.push(new Action(id, label, undefined, enabled, async () => { await handler(); }));
+		};
+		run('picode.profile.rename', localize('picodePm.rename', "Rename..."), !view.unsaved, async () => {
+			const to = await this.askProfileName(localize('picodePm.renameTitle', "Rename {0}", profile.name), profile.name);
+			if (to !== undefined && await this.editProfiles({ type: 'rename', name: profile.name, to })) {
+				this.selectedProfile = to;
+				this.render();
+			}
+		});
+		run('picode.profile.duplicate', localize('picodePm.duplicate', "Duplicate..."), true, async () => {
+			const name = await this.askProfileName(localize('picodePm.duplicateTitle', "Copy of {0}", profile.name), '');
+			if (name !== undefined && await this.editProfiles({ type: 'create', name, from: profile.name })) {
+				this.selectedProfile = name;
+				this.render();
+			}
+		});
+		if (view.pinnable && !view.unsaved) {
+			actions.push(new Separator());
+			const pinnedHere = view.pins.local === profile.name;
+			run('picode.profile.pinLocal', pinnedHere ? localize('picodePm.unpinLocal', "Unpin from this project") : localize('picodePm.pinLocal', "Pin to this project"), true,
+				() => this.editProfiles({ type: 'pin', source: 'local', ...(pinnedHere ? {} : { name: profile.name }) }, pinnedHere ? undefined : localize('picodePm.pinnedLocal', "New chats in this project now start with {0}, on this computer only.", profile.name)));
+			const shared = view.pins.repo === profile.name;
+			run('picode.profile.pinRepo', shared ? localize('picodePm.unpinRepo', "Stop sharing with the repository") : localize('picodePm.pinRepo', "Share with the repository"), true,
+				() => this.editProfiles({ type: 'pin', source: 'repo', ...(shared ? {} : { name: profile.name }) }, shared ? undefined : localize('picodePm.pinnedRepo', "Saved in the repository: commit it so everyone's new chats here start with {0}.", profile.name)));
+		}
+		actions.push(new Separator());
+		const pinned = view.pins.local === profile.name || view.pins.repo === profile.name;
+		run('picode.profile.delete', profile.name === view.active
+			? localize('picodePm.deleteDefault', "Delete (make another profile the default first)")
+			: pinned ? localize('picodePm.deletePinned', "Delete (unpin it from this project first)") : localize('picodePm.delete', "Delete"),
+			profile.name !== view.active && !pinned && !view.unsaved,
+			async () => {
+				const { confirmed } = await this.dialogService.confirm({
+					message: localize('picodePm.deleteConfirm', "Delete the {0} profile?", profile.name),
+					detail: localize('picodePm.deleteDetail', "The profile and its models are removed. Chats that use it keep it until they end."),
+					primaryButton: localize('picodePm.deleteButton', "Delete"),
+				});
+				if (confirmed && await this.editProfiles({ type: 'delete', name: profile.name })) {
+					this.selectedProfile = undefined;
+					this.render();
+				}
+			});
+		this.contextMenuService.showContextMenu({ getAnchor: () => anchor, getActions: () => actions });
 	}
 
 	/* --------------------------------------------------------------------- models */

@@ -74,6 +74,12 @@ export const GENTLE_PI_TERMINAL_EXTENSIONS: readonly string[] = [
 	// editor does not read, plus a `/gentle:desktop` command nobody should type. The editor already
 	// reads those from gentle-pi's own events.
 	'!extensions/gentle-desktop-rpc.ts',
+	// New in 4.9.0: the session feed for Gentle Shell Desktop, Herdr's desktop status lines and Gentle
+	// Tower, a local web view of the sessions that keeps a snapshot file per session. All three serve
+	// apps outside the editor, which shows the same sessions, tasks and changes itself.
+	'!extensions/gentle-desktop-feed.ts',
+	'!extensions/gentle-herdr-desktop-status.ts',
+	'!extensions/gentle-tower.ts',
 ];
 
 /**
@@ -104,7 +110,7 @@ export const REMOVED_PACKAGE_NAMES: readonly string[] = [
 
 /** What the product pins, in the order it declares them. */
 export const PRODUCT_PACKAGES: readonly ProductPackage[] = [
-	{ name: 'gentle-pi', version: '4.8.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
+	{ name: 'gentle-pi', version: '4.9.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
 	{ name: 'gentle-engram', version: '0.8.0' },
 	{ name: 'pi-intercom', version: '0.18.1' },
 ];

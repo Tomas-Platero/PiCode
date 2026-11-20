@@ -66,6 +66,10 @@ type SyncConflictsClassification = {
 const turnOffSyncCommand = { id: 'workbench.userDataSync.actions.turnOff', title: localize2('stop sync', 'Turn Off') };
 const configureSyncCommand = { id: CONFIGURE_SYNC_COMMAND_ID, title: localize2('configure sync', 'Configure...') };
 const showConflictsCommandId = 'workbench.userDataSync.actions.showConflicts';
+// PiCode: the Account window and its Cloud sync page (`picodeAccount.contribution.ts`), by id so this
+// upstream file does not import PiCode's.
+const PICODE_OPEN_ACCOUNT_COMMAND = 'picode.account.open';
+const PICODE_CLOUD_SYNC_SECTION = 'sync';
 const syncNowCommand = {
 	id: 'workbench.userDataSync.actions.syncNow',
 	title: localize2('sync now', 'Sync Now'),
@@ -516,6 +520,12 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 	 * (the Account window): the list of categories is not asked a second time.
 	 */
 	private async turnOn(skipConfigure = false): Promise<void> {
+		if (!skipConfigure) {
+			// PiCode: what is synced is chosen on the Account window's Cloud sync page, which turns sync on
+			// with `skipConfigure`. Every other way in (menus, palette, notifications) goes there.
+			await this.openCloudSyncPage();
+			return;
+		}
 		try {
 			if (!this.userDataSyncWorkbenchService.authenticationProviders.length) {
 				throw new Error(localize('no authentication providers', "No authentication providers are available."));
@@ -602,6 +612,11 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 		}
 	}
 
+	/** PiCode: the Account window, on its Cloud sync page. */
+	private async openCloudSyncPage(): Promise<void> {
+		await this.commandService.executeCommand(PICODE_OPEN_ACCOUNT_COMMAND, PICODE_CLOUD_SYNC_SECTION);
+	}
+
 	private async askToConfigure(): Promise<boolean> {
 		return new Promise<boolean>((c, e) => {
 			const disposables: DisposableStore = new DisposableStore();
@@ -672,7 +687,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 		}, {
 			id: SyncResource.PiProfile,
 			label: getSyncAreaLabel(SyncResource.PiProfile),
-			description: localize('pi profile sync description', "Agents, subagents and skills of your Pi profile")
+			description: localize('pi profile sync description', "Agents, skills, agent profiles, MCP servers and models")
 		}];
 
 
@@ -690,6 +705,12 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 	}
 
 	private async configureSyncOptions(): Promise<void> {
+		// PiCode: the choice of what to sync lives on the Account window's Cloud sync page.
+		return this.openCloudSyncPage();
+	}
+
+	// PiCode: VS Code's own picker, kept for reference; nothing opens it.
+	protected async configureSyncOptionsPicker(): Promise<void> {
 		return new Promise((c, _e) => {
 			const disposables: DisposableStore = new DisposableStore();
 			const quickPick = this.quickInputService.createQuickPick<ConfigureSyncQuickPickItem>();
@@ -821,8 +842,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 			constructor() {
 				super({
 					id: 'workbench.userDataSync.actions.turnOn',
-					title: localize2('global activity turn on sync', 'Backup and Sync Settings...'),
-					category: SYNC_TITLE,
+					title: localize2('picode cloud sync menu', 'Cloud Sync...'),
 					f1: true,
 					precondition: when,
 					menu: [{
@@ -972,7 +992,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 			constructor() {
 				super({
 					id: 'workbench.userDataSync.actions.manage',
-					title: localize('sync is on', "Settings Sync is On"),
+					title: localize('picode cloud sync menu on', "Cloud Sync..."),
 					toggled: ContextKeyTrueExpr.INSTANCE,
 					menu: [
 						{
@@ -995,7 +1015,11 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					],
 				});
 			}
-			run(accessor: ServicesAccessor): Promise<void> {
+			run(): Promise<void> {
+				// PiCode: the Account window's Cloud sync page shows the state and every action.
+				return that.openCloudSyncPage();
+			}
+			protected runPicker(accessor: ServicesAccessor): Promise<void> {
 				return new Promise<void>((c, _e) => {
 					const quickInputService = accessor.get(IQuickInputService);
 					const commandService = accessor.get(ICommandService);

@@ -186,7 +186,7 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 		}, REFRESH_MS);
 
 		// Alerts changed here or in another window: only the alerts blocks repaint.
-		this._register(storageService.onDidChangeValue(StorageScope.PROFILE, USAGE_ALERTS_STORAGE_KEY, this._store)(() => this.paintAllAlerts()));
+		this._register(storageService.onDidChangeValue(StorageScope.APPLICATION, USAGE_ALERTS_STORAGE_KEY, this._store)(() => this.paintAllAlerts()));
 
 		void this.refresh();
 	}

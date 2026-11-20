@@ -108,7 +108,7 @@
 	providerWait: '在按下“连接”之前不会保存任何内容。',
 	providerConnectedDone: '{0} 已连接：{1} 个模型可用。',
 	layoutTitle: '您的工作方式',
-	layoutLead: '两种安排PiCode的方式。选适合您的一种；随时可以用右上角的机器人按钮更改。',
+	layoutLead: "PiCode 有两种布局方式。选择适合你的那一种；随时可以用右上角的 Agent / Editor 切换开关更改。",
 	layoutAgent: 'Agent',
 	layoutAgentNote: '告诉pi您想要什么，然后看它工作',
 	layoutAgentPoints: ['聊天位于中央', '过去的对话随手可及', '侧边面板显示改了什么、正在运行什么'],

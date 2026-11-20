@@ -108,7 +108,7 @@
 	providerWait: '「接続」を押すまで何も保存されません。',
 	providerConnectedDone: '{0} に接続しました：{1} 個のモデルを使えます。',
 	layoutTitle: '作業のしかた',
-	layoutLead: 'PiCodeの並べ方は2通りです。合うほうを選んでください。右上のロボットのボタンでいつでも切り替えられます。',
+	layoutLead: "PiCode のレイアウトは 2 種類です。合うほうを選んでください。右上の Agent / Editor スイッチでいつでも切り替えられます。",
 	layoutAgent: 'Agent',
 	layoutAgentNote: 'piに頼んで、動くところを見る',
 	layoutAgentPoints: ['チャットが真ん中', '過去の会話がいつも手元に', '変更と実行中の内容が横のパネルに出る'],
