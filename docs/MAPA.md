@@ -353,6 +353,8 @@
 │   └── … 47 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
+│   ├── AGENT-PROFILES.md
+│   ├── AJUSTES.md
 │   ├── ARCHITECTURE.md
 │   ├── CI.md
 │   ├── CUENTA.md
@@ -402,6 +404,9 @@
 │   │   │   │   └── SKILL.md
 │   │   │   └── README.md
 │   │   ├── src/
+│   │   │   ├── agent-profiles-live.ts
+│   │   │   ├── agent-profiles-ui.ts
+│   │   │   ├── agent-profiles.ts
 │   │   │   ├── agent-todo.ts
 │   │   │   ├── agent-transcript-panel.ts
 │   │   │   ├── agent-transcript.ts
@@ -514,6 +519,7 @@
 │   │   │   ├── theme-types.ts
 │   │   │   ├── updates-check.ts
 │   │   │   ├── usage-data.ts
+│   │   │   ├── user-data-path.ts
 │   │   │   ├── voice-controller.ts
 │   │   │   ├── voice-engine.ts
 │   │   │   ├── voice-fork.ts
@@ -522,8 +528,10 @@
 │   │   │   ├── voice-worker.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 120 files in total
+│   │   │   └── … 124 files in total
 │   │   ├── test/
+│   │   │   ├── agent-profiles-live.test.ts
+│   │   │   ├── agent-profiles.test.ts
 │   │   │   ├── agent-todo.test.ts
 │   │   │   ├── agent-transcript.test.ts
 │   │   │   ├── agents.test.ts
@@ -613,12 +621,14 @@
 │   │   │   ├── update-memory-engine.test.ts
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
+│   │   │   ├── usage-sharing-env.test.ts
+│   │   │   ├── user-data-path.test.ts
 │   │   │   ├── voice-controller.test.ts
 │   │   │   ├── voice-engine.test.ts
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 94 files in total
+│   │   │   └── … 98 files in total
 │   │   ├── package.json
 │   │   ├── package.nls.cs.json
 │   │   ├── package.nls.de.json
