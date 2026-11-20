@@ -909,3 +909,14 @@ button.picode-whatsnew-row {
 	text-align: left;
 	cursor: pointer;
 }
+
+/* The Settings demo: the page picked in its list is lit, like the window's own side list. */
+button.picode-whatsnew-row.active {
+	border-radius: 6px;
+	background: var(--vscode-list-inactiveSelectionBackground, var(--vscode-list-hoverBackground));
+	font-weight: 600;
+}
+
+button.picode-whatsnew-row:hover:not(.active) {
+	background: var(--vscode-list-hoverBackground);
+}

@@ -282,6 +282,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.openAgentProfiles', "Open agent profiles");
 		case 'openCloudSync':
 			return localize('picodeWhatsNew.openCloudSync', "Open Cloud sync");
+		case 'openSettings':
+			return localize('picodeWhatsNew.openSettings', "Open Settings");
 	}
 }
 
@@ -343,6 +345,10 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 			close();
 			void services.commandService.executeCommand(OPEN_ACCOUNT_COMMAND, 'sync');
 			return;
+		case 'openSettings':
+			close();
+			void services.commandService.executeCommand(OPEN_SETTINGS_COMMAND);
+			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
 			void services.configurationService.updateValue(FILE_LIST_SETTING, !services.configurationService.getValue<boolean>(FILE_LIST_SETTING)).then(rerender);
@@ -401,6 +407,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	setup: setupPreview,
 	agentProfiles: agentProfilesPreview,
 	syncParts: syncPartsPreview,
+	settings: settingsPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -582,6 +589,63 @@ function syncPartsPreview(parent: HTMLElement, store: DisposableStore): void {
 	append(keys, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.lock)}`));
 	append(keys, $('span.picode-whatsnew-row-detail')).textContent = localize('picodeSyncKeysStay', "Keys and sign-ins stay on each computer: MCP servers and providers travel without them.");
 	count();
+}
+
+function settingsPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.settings.demo', "Pick a group, then a page. Nothing really changes here."), store);
+	const groups = [
+		{
+			id: 'preferences', label: localize('picodeSettingsGroupPreferences', "Preferences"), pages: [
+				{ icon: Codicon.settings, label: localize('picodePrefGeneral', "General"), detail: localize('picodeWhatsNew.settings.general', "Theme, layout, language and zoom") },
+				{ icon: Codicon.robot, label: localize('picodePrefChat', "Chat and agent"), detail: localize('picodeWhatsNew.settings.chat', "How hard pi thinks and what it is told") },
+				{ icon: Codicon.cloudDownload, label: localize('picodePrefUpdates', "Updates"), detail: localize('picodeWhatsNew.settings.updates', "PiCode, pi and its packages, in one place") },
+			]
+		},
+		{
+			id: 'account', label: localize('picodeSettingsGroupAccount', "Account"), pages: [
+				{ icon: Codicon.account, label: localize('picodeAccountOverviewLabel', "Overview"), detail: localize('picodeWhatsNew.settings.overview', "Your plan and what Pro brings") },
+				{ icon: Codicon.cloud, label: localize('picodeSyncLabel', "Cloud sync"), detail: localize('picodeWhatsNew.settings.sync', "What travels with you, part by part") },
+				{ icon: Codicon.shield, label: localize('picodeAccountPrivacy', "Privacy"), detail: localize('picodeWhatsNew.settings.privacy', "What PiCode sends, and what it never sends") },
+			]
+		},
+		{
+			id: 'agent', label: localize('picodeSettingsGroupAgent', "Agent"), pages: [
+				{ icon: Codicon.vm, label: localize('picodeWhatsNew.settings.providersLabel', "Providers and models"), detail: localize('picodeWhatsNew.settings.providers', "Your providers, models and agent profiles") },
+				{ icon: Codicon.tools, label: localize('picodeToolsLabel', "Tools"), detail: localize('picodeWhatsNew.settings.tools', "Turn off what pi should not use") },
+				{ icon: Codicon.graph, label: localize('picodeUsageLimitsSectionLabel', "Usage limits"), detail: localize('picodeWhatsNew.settings.limits', "How much of each plan is left") },
+			]
+		},
+	];
+	const tabs = append(parent, $('.picode-whatsnew-tabs', { role: 'tablist' }));
+	const list = append(parent, $('.picode-whatsnew-list'));
+	const result = append(parent, $('.picode-whatsnew-sync-result'));
+	const draw = (groupId: string) => {
+		for (const tab of Array.from(tabs.children)) {
+			tab.classList.toggle('active', (tab as HTMLElement).dataset.group === groupId);
+		}
+		const group = groups.find(candidate => candidate.id === groupId)!;
+		clearNode(list);
+		const rows: HTMLElement[] = [];
+		const choose = (index: number) => {
+			rows.forEach((row, i) => row.classList.toggle('active', i === index));
+			result.textContent = group.pages[index].detail;
+		};
+		group.pages.forEach((page, index) => {
+			const row = append(list, $('button.picode-whatsnew-row', { type: 'button' }));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(page.icon)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = page.label;
+			store.add(addDisposableListener(row, EventType.CLICK, () => choose(index)));
+			rows.push(row);
+		});
+		choose(0);
+	};
+	for (const group of groups) {
+		const tab = append(tabs, $('button.picode-whatsnew-tab', { type: 'button', role: 'tab' }));
+		tab.dataset.group = group.id;
+		tab.textContent = group.label;
+		store.add(addDisposableListener(tab, EventType.CLICK, () => draw(group.id)));
+	}
+	draw('preferences');
 }
 
 function importPreview(parent: HTMLElement, store: DisposableStore): void {

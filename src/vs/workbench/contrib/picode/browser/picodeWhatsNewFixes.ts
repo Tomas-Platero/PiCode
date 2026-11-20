@@ -24,6 +24,22 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.4.2',
+			text: localize('picodeWhatsNew.fix.piProblems', "**pi tells you what went wrong.** An extension that could not load, or a model a saved chat could not get back, now shows once in the chat instead of silently missing. pi itself moves to version 1.6."),
+		},
+		{
+			since: '2.4.2',
+			text: localize('picodeWhatsNew.fix.thinkingLevels', "**The thinking picker only offers what your model can do.** Levels a model refuses (GPT-6.2 has no Off or Minimal) are greyed out and say so, instead of being quietly swapped for another."),
+		},
+		{
+			since: '2.4.2',
+			text: localize('picodeWhatsNew.fix.toolsReal', "**Tools lists pi's own tools.** It used to show tools pi does not have; now each of pi's tools has a switch that really turns it off."),
+		},
+		{
+			since: '2.4.2',
+			text: localize('picodeWhatsNew.fix.packageInstalls', "**Package installs never hang.** Installing a pi package that asked for a password could wait forever; it now fails with a clear message."),
+		},
+		{
 			since: '2.4.1',
 			text: localize('picodeWhatsNew.fix.shareUsage', "**You choose whether to help improve PiCode.** The anonymous counts sent with each update check (version, system and whether you used PiCode today) now have their own switch: in the setup, in Settings and in Account › Privacy. Never your code, chats, files or account."),
 		},
