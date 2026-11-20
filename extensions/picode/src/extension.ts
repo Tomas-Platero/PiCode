@@ -56,7 +56,7 @@ import { registerPiSessionsProvider } from './sessions-register';
 import { setSessionGitProfile } from './session-git';
 import { registerSessionBranchCommands } from './session-branch-commands';
 import { registerSessionActions } from './session-actions';
-import { applyProductEnv, pointChildPiAtThisPi, subagentInjectionEnv } from './product-env';
+import { applyProductEnv, applyUsageSharing, pointChildPiAtThisPi, subagentInjectionEnv } from './product-env';
 import { explainTaskFailure } from './subagent-failure';
 import { applyIntercomBroker } from './intercom-config';
 import { traceChildPi } from './child-trace';
@@ -2509,6 +2509,14 @@ export function activate(context: vscode.ExtensionContext): void {
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
 	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
 	applyProductEnv(process.env, profileDirectory(context.extensionUri));
+	// "Help Improve PiCode" also decides whether pi sends its own install and update report.
+	const syncUsageSharing = () => applyUsageSharing(vscode.workspace.getConfiguration('picode.privacy').get<boolean>('shareUsage') !== false);
+	syncUsageSharing();
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+		if (e.affectsConfiguration('picode.privacy.shareUsage')) {
+			syncUsageSharing();
+		}
+	}));
 	// gentle-pi's subagents are child pi processes: they start the pi this editor carries.
 	pointChildPiAtThisPi(
 		path.join(piRuntimeRoot(distributionRoot(context.extensionUri)), 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js'),

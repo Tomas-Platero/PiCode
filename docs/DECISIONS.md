@@ -1980,3 +1980,30 @@ usuario; la App da lectura de issues y solo en los repos que el usuario elija al
 - *What's New* lleva su página cuando salga en una release.
 - **gentle-pi 4.9.0** (2026-11-19): según sus notas, los chats nuevos «que lo admiten» usan el agente principal del perfil que les toca sin tocar el predeterminado. Comprobado el 2026-11-20 en su código (`lib/session-profile-freeze.ts`, `resolveInheritedProfile`): sí incluye el perfil fijado, así que un chat nuevo en un proyecto fijado arranca también el agente principal con el modelo de ese perfil. La marca *This project* ya lo dice así. El servicio de perfiles (`gentle-pi.desktop-profiles-service/v1`) no cambia. Sus extensiones nuevas `gentle-desktop-feed.ts`, `gentle-herdr-desktop-status.ts` y `gentle-tower.ts` quedan en el filtro de `product-packages.ts` (`node build/pins.mjs audit gentle-pi 4.8.0 4.9.0` solo marcaba esas tres).
 
+## ADR-045 — «Ayuda a mejorar PiCode»: el recuento anónimo se elige
+
+> *"para la 2.4.1 revisa la telemetría y que mejroas me ofreces. A parte revisa en la instalación como añadirlo si no está para que puedan o no ayudar a mejorar el software."* — 2026-11-20
+>
+> Valor de serie: *"Encendido"* — 2026-11-20
+
+**Punto de partida.** La telemetría de VS Code ya estaba apagada en el código (ADR-002: `telemetry.telemetryLevel` sin registrar), el informe de fallos no sube a ningún sitio y gentle-pi va con `DO_NOT_TRACK=1` y `GENTLE_AI_TELEMETRY=0` (ADR-031). Lo único que salía era el recuento anónimo que viaja con cada búsqueda de actualizaciones (`X-PiCode-Version`, `X-PiCode-Active`), sin ADR, sin nombrarse en el README y sin forma de apagarlo salvo apagando las actualizaciones.
+
+**Qué se decide.**
+- **Un ajuste propio:** `picode.privacy.shareUsage` (*Help Improve PiCode*), encendido de serie. Apagado, la búsqueda de actualizaciones solo añade `X-PiCode-Usage: off`: no manda la versión ni los periodos, y no guarda el último día activo (`abstractUpdateService.ts`, `updateCheckHeaders`).
+- **El servidor respeta la elección:** con `X-PiCode-Usage: off` responde igual y no cuenta nada (`host/cloud/sync-api/src/lib/usage.ts`, `sharesUsage`). Una versión antigua, sin esa cabecera, sigue contando como antes.
+- **Se elige en tres sitios, con la misma frase:** la tarjeta *Privacy* del último paso del asistente (que guarda la elección al terminar, aunque no se toque), *Ajustes* y *Account › Privacy*.
+- **La página *Privacy* de Cuenta** reúne todo lo que sale del equipo: el interruptor con lo que se envía y lo que nunca se envía, la frecuencia de las actualizaciones de PiCode (`update.mode`) y las comprobaciones de extensiones en Open VSX (`extensions.autoCheckUpdates`). Se movió desde *Resumen* a petición del dueño: «la telemetría ahí no, ponla en cuenta pero en otro lado. Y añade más config y mejor diseño».
+- **pi va con el mismo interruptor** («Unirlo al interruptor», 2026-11-20). pi envía por su cuenta un aviso anónimo al instalarse y al actualizarse (`enableInstallTelemetry`, encendido de serie en pi). Con el interruptor apagado, el editor pone `PI_TELEMETRY=0` y pi no envía nada; encendido, la quita y decide el ajuste propio de pi (`extensions/picode/src/product-env.ts`, `applyUsageSharing`). Gentle AI sigue apagado siempre (ADR-031).
+- **Quien llega a la 2.4.1 sin pasar por el asistente** ve un aviso una vez, con *Keep sharing* y *Turn off* (`picodeUsageSharingNotice.ts`). Si ya eligió, no sale.
+- **Segundo cerrojo:** el colector de Microsoft (`1dsAppender.ts`) apunta a `0.0.0.0`, como hace `undo_telemetry.sh` de VSCodium. Sin `aiConfig` en `product.json` ese código ni se crea.
+
+**Qué no se cuenta nunca.** Código, chats, nombres de ficheros, rutas, la cuenta, la IP o cualquier identificador.
+
+**Alternativas descartadas.**
+- **Registrar `telemetry.telemetryLevel` y colgar el recuento de él:** devolvería la página de telemetría de VS Code, con opciones (*crash*, *error*, *all*) que PiCode no tiene.
+- **Apagado de serie:** más respetuoso, pero el dueño prefiere mantener las cifras; el recuento no identifica a nadie.
+- **Informes de fallos o de uso de funciones:** no entran en la 2.4.1; serían otra decisión con su propio interruptor.
+
+**Consecuencias.**
+- Las cifras de la página privada de estadísticas bajan con cada persona que lo apaga, y no se sabe cuántas lo hicieron (no se cuenta el apagado).
+- Falta actualizar la política de privacidad de la web (otro repositorio).

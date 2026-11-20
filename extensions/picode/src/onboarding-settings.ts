@@ -206,6 +206,8 @@ export const EXTRA_SETTINGS: Readonly<Record<string, string>> = {
 	// Asks the editor to download dictation when it opens. The window itself downloads nothing: a
 	// 700 MB transfer belongs where its progress can be seen and cancelled (the Status page).
 	voice: 'picode.voice.downloadOnStart',
+	// "Help Improve PiCode": whether update checks carry the anonymous usage counts (ADR-045).
+	privacy: 'picode.privacy.shareUsage',
 };
 
 /** Turns the extras on or off, ignoring any key the product does not declare. */
