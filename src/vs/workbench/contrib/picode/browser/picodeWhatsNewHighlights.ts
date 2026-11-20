@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions' | 'setup';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions' | 'setup' | 'agentProfiles' | 'syncParts';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser' | 'newIsolatedSession' | 'openSetup';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser' | 'newIsolatedSession' | 'openSetup' | 'openAgentProfiles' | 'openCloudSync';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,50 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'agentProfiles',
+			since: '2.4.0',
+			plan: 'free',
+			icon: Codicon.layers,
+			title: localize('picodeWhatsNew.agentProfiles.title', "Agent profiles: a model for each agent, ready to swap"),
+			summary: localize('picodeWhatsNew.agentProfiles.summary', "A profile says which model each agent uses, with backup models for when one fails. Keep a few (everyday, cheap, deep work) and switch between them in one click."),
+			points: [
+				localize('picodeWhatsNew.agentProfiles.point1', "The chat shows the profile in use; click it to switch, for every new chat or only for this one."),
+				localize('picodeWhatsNew.agentProfiles.point2', "Pin a profile to a project, so its new chats start with it, main agent included."),
+				localize('picodeWhatsNew.agentProfiles.point3', "Each editor profile can bring its own agent profile, applied when you switch to it."),
+			],
+			preview: 'agentProfiles',
+			action: 'openAgentProfiles',
+		},
+		{
+			id: 'layoutSwitch',
+			since: '2.4.0',
+			plan: 'free',
+			icon: Codicon.robot,
+			title: localize('picodeWhatsNew.layoutSwitch.title', "Agent or Editor, from the top bar"),
+			summary: localize('picodeWhatsNew.layoutSwitch.summary', "The layout button is now a switch at the top right: the robot for Agent and </> for Editor, with the one in use lit up."),
+			points: [
+				localize('picodeWhatsNew.layoutSwitch.point1', "You see at a glance which layout you are in, and where the other click takes you."),
+				localize('picodeWhatsNew.layoutSwitch.point2', "It changes at once, without restarting, and the robot blinks when it does."),
+			],
+			preview: 'layout',
+			action: 'switchLayout',
+		},
+		{
+			id: 'syncParts',
+			since: '2.4.0',
+			plan: 'pro',
+			icon: Codicon.cloud,
+			title: localize('picodeWhatsNew.syncParts.title', "Cloud sync, part by part, and your keys stay home"),
+			summary: localize('picodeWhatsNew.syncParts.summary', "Cloud sync now lives in Account, with a new page that shows where your setup goes and every part of it with its own switch."),
+			points: [
+				localize('picodeWhatsNew.syncParts.point1', "Your agents come apart: agents, subagents, skills, agent profiles, MCP servers, models and providers, settings and memory notes."),
+				localize('picodeWhatsNew.syncParts.point2', "MCP servers now travel too. Keys written in them, or in your providers, stay on each computer."),
+				localize('picodeWhatsNew.syncParts.point3', "The settings menu and the command palette open this page instead of the old list."),
+			],
+			preview: 'syncParts',
+			action: 'openCloudSync',
+		},
 		{
 			id: 'setup',
 			since: '2.3.0',

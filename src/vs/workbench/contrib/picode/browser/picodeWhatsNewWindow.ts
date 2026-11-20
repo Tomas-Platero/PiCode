@@ -278,6 +278,10 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.newWorktreeSession', "Start a session in a worktree");
 		case 'openSetup':
 			return localize('picodeWhatsNew.openSetup', "Open the setup");
+		case 'openAgentProfiles':
+			return localize('picodeWhatsNew.openAgentProfiles', "Open agent profiles");
+		case 'openCloudSync':
+			return localize('picodeWhatsNew.openCloudSync', "Open Cloud sync");
 	}
 }
 
@@ -330,6 +334,14 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 		case 'openSetup':
 			close();
 			void services.commandService.executeCommand('picode.setup');
+			return;
+		case 'openAgentProfiles':
+			close();
+			void services.commandService.executeCommand('picode.providersModels.open', 'agents');
+			return;
+		case 'openCloudSync':
+			close();
+			void services.commandService.executeCommand(OPEN_ACCOUNT_COMMAND, 'sync');
 			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
@@ -387,6 +399,8 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	sessionBranches: sessionBranchesPreview,
 	parallelSessions: parallelSessionsPreview,
 	setup: setupPreview,
+	agentProfiles: agentProfilesPreview,
+	syncParts: syncPartsPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -500,6 +514,73 @@ function syncPreview(parent: HTMLElement, store: DisposableStore): void {
 			count();
 		}));
 	}
+	count();
+}
+
+/** Three made-up profiles: picking one shows each agent's model change. */
+function agentProfilesPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.agentProfiles.demo', "Pick a profile and watch each agent's model change."), store);
+	const agents = [
+		localize('picodeWhatsNew.agentProfiles.main', "Main agent"),
+		localize('picodeWhatsNew.agentProfiles.explorer', "Explorer"),
+		localize('picodeWhatsNew.agentProfiles.writer', "Writer"),
+		localize('picodeWhatsNew.agentProfiles.reviewer', "Reviewer"),
+	];
+	const models: Record<'everyday' | 'cheap' | 'deep', readonly string[]> = {
+		everyday: ['Claude Sonnet', 'GPT Mini', 'Claude Sonnet', 'GPT'],
+		cheap: ['DeepSeek Flash', 'DeepSeek Flash', 'Qwen Coder', 'DeepSeek Flash'],
+		deep: ['Claude Opus', 'Claude Sonnet', 'Claude Opus', 'GPT'],
+	};
+	let list: HTMLElement | undefined;
+	const draw = (id: 'everyday' | 'cheap' | 'deep') => {
+		if (!list) {
+			return;
+		}
+		clearNode(list);
+		agents.forEach((agent, index) => {
+			const row = append(list!, $('.picode-whatsnew-row.model'));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(index === 0 ? Codicon.robot : Codicon.organization)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = agent;
+			append(row, $('span.picode-whatsnew-row-detail')).textContent = models[id][index];
+		});
+	};
+	const pick = demoTabs(parent, store, [
+		['everyday', localize('picodeWhatsNew.agentProfiles.everyday', "Everyday")],
+		['cheap', localize('picodeWhatsNew.agentProfiles.cheap', "Cheap")],
+		['deep', localize('picodeWhatsNew.agentProfiles.deep', "Deep work")],
+	] as const, draw);
+	list = append(parent, $('.picode-whatsnew-list'));
+	pick('everyday');
+}
+
+/** The agents' parts with their switches, and the keys that never travel. */
+function syncPartsPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.sync.demo', "Flip a few switches. Nothing really changes here."), store);
+	const parts = [
+		{ label: localize('picodeSyncPartAgents', "Agents"), on: true },
+		{ label: localize('picodeSyncPartSkills', "Skills"), on: true },
+		{ label: localize('picodeSyncPartProfiles', "Agent profiles"), on: true },
+		{ label: localize('picodeSyncPartMcp', "MCP servers"), on: true },
+		{ label: localize('picodeSyncPartMemory', "Memory notes"), on: false },
+	];
+	const list = append(parent, $('.picode-whatsnew-list'));
+	const result = append(parent, $('.picode-whatsnew-sync-result'));
+	const count = () => {
+		result.textContent = localize('picodeWhatsNew.sync.result', "{0} of {1} will travel with you.", parts.filter(part => part.on).length, parts.length);
+	};
+	for (const part of parts) {
+		const label = append(list, $('label.picode-whatsnew-row.toggle'));
+		const input = append(label, $('input', { type: 'checkbox' })) as HTMLInputElement;
+		input.checked = part.on;
+		append(label, $('span.picode-whatsnew-row-label')).textContent = part.label;
+		store.add(addDisposableListener(input, EventType.CHANGE, () => {
+			part.on = input.checked;
+			count();
+		}));
+	}
+	const keys = append(list, $('.picode-whatsnew-row'));
+	append(keys, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.lock)}`));
+	append(keys, $('span.picode-whatsnew-row-detail')).textContent = localize('picodeSyncKeysStay', "Keys and sign-ins stay on each computer: MCP servers and providers travel without them.");
 	count();
 }
 

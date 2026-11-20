@@ -32,12 +32,16 @@ const WATCH_MS = 60_000;
 /** The first read waits for the connector to start. */
 const FIRST_READ_MS = 15_000;
 
+/**
+ * The alerts are about the subscription, which every editor profile shares, so they live in
+ * application storage. Alerts set before that lived in the profile and are still read from there.
+ */
 export function getUsageAlerts(storageService: IStorageService): IUsageAlert[] {
-	return readAlerts(storageService.get(USAGE_ALERTS_STORAGE_KEY, StorageScope.PROFILE));
+	return readAlerts(storageService.get(USAGE_ALERTS_STORAGE_KEY, StorageScope.APPLICATION) ?? storageService.get(USAGE_ALERTS_STORAGE_KEY, StorageScope.PROFILE));
 }
 
 function storeAlerts(storageService: IStorageService, alerts: readonly IUsageAlert[]): void {
-	storageService.store(USAGE_ALERTS_STORAGE_KEY, JSON.stringify(alerts), StorageScope.PROFILE, StorageTarget.USER);
+	storageService.store(USAGE_ALERTS_STORAGE_KEY, JSON.stringify(alerts), StorageScope.APPLICATION, StorageTarget.USER);
 }
 
 export function addUsageAlert(storageService: IStorageService, provider: string, meter: string | undefined, window: string, percent: number): boolean {
@@ -96,7 +100,7 @@ class PicodeUsageAlertsWatcher extends Disposable implements IWorkbenchContribut
 		super();
 		this._register({ dispose: () => clearTimeout(this.timer) });
 		// A new or changed alert is checked straight away, so one already passed says so at once.
-		this._register(storageService.onDidChangeValue(StorageScope.PROFILE, USAGE_ALERTS_STORAGE_KEY, this._store)(() => this.schedule(500)));
+		this._register(storageService.onDidChangeValue(StorageScope.APPLICATION, USAGE_ALERTS_STORAGE_KEY, this._store)(() => this.schedule(500)));
 		this.schedule(FIRST_READ_MS);
 	}
 
@@ -133,10 +137,10 @@ class PicodeUsageAlertsWatcher extends Disposable implements IWorkbenchContribut
 		}
 		// Read again right before deciding: another PiCode window may have just told the user.
 		const alerts = getUsageAlerts(this.storageService);
-		const fired = readFired(this.storageService.get(FIRED_STORAGE_KEY, StorageScope.PROFILE));
+		const fired = readFired(this.storageService.get(FIRED_STORAGE_KEY, StorageScope.APPLICATION));
 		const result = evaluateAlerts(alerts, (data.subscriptions ?? []).filter(meter => meter.windows.length > 0), fired, Date.now());
 		if (JSON.stringify(result.fired) !== JSON.stringify(fired)) {
-			this.storageService.store(FIRED_STORAGE_KEY, JSON.stringify(result.fired), StorageScope.PROFILE, StorageTarget.MACHINE);
+			this.storageService.store(FIRED_STORAGE_KEY, JSON.stringify(result.fired), StorageScope.APPLICATION, StorageTarget.MACHINE);
 		}
 		// Several alerts of one window at once: the highest one says it all.
 		const byWindow = new Map<string, ITriggeredAlert>();

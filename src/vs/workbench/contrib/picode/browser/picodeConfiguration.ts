@@ -24,6 +24,7 @@ import './picodeStatusSection.js';
 import './picodeUsageLimitsSection.js';
 import './picodeUsageMeter.js';
 import './picodeChatBranchChip.js';
+import './picodeChatProfileChip.js';
 import './picodeUsageAlerts.js';
 import './picodeAgentStatusPill.js';
 import './picodeUsageStatus.js';
@@ -170,6 +171,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			order: 3,
 			markdownDescription: localize('picode.pi.thinkingLevel', "How hard pi thinks before answering. Its own setting is used when this is left alone."),
 		},
+		// Not APPLICATION on purpose: each editor profile keeps its own, which is the point of it.
+		'picode.agents.profile': {
+			type: 'string',
+			default: '',
+			order: 3.5,
+			markdownDescription: localize('picode.agents.profile', "The agent profile this editor profile uses. Switching to this editor profile makes it the default for your agents. Leave it empty to keep whichever profile is in use. [Manage agent profiles](command:picode.providersModels.open?%22agents%22)."),
+		},
 		[PICODE_REASONING_SETTING]: {
 			type: 'string',
 			enum: ['hide', 'show'],
@@ -219,6 +227,15 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'boolean',
 			default: false,
 			description: localize('picodeSyncChatsDescription', "Your chats of the last 7 days."),
+		},
+		// The parts of the agents' cloud sync switched off on the Account window's Cloud sync page
+		// (`piProfileContent.ts`). It must be registered: the editor refuses to write an unknown setting.
+		'picode.sync.agentsSkip': {
+			type: 'array',
+			items: { type: 'string', enum: ['agents', 'subagents', 'skills', 'agentProfiles', 'mcp', 'models', 'agentSettings', 'memory'] },
+			default: [],
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('picodeSyncAgentsSkipSetting', "The parts of your agents that stay on this computer when cloud sync is on. Choose them in [Account › Cloud sync](command:picode.account.open?%22sync%22)."),
 		},
 		'picode.mcp.servers': {
 			type: 'array',
