@@ -17,6 +17,7 @@ import { ColorScheme } from '../../../../../platform/theme/common/theme.js';
 import { IThemeService } from '../../../../../platform/theme/common/themeService.js';
 import { aiCustomizationManagementSectionRegistry } from '../../../chat/browser/aiCustomization/aiCustomizationManagementSectionRegistry.js';
 import { AICustomizationManagementSection } from '../../../chat/common/aiCustomizationWorkspaceService.js';
+import { IWorkbenchThemeService } from '../../../../services/themes/common/workbenchThemeService.js';
 import { PicodeSettingsPage } from './picodeSettingsRows.js';
 
 /** What the connector's status reading says about versions and dictation; the rest is unused here. */
@@ -46,6 +47,7 @@ interface IPageServices {
 	readonly commandService: ICommandService;
 	readonly configurationService: IConfigurationService;
 	readonly themeService: IThemeService;
+	readonly workbenchThemeService: IWorkbenchThemeService;
 	readonly productService: IProductService;
 	readonly instantiationService: IInstantiationService;
 }
@@ -63,6 +65,7 @@ function registerPage(spec: IPageSpec): void {
 				commandService: accessor.get(ICommandService),
 				configurationService: accessor.get(IConfigurationService),
 				themeService: accessor.get(IThemeService),
+				workbenchThemeService: accessor.get(IWorkbenchThemeService),
 				productService: accessor.get(IProductService),
 				instantiationService,
 			};
@@ -91,18 +94,19 @@ registerPage({
 	icon: Codicon.settings,
 	description: localize('picodePrefGeneralDesc', "How PiCode looks and how it starts."),
 	keywords: ['theme', 'dark', 'light', 'layout', 'agent', 'editor', 'language', 'zoom', 'startup', 'windows'],
-	build: (page, { configurationService, themeService, commandService }) => {
+	build: (page, { configurationService, themeService, commandService, workbenchThemeService }) => {
 		page.group(localize('picodePrefAppearance', "Appearance"));
 
 		type ThemeMode = 'system' | 'light' | 'dark';
+		const isLight = (type: ColorScheme) => type === ColorScheme.LIGHT || type === ColorScheme.HIGH_CONTRAST_LIGHT;
+		// What is on screen, not what was asked for: the choice follows the theme in force.
 		const themeMode = (): ThemeMode => {
 			if (configurationService.getValue<boolean>('window.autoDetectColorScheme')) {
 				return 'system';
 			}
-			const type = themeService.getColorTheme().type;
-			return type === ColorScheme.LIGHT || type === ColorScheme.HIGH_CONTRAST_LIGHT ? 'light' : 'dark';
+			return isLight(workbenchThemeService.getColorTheme().type) ? 'light' : 'dark';
 		};
-		page.customSegmentedRow<ThemeMode>(
+		const repaintThemeMode = page.customSegmentedRow<ThemeMode>(
 			{ name: localize('picodePrefTheme', "Theme"), description: localize('picodePrefThemeDesc', "Follow your system, or keep one look."), keywords: 'dark light system' },
 			[
 				{ value: 'system', label: localize('picodePrefThemeSystem', "System"), icon: Codicon.deviceDesktop },
@@ -115,15 +119,23 @@ registerPage({
 					await configurationService.updateValue('window.autoDetectColorScheme', true, ConfigurationTarget.USER);
 				} else {
 					await configurationService.updateValue('window.autoDetectColorScheme', false, ConfigurationTarget.USER);
-					const preferred = configurationService.getValue<string>(mode === 'light' ? 'workbench.preferredLightColorTheme' : 'workbench.preferredDarkColorTheme');
-					if (preferred) {
-						await configurationService.updateValue('workbench.colorTheme', preferred, ConfigurationTarget.USER);
+					// The preferred light or dark theme when it is installed; otherwise the first one of
+					// that kind, so the click always changes the look.
+					const wantLight = mode === 'light';
+					const preferred = configurationService.getValue<string>(wantLight ? 'workbench.preferredLightColorTheme' : 'workbench.preferredDarkColorTheme');
+					const themes = await workbenchThemeService.getColorThemes();
+					const target = themes.find(t => t.settingsId === preferred && isLight(t.type) === wantLight)
+						?? themes.find(t => isLight(t.type) === wantLight && t.type !== ColorScheme.HIGH_CONTRAST_LIGHT && t.type !== ColorScheme.HIGH_CONTRAST_DARK);
+					if (target && isLight(workbenchThemeService.getColorTheme().type) !== wantLight) {
+						await workbenchThemeService.setColorTheme(target, ConfigurationTarget.USER);
 					}
 				}
+				repaintThemeMode();
 				page.markSaved(saved);
 			},
 			['window.autoDetectColorScheme', 'workbench.colorTheme'],
 		);
+		page.register(workbenchThemeService.onDidColorThemeChange(() => repaintThemeMode()));
 
 		const themeName = () => themeService.getColorTheme().label;
 		const themeRow = page.row({ name: localize('picodePrefColorTheme', "Color theme"), description: themeName(), keywords: 'colors' });

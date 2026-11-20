@@ -7,7 +7,7 @@ import '../../../chat/browser/aiCustomization/media/picodeSettings.css';
 import * as DOM from '../../../../../base/browser/dom.js';
 import { renderIcon } from '../../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
-import { Disposable } from '../../../../../base/common/lifecycle.js';
+import { Disposable, IDisposable } from '../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { localize } from '../../../../../nls.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
@@ -313,6 +313,11 @@ export class PicodeSettingsPage extends Disposable {
 		paint();
 		this.watch(row.key, paint);
 		this._register(DOM.addDisposableListener(input, DOM.EventType.CHANGE, () => this.save(row, input.value.trim(), saved)));
+	}
+
+	/** Keeps something alive as long as the page (a listener of the caller's own). */
+	register<T extends IDisposable>(disposable: T): T {
+		return this._register(disposable);
 	}
 
 	/** Repaints something of the caller's own when one of these settings changes. */
