@@ -127,7 +127,7 @@ zip vs installed setup) and the version-numbering rules live in
 
 `raw.githubusercontent.com` serves the files. The editor does not ask it directly: it asks
 `https://www.getpicode.app/api/feed/<branch>/updates/...`, which adds one to an anonymous counter
-and redirects to the same document on GitHub (see *Anonymous usage* in
+(unless the person turned *Help Improve PiCode* off, ADR-045) and redirects to the same document on GitHub (see *Anonymous usage* in
 [`cloud/sync-api/README.md`](../host/cloud/sync-api/README.md)).
 
 ## ✅ 8. Verification

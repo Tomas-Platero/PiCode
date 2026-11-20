@@ -195,8 +195,10 @@ What is read, and nothing else:
 
 Firestore layout: `usage/{YYYY-MM-DD}` → `{ checks, active: { day, week, month }, os, arch,
 channel, version, package }`, numbers only. The breakdowns count only the first check of the
-day, so they add up to the day's active installs. Turning updates off in the editor
-(`update.mode: none`) stops the checks, and with them any counting.
+day, so they add up to the day's active installs. A check that sends `X-PiCode-Usage: off`
+(the person turned *Help Improve PiCode* off, `picode.privacy.shareUsage`) is redirected and
+not counted at all; that editor sends neither of the two headers above (ADR-045). Turning
+updates off in the editor (`update.mode: none`) stops the checks too.
 
 `GET /api/stats` is the summary behind the website's **private** dashboard. It answers only a
 caller that sends `Authorization: Bearer <STATS_TOKEN>` (the secret is set in Vercel, in this

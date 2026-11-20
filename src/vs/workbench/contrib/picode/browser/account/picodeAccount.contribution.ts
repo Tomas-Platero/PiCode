@@ -17,6 +17,7 @@ import { PICODE_ACCOUNT_EDITOR_ID, PICODE_ACCOUNT_EDITOR_INPUT_ID, PicodeAccount
 import './picodeAccountOverviewSection.js';
 import './picodeAccountSyncSection.js';
 import './picodeConnectionsSection.js';
+import './picodeAccountPrivacySection.js';
 import './picodeProFeaturesSection.js';
 
 export const PICODE_OPEN_ACCOUNT_COMMAND = 'picode.account.open';

@@ -24,6 +24,10 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.4.1',
+			text: localize('picodeWhatsNew.fix.shareUsage', "**You choose whether to help improve PiCode.** The anonymous counts sent with each update check (version, system and whether you used PiCode today) now have their own switch: in the setup, in Settings and in Account › Privacy. Never your code, chats, files or account."),
+		},
+		{
 			since: '2.4.0',
 			text: localize('picodeWhatsNew.fix.keysStayHome', "**Your provider keys no longer travel to the cloud.** Keys written in full in your providers or MCP servers stay on each computer; the rest of those settings still syncs."),
 		},
