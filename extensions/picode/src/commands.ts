@@ -122,7 +122,8 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 			cwd,
 			...(agentDir === undefined ? {} : { agentDir }),
 			...settingsForFolder(sdk, cwd, agentDir),
-			...(builtinFactories.length === 0 ? {} : { resourceLoaderOptions: { extensionFactories: builtinFactories } }),
+			// No terminal for git or npm here: output kept, no password prompts (see agent.ts).
+			resourceLoaderOptions: { packageCommandOutput: 'capture', ...(builtinFactories.length === 0 ? {} : { extensionFactories: builtinFactories }) },
 		});
 		// pi's own session home for this project — the same shape the chat's live session
 		// uses (`agent.ts`), so a discovery session that ever flushed would file beside the

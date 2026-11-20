@@ -26,6 +26,7 @@ import { bundledSkillPaths } from './bundled-skills';
 import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import { windowPastConversationTools } from './past-conversations-window';
 import { mcpNotice, mcpNoticeLine } from './mcp-notice';
+import { sessionProblems, unseenProblems, type SessionProblem } from './session-problems';
 import {
 	decisionFromAnswer,
 	isReadOnlyShellCommand,
@@ -246,6 +247,8 @@ export interface PiSession {
 	readonly systemPrompt?: string;
 	readonly messages?: readonly unknown[];
 	getContextUsage?(): { readonly tokens: number | null; readonly contextWindow: number; readonly percent: number | null } | undefined;
+	/** The thinking levels the session's model accepts (pi 1.6: GPT-6.2 refuses `off` and `minimal`). */
+	getAvailableThinkingLevels?(): readonly string[];
 	readonly settingsManager?: { getCompactionSettings?(model?: PiModel): { readonly reserveTokens: number } | undefined };
 	/** Names the conversation: what pi-intercom calls the session, and what its transcript records. */
 	setSessionName?(name: string): void;
@@ -1243,6 +1246,28 @@ function putInChatInput(text: string): void {
 /** The MCP notices this window already showed (`McpNotice.key`), so a new chat does not repeat one. */
 const shownMcpNotices = new Set<string>();
 
+/** Problems pi reported while building a session, already said in this window. */
+const shownSessionProblems = new Set<string>();
+
+/**
+ * Says what pi found wrong while building a session: in the log always, and in the chat once per
+ * window as its alert card, so a rebuilt session does not repeat an unchanged warning.
+ */
+function showSessionProblems(turn: TurnHolder, problems: readonly SessionProblem[], log: (line: string) => void): void {
+	for (const problem of problems) {
+		log(`pi session (${problem.kind}): ${problem.text}`);
+	}
+	const stream = turn.current?.stream;
+	if (stream === undefined) {
+		return;
+	}
+	for (const problem of unseenProblems(problems, shownSessionProblems)) {
+		try {
+			stream.warning(problem.text);
+		} catch { /* a stream that already closed is not an error to report */ }
+	}
+}
+
 function extensionUiContext(log: (line: string) => void, turn: TurnHolder): PiExtensionUiContext {
 	const noop = (): void => { /* the chat owns this surface */ };
 	return {
@@ -1645,6 +1670,13 @@ export const CHAT_ACTIVE_CONTEXT = 'picode.chatActive';
 
 /** The live session's reset hook, set by registerPiAgent for `resetChatSession`. */
 let sessionUsageProvider: (() => SessionUsage | undefined) | undefined;
+let thinkingLevelsProvider: ((key?: unknown) => AvailableThinkingLevels | undefined) | undefined;
+
+/** The thinking levels a chat's model accepts, as pi reports them, with the model's name. */
+export interface AvailableThinkingLevels {
+	readonly levels: readonly string[];
+	readonly model?: string;
+}
 let sessionResetter: (() => void) | undefined;
 /** The live session's command registry reader, set by registerPiAgent for the slash list. */
 let sessionCommandsProvider: (() => { readonly key: string; readonly commands: readonly PiCommand[] } | undefined) | undefined;
@@ -2091,6 +2123,16 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	/** The chat the person is looking at (its resource, from the core), or the one that spoke last. */
 	const chatOf = (key: unknown): ChatPi | undefined => (typeof key === 'string' ? chats.get(key) : undefined) ?? active;
 	let lastContext: { readonly signature: string; readonly breakdown: IContextBreakdown } | undefined;
+	// pi 1.6 models such as GPT-6.2 refuse some levels, and pi quietly moves a refused choice to the
+	// nearest one it accepts: the chat's picker greys out what this model cannot do instead.
+	thinkingLevelsProvider = key => {
+		const session = chatOf(key)?.session;
+		const levels = session?.getAvailableThinkingLevels?.();
+		if (session === undefined || levels === undefined || levels.length === 0) {
+			return undefined;
+		}
+		return { levels: [...levels], model: session.model?.name };
+	};
 	sessionContextProvider = key => {
 		const session = chatOf(key)?.session;
 		if (session === undefined) {
@@ -2267,21 +2309,16 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 						extensionFactories: [...loaded.builtins, permissionExtension(deps.log, chat.turn), usageHeadersExtension(), chatModelExtension(), agentProfilesExtension(chat.key) as unknown as PiInlineExtension],
 						// PiCode's own skills (`skills/`), next to the profile's; `out/` is one level down.
 						additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
+						// The editor has no terminal for git or npm to write to or ask a password in: their
+						// output is kept (a failure still carries its end) and they never wait on a prompt.
+						packageCommandOutput: 'capture',
+						onPackageProgress: event => {
+							if (event.type === 'start' || event.type === 'error') {
+								deps.log(`pi packages: ${event.action} ${event.source}${event.message ? ` (${event.message})` : ''}`);
+							}
+						},
 					},
 				});
-				// pi collects load problems instead of failing the session; one that could not be
-				// loaded is said here, and the turn still runs without it.
-				for (const diagnostic of chat.services.diagnostics ?? []) {
-					if (diagnostic.type === 'error' || diagnostic.type === 'warning') {
-						deps.log(`pi resources (${diagnostic.type}): ${diagnostic.message}`);
-					}
-				}
-				// `services.diagnostics` carries provider registrations, not extension load
-				// failures: pi collects those in the loader's own `errors`, which nothing read,
-				// so a bridge with a broken import graph disappeared without a single line.
-				for (const { path: failedPath, error } of chat.services.resourceLoader.getExtensions().errors) {
-					deps.log(`pi extension failed to load (${failedPath}): ${error}`);
-				}
 				if (scopeChanged || chat.sessionManager === undefined || profileChanged) {
 					// pi's own session home: the per-project folder under the profile's `sessions/`,
 					// the same shape `getDefaultSessionDirPath` builds (replicated by `piProjectSlug`,
@@ -2328,6 +2365,13 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					...(disabledTools.length === 0 ? {} : { excludeTools: [...disabledTools] }),
 				});
 				chat.session = created.session;
+				// What pi found wrong while building it, said once per window as the chat's own alert
+				// card (pi 1.6 hands these to the host instead of printing them).
+				showSessionProblems(chat.turn, sessionProblems({
+					diagnostics: chat.services.diagnostics,
+					extensionErrors: chat.services.resourceLoader.getExtensions().errors,
+					modelFallbackMessage: created.modelFallbackMessage,
+				}), deps.log);
 				// The session exists and its extensions are loaded; this is what starts them. Called
 				// before the first turn, because `session_start` is where they do their startup work.
 				watchLateTurns(chat.session, chat.key, deps.log);
@@ -2606,6 +2650,11 @@ export const onPiSessionChanged = sessionChangedEmitter.event;
 /** The live session's usage totals and current selection, as the status view shows them. */
 export function getSessionUsage(): SessionUsage | undefined {
 	return sessionUsageProvider?.();
+}
+
+/** The thinking levels a chat's model accepts (`key`: the chat's resource; the last chat otherwise). */
+export function availableThinkingLevels(key?: unknown): AvailableThinkingLevels | undefined {
+	return thinkingLevelsProvider?.(key);
 }
 
 /** Where the context of a chat goes (`key`: the chat's resource; the last chat otherwise). */
