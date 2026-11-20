@@ -295,19 +295,30 @@ label.picode-account-row:hover,
 
 /* Cloud sync */
 .picode-sync-page {
-	max-width: 760px;
+	gap: 18px;
+	max-width: 720px;
 }
 
+.picode-sync-title {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+/* The hero: a drawing of where the setup goes, then the state and its actions. */
 .picode-sync-hero {
 	--picode-sync-tone: var(--vscode-descriptionForeground);
+	position: relative;
 	display: flex;
-	align-items: center;
-	gap: 16px;
-	padding: 18px 20px;
-	border: 1px solid var(--vscode-panel-border);
-	border-left: 3px solid var(--picode-sync-tone);
-	border-radius: 10px;
-	background: var(--vscode-editorWidget-background, transparent);
+	flex-direction: column;
+	gap: 18px;
+	padding: 22px 24px 20px;
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--picode-sync-tone) 30%, var(--vscode-panel-border));
+	border-radius: 14px;
+	background:
+		radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--picode-sync-tone) 14%, transparent), transparent 70%),
+		var(--vscode-editorWidget-background, transparent);
 }
 
 .picode-sync-hero.ok {
@@ -315,27 +326,107 @@ label.picode-account-row:hover,
 }
 
 .picode-sync-hero.busy {
-	--picode-sync-tone: var(--vscode-progressBar-background);
+	--picode-sync-tone: var(--vscode-charts-blue);
 }
 
 .picode-sync-hero.warn {
 	--picode-sync-tone: var(--vscode-editorWarning-foreground);
 }
 
-.picode-sync-hero-icon {
+.picode-sync-flow {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	padding-top: 4px;
+}
+
+.picode-sync-flow-node {
+	display: flex;
+	flex: 0 0 120px;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-sync-flow-device {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 30%, transparent);
+	border-radius: 12px;
+	background: var(--vscode-editor-background);
+	color: var(--vscode-foreground);
+}
+
+.picode-sync-flow-device .codicon {
+	font-size: 18px;
+}
+
+.picode-sync-flow-line {
+	flex: 1 1 40px;
+	max-width: 110px;
+	height: 2px;
+	margin-bottom: 20px;
+	border-radius: 1px;
+	background: color-mix(in srgb, var(--picode-sync-tone) 55%, transparent);
+}
+
+.picode-sync-hero.off .picode-sync-flow-line {
+	background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--vscode-descriptionForeground) 45%, transparent) 0 6px, transparent 6px 11px);
+}
+
+.picode-sync-flow-line.moving {
+	background: repeating-linear-gradient(90deg, var(--picode-sync-tone) 0 8px, transparent 8px 14px);
+	background-size: 28px 2px;
+	animation: picode-sync-flow 0.9s linear infinite;
+}
+
+@keyframes picode-sync-flow {
+	from {
+		background-position: 0 0;
+	}
+
+	to {
+		background-position: 28px 0;
+	}
+}
+
+.picode-sync-flow-cloud {
 	display: flex;
 	flex: 0 0 auto;
 	align-items: center;
 	justify-content: center;
-	width: 42px;
-	height: 42px;
+	width: 64px;
+	height: 64px;
+	margin-bottom: 20px;
 	border-radius: 50%;
 	color: var(--picode-sync-tone);
-	background: color-mix(in srgb, var(--picode-sync-tone) 16%, transparent);
+	background: color-mix(in srgb, var(--picode-sync-tone) 16%, var(--vscode-editor-background));
+	box-shadow: 0 0 0 6px color-mix(in srgb, var(--picode-sync-tone) 7%, transparent), 0 0 28px color-mix(in srgb, var(--picode-sync-tone) 30%, transparent);
 }
 
-.picode-sync-hero-icon .codicon {
-	font-size: 22px;
+.picode-sync-hero.off .picode-sync-flow-cloud {
+	border: 1px dashed color-mix(in srgb, var(--vscode-descriptionForeground) 45%, transparent);
+	background: var(--vscode-editor-background);
+	box-shadow: none;
+}
+
+.picode-sync-flow-cloud .codicon {
+	font-size: 28px;
+}
+
+.picode-sync-hero-body {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding-top: 16px;
+	border-top: 1px solid var(--vscode-panel-border);
 }
 
 .picode-sync-hero-text {
@@ -362,130 +453,149 @@ label.picode-account-row:hover,
 	gap: 8px;
 }
 
-.picode-sync-hero-actions .monaco-button,
-.picode-account-row > .monaco-button {
+.picode-sync-hero-actions .monaco-button {
 	flex: 0 0 auto;
 	width: auto;
-	padding: 5px 16px;
-	border-radius: 6px;
+	padding: 6px 18px;
+	border-radius: 8px;
 }
 
+/* Groups of rows, like a settings list. */
 .picode-sync-head {
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
-	margin-top: 10px;
+	margin: 6px 2px -8px;
 }
 
 .picode-sync-head h3 {
 	margin: 0;
 }
 
-.picode-sync-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-	gap: 10px;
-}
-
-.picode-sync-tile {
+.picode-sync-card {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
-	padding: 12px 14px;
+	overflow: hidden;
 	border: 1px solid var(--vscode-panel-border);
-	border-radius: 10px;
+	border-radius: 12px;
 	background: var(--vscode-editorWidget-background, transparent);
-	transition: border-color 0.12s ease;
 }
 
-.picode-sync-tile:not(.on) {
-	opacity: 0.72;
-}
-
-.picode-sync-tile:hover {
-	border-color: var(--vscode-focusBorder);
-	opacity: 1;
-}
-
-.picode-sync-tile-head {
+.picode-sync-item {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: 12px;
+	padding: 11px 16px;
+	transition: background 0.12s ease;
+}
+
+.picode-sync-item + .picode-sync-item {
+	border-top: 1px solid var(--vscode-panel-border);
+}
+
+.picode-sync-item:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-sync-item-label {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
 	cursor: pointer;
 }
 
-.picode-sync-tile-head strong {
-	flex: 1;
-	min-width: 0;
-}
-
-.picode-sync-tile-icon {
+.picode-sync-item-icon {
 	display: flex;
 	flex: 0 0 auto;
 	align-items: center;
 	justify-content: center;
-	width: 28px;
-	height: 28px;
-	border-radius: 7px;
-	color: var(--vscode-button-background);
-	background: color-mix(in srgb, var(--vscode-button-background) 14%, transparent);
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+	color: var(--picode-sync-item-color);
+	background: color-mix(in srgb, var(--picode-sync-item-color) 16%, transparent);
+	transition: filter 0.12s ease, opacity 0.12s ease;
 }
 
-.picode-sync-tile-text {
-	margin: 0 0 0 38px;
-	line-height: 1.45;
+.picode-sync-item:not(.on) .picode-sync-item-icon {
+	filter: grayscale(1);
+	opacity: 0.55;
+}
+
+.picode-sync-item-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.picode-sync-item-text strong {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+}
+
+.picode-sync-item-text > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	color: var(--vscode-descriptionForeground);
 }
 
-.picode-sync-tile-foot {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	min-height: 24px;
-	margin-left: 38px;
-}
-
-.picode-sync-tile-state {
-	display: flex;
-	align-items: center;
-	gap: 5px;
-	font-size: 12px;
+.picode-sync-item:not(.on) .picode-sync-item-text strong {
 	color: var(--vscode-descriptionForeground);
 }
 
-.picode-sync-tile-state.ok .codicon {
+.picode-sync-item-state {
+	display: inline-flex;
 	color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
 }
 
-.picode-sync-tile-state.warn {
+.picode-sync-item-state .codicon {
+	font-size: 13px;
+}
+
+.picode-sync-item-state.warn {
 	color: var(--vscode-editorWarning-foreground);
 }
 
-.picode-sync-tile-state.busy .codicon {
-	color: var(--vscode-progressBar-background);
-}
-
-.picode-sync-tile-foot .monaco-button.picode-sync-small-button {
+.picode-sync-item .monaco-button.picode-sync-small-button {
 	flex: 0 0 auto;
 	width: auto;
 	padding: 2px 12px;
 	border-radius: 6px;
 }
 
-/* A switch, not a checkbox: each tile says on or off at a glance. */
+.picode-sync-note {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: -8px 4px 0;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-sync-note .codicon {
+	font-size: 12px;
+}
+
+/* A switch, not a checkbox: each row says on or off at a glance. */
 input.picode-sync-switch {
 	appearance: none;
 	flex: 0 0 auto;
 	position: relative;
-	width: 32px;
-	height: 18px;
+	width: 34px;
+	height: 20px;
 	margin: 0;
-	border-radius: 9px;
+	border-radius: 10px;
 	background: color-mix(in srgb, var(--vscode-descriptionForeground) 22%, transparent);
 	border: 1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 45%, transparent);
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 input.picode-sync-switch::after {
@@ -493,8 +603,8 @@ input.picode-sync-switch::after {
 	position: absolute;
 	top: 2px;
 	left: 2px;
-	width: 12px;
-	height: 12px;
+	width: 14px;
+	height: 14px;
 	border-radius: 50%;
 	background: var(--vscode-descriptionForeground);
 	transition: transform 0.15s ease, background 0.15s ease;
@@ -515,13 +625,47 @@ input.picode-sync-switch:focus-visible {
 	outline-offset: 2px;
 }
 
+/* What the cloud itself holds: quiet links at the end. */
+.picode-sync-foot {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	padding: 4px 2px 0;
+}
+
+.picode-sync-foot-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 0;
+	border: none;
+	background: none;
+	color: var(--vscode-descriptionForeground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-sync-foot-link:hover {
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-sync-foot-link:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.picode-sync-flow-line.moving {
+		animation: none;
+	}
+}
+
 @media (max-width: 620px) {
-	.picode-sync-hero {
+	.picode-sync-hero-body {
 		flex-wrap: wrap;
 	}
 
-	.picode-sync-grid {
-		grid-template-columns: 1fr;
+	.picode-sync-flow-node {
+		flex-basis: 80px;
 	}
 }
 

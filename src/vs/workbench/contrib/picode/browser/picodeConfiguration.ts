@@ -228,6 +228,15 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			default: false,
 			description: localize('picodeSyncChatsDescription', "Your chats of the last 7 days."),
 		},
+		// The parts of the agents' cloud sync switched off on the Account window's Cloud sync page
+		// (`piProfileContent.ts`). It must be registered: the editor refuses to write an unknown setting.
+		'picode.sync.agentsSkip': {
+			type: 'array',
+			items: { type: 'string', enum: ['agents', 'subagents', 'skills', 'agentProfiles', 'mcp', 'models', 'agentSettings', 'memory'] },
+			default: [],
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('picodeSyncAgentsSkipSetting', "The parts of your agents that stay on this computer when cloud sync is on. Choose them in [Account › Cloud sync](command:picode.account.open?%22sync%22)."),
+		},
 		'picode.mcp.servers': {
 			type: 'array',
 			default: [],

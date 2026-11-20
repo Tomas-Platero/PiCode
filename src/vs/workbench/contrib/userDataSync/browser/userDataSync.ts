@@ -687,7 +687,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 		}, {
 			id: SyncResource.PiProfile,
 			label: getSyncAreaLabel(SyncResource.PiProfile),
-			description: localize('pi profile sync description', "Agents, subagents and skills of your Pi profile")
+			description: localize('pi profile sync description', "Agents, skills, agent profiles, MCP servers and models")
 		}];
 
 

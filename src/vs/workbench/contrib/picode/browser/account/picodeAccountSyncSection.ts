@@ -16,14 +16,15 @@ import { IConfigurationService } from '../../../../../platform/configuration/com
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { defaultButtonStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
 import { IUserDataSyncEnablementService, IUserDataSyncService, SyncResource, SyncStatus } from '../../../../../platform/userDataSync/common/userDataSync.js';
-import { IUserDataSyncMachine, IUserDataSyncMachinesService, isWebPlatform } from '../../../../../platform/userDataSync/common/userDataSyncMachines.js';
+import { IUserDataSyncMachine, IUserDataSyncMachinesService } from '../../../../../platform/userDataSync/common/userDataSyncMachines.js';
+import { PI_PROFILE_PARTS, PI_PROFILE_SKIP_SETTING, PiProfilePart, skippedPiProfileParts } from '../../../../../platform/userDataSync/common/piProfileContent.js';
 import { AccountStatus, IUserDataSyncWorkbenchService } from '../../../../services/userDataSync/common/userDataSync.js';
 import { registerAccountSection } from './picodeAccountSections.js';
 import { IPicodeProEntitlement } from './picodeProEntitlement.js';
 
 const $ = DOM.$;
 
-/** The switch the Chats tile flips; the connector reads it to back chats up in the background. */
+/** The switch the Chats row flips; the connector reads it to back chats up in the background. */
 const CHATS_SETTING = 'picode.sync.chats';
 
 /** VS Code's own sync commands, run from the buttons of this page. */
@@ -38,27 +39,62 @@ const COMMANDS = {
 	restoreChats: 'picode.restoreSessions',
 };
 
-interface ICategory {
-	readonly resource: SyncResource;
+/** One row of the page: what it is, the colour of its icon, and how its switch is read and set. */
+interface IItem {
+	readonly id: string;
 	readonly icon: ThemeIcon;
+	/** A `--vscode-charts-*` colour, so every row is told apart at a glance and follows the theme. */
+	readonly color: string;
 	readonly label: string;
 	readonly description: string;
+	/** The sync engine's resource, or none for Chats, which the connector copies on its own. */
+	readonly resource?: SyncResource;
+	/** For the agents' rows: the part of that resource the row switches (`piProfileContent.ts`). */
+	readonly part?: PiProfilePart;
 }
 
+interface IGroup {
+	readonly label: string;
+	readonly items: readonly IItem[];
+	/** One line under the group, for what it leaves out on purpose. */
+	readonly note?: string;
+}
+
+const CHATS_ID = 'chats';
+
 /**
- * Everything the cloud keeps, in the order it is read: what pi uses first, then the editor. Every
- * resource the sync engine moves has its tile, so nothing travels without the owner seeing it here.
+ * Everything the cloud keeps, in two groups: what pi uses, then the editor. Every resource the sync
+ * engine moves has its row, so nothing travels without the owner seeing it here.
  */
-const CATEGORIES: readonly ICategory[] = [
-	{ resource: SyncResource.PiProfile, icon: Codicon.robot, label: localize('picodeSyncAgents', "Agents and skills"), description: localize('picodeSyncAgentsDetail', "Agents, subagents, skills, agent profiles with their backup models, and pi's MCP servers.") },
-	{ resource: SyncResource.Profiles, icon: Codicon.account, label: localize('picodeSyncProfiles', "Editor profiles"), description: localize('picodeSyncProfilesDetail', "Your editor profiles and the agent profile each one uses.") },
-	{ resource: SyncResource.Settings, icon: Codicon.settingsGear, label: localize('picodeSyncSettings', "Settings"), description: localize('picodeSyncSettingsDescription', "Your editor preferences.") },
-	{ resource: SyncResource.Keybindings, icon: Codicon.keyboard, label: localize('picodeSyncShortcuts', "Keyboard shortcuts"), description: localize('picodeSyncShortcutsDescription', "The keys you changed.") },
-	{ resource: SyncResource.Extensions, icon: Codicon.extensions, label: localize('picodeSyncExtensions', "Extensions"), description: localize('picodeSyncExtensionsDescription', "The extensions you installed.") },
-	{ resource: SyncResource.Snippets, icon: Codicon.symbolSnippet, label: localize('picodeSyncSnippets', "Snippets"), description: localize('picodeSyncSnippetsDescription', "Text you insert with a short word.") },
-	{ resource: SyncResource.Tasks, icon: Codicon.tasklist, label: localize('picodeSyncTasks', "Tasks"), description: localize('picodeSyncTasksDetail', "The tasks you set up to build or run your projects.") },
-	{ resource: SyncResource.Mcp, icon: Codicon.mcp, label: localize('picodeSyncEditorMcp', "Editor MCP servers"), description: localize('picodeSyncEditorMcpDetail', "MCP servers you added to the editor itself.") },
-	{ resource: SyncResource.GlobalState, icon: Codicon.layout, label: localize('picodeSyncLayout', "Layout"), description: localize('picodeSyncLayoutDescription', "How the editor looks and opens.") },
+const GROUPS: readonly IGroup[] = [
+	{
+		label: localize('picodeSyncGroupAgents', "Agents and chats"),
+		items: [
+			{ id: 'agents', resource: SyncResource.PiProfile, part: 'agents', icon: Codicon.robot, color: 'purple', label: localize('picodeSyncPartAgents', "Agents"), description: localize('picodeSyncPartAgentsDetail', "Your agents and the chains they run.") },
+			{ id: 'subagents', resource: SyncResource.PiProfile, part: 'subagents', icon: Codicon.organization, color: 'blue', label: localize('picodeSyncPartSubagents', "Subagents"), description: localize('picodeSyncPartSubagentsDetail', "The helpers your agents hand work to.") },
+			{ id: 'skills', resource: SyncResource.PiProfile, part: 'skills', icon: Codicon.mortarBoard, color: 'green', label: localize('picodeSyncPartSkills', "Skills"), description: localize('picodeSyncPartSkillsDetail', "What your agents know how to do.") },
+			{ id: 'agentProfiles', resource: SyncResource.PiProfile, part: 'agentProfiles', icon: Codicon.layers, color: 'orange', label: localize('picodeSyncPartProfiles', "Agent profiles"), description: localize('picodeSyncPartProfilesDetail', "Which model each agent uses, with its backup models.") },
+			{ id: 'mcp', resource: SyncResource.PiProfile, part: 'mcp', icon: Codicon.mcp, color: 'red', label: localize('picodeSyncPartMcp', "MCP servers"), description: localize('picodeSyncPartMcpDetail', "The servers your agents connect to.") },
+			{ id: 'models', resource: SyncResource.PiProfile, part: 'models', icon: Codicon.chip, color: 'yellow', label: localize('picodeSyncPartModels', "Models and providers"), description: localize('picodeSyncPartModelsDetail', "The providers and models you added.") },
+			{ id: 'agentSettings', resource: SyncResource.PiProfile, part: 'agentSettings', icon: Codicon.settings, color: 'blue', label: localize('picodeSyncPartSettings', "Agent settings"), description: localize('picodeSyncPartSettingsDetail', "Default model, package list, how the agent talks and how chats start.") },
+			{ id: 'memory', resource: SyncResource.PiProfile, part: 'memory', icon: Codicon.note, color: 'purple', label: localize('picodeSyncPartMemory', "Memory notes"), description: localize('picodeSyncPartMemoryDetail', "The notes your agents saved.") },
+			{ id: CHATS_ID, icon: Codicon.commentDiscussion, color: 'blue', label: localize('picodeSyncChats', "Chats"), description: localize('picodeSyncChatsDescription', "Your chats of the last 7 days.") },
+		],
+		note: localize('picodeSyncKeysStay', "Keys and sign-ins stay on each computer: MCP servers and providers travel without them."),
+	},
+	{
+		label: localize('picodeSyncGroupEditor', "Editor"),
+		items: [
+			{ id: 'profiles', resource: SyncResource.Profiles, icon: Codicon.account, color: 'purple', label: localize('picodeSyncProfiles', "Editor profiles"), description: localize('picodeSyncProfilesDetail', "Your editor profiles and the agent profile each one uses.") },
+			{ id: 'settings', resource: SyncResource.Settings, icon: Codicon.settingsGear, color: 'blue', label: localize('picodeSyncSettings', "Settings"), description: localize('picodeSyncSettingsDescription', "Your editor preferences.") },
+			{ id: 'keys', resource: SyncResource.Keybindings, icon: Codicon.keyboard, color: 'orange', label: localize('picodeSyncShortcuts', "Keyboard shortcuts"), description: localize('picodeSyncShortcutsDescription', "The keys you changed.") },
+			{ id: 'extensions', resource: SyncResource.Extensions, icon: Codicon.extensions, color: 'green', label: localize('picodeSyncExtensions', "Extensions"), description: localize('picodeSyncExtensionsDescription', "The extensions you installed.") },
+			{ id: 'snippets', resource: SyncResource.Snippets, icon: Codicon.symbolSnippet, color: 'yellow', label: localize('picodeSyncSnippets', "Snippets"), description: localize('picodeSyncSnippetsDescription', "Text you insert with a short word.") },
+			{ id: 'tasks', resource: SyncResource.Tasks, icon: Codicon.tasklist, color: 'red', label: localize('picodeSyncTasks', "Tasks"), description: localize('picodeSyncTasksDetail', "The tasks you set up to build or run your projects.") },
+			{ id: 'mcp', resource: SyncResource.Mcp, icon: Codicon.mcp, color: 'green', label: localize('picodeSyncEditorMcp', "Editor MCP servers"), description: localize('picodeSyncEditorMcpDetail', "MCP servers you added to the editor itself.") },
+			{ id: 'layout', resource: SyncResource.GlobalState, icon: Codicon.layout, color: 'orange', label: localize('picodeSyncLayout', "Layout"), description: localize('picodeSyncLayoutDescription', "How the editor looks and opens.") },
+		],
+	},
 ];
 
 type Tone = 'ok' | 'busy' | 'warn' | 'off';
@@ -82,7 +118,7 @@ class PicodeAccountSyncSection extends Disposable {
 	) {
 		super();
 		const rerender = () => this.render();
-		this._register(this.configurationService.onDidChangeConfiguration(e => { if (e.affectsConfiguration(CHATS_SETTING)) { rerender(); } }));
+		this._register(this.configurationService.onDidChangeConfiguration(e => { if (e.affectsConfiguration(CHATS_SETTING) || e.affectsConfiguration(PI_PROFILE_SKIP_SETTING)) { rerender(); } }));
 		this._register(this.entitlement.onDidChange(rerender));
 		this._register(this.userDataSyncService.onDidChangeStatus(rerender));
 		this._register(this.userDataSyncService.onDidChangeConflicts(rerender));
@@ -101,17 +137,19 @@ class PicodeAccountSyncSection extends Disposable {
 		this.renderStore.clear();
 		DOM.clearNode(this.container);
 		const page = DOM.append(this.container, $('.picode-account-page.picode-sync-page'));
-		DOM.append(page, $('h2')).textContent = localize('picodeSyncTitle', "Cloud sync");
-		DOM.append(page, $('p.picode-account-lead')).textContent = localize('picodeSyncLead', "Your setup, the same on every computer you sign in to.");
+		const head = DOM.append(page, $('.picode-sync-title'));
+		DOM.append(head, $('h2')).textContent = localize('picodeSyncTitle', "Cloud sync");
+		DOM.append(head, $('p.picode-account-lead')).textContent = localize('picodeSyncLead', "Your setup, the same on every computer you sign in to.");
 
 		if (!this.entitlement.isPro) {
 			this.renderLocked(page);
 		} else {
 			const enabled = this.enablementService.isEnabled();
-			this.renderStatus(page, enabled);
-			this.renderCategories(page, enabled);
+			this.renderHero(page, enabled);
+			for (const group of GROUPS) {
+				this.renderGroup(page, group, enabled);
+			}
 			if (enabled) {
-				this.renderMachines(page);
 				this.renderCloudData(page);
 			}
 		}
@@ -121,41 +159,43 @@ class PicodeAccountSyncSection extends Disposable {
 	}
 
 	private renderLocked(page: HTMLElement): void {
-		const card = DOM.append(page, $('.picode-sync-hero.off'));
-		DOM.append(card, $('.picode-sync-hero-icon')).appendChild(renderIcon(Codicon.cloud));
-		const text = DOM.append(card, $('.picode-sync-hero-text'));
+		const hero = DOM.append(page, $('.picode-sync-hero.off'));
+		this.renderFlow(hero, 'off', false);
+		const body = DOM.append(hero, $('.picode-sync-hero-body'));
+		const text = DOM.append(body, $('.picode-sync-hero-text'));
 		DOM.append(text, $('strong')).textContent = localize('picodeSyncProOnly', "Cloud sync is part of Pro");
 		DOM.append(text, $('span')).textContent = this.entitlement.signedIn
 			? localize('picodeSyncNeedsPro', "Cloud sync comes with the Pro plan. Upgrade from Overview to turn it on.")
 			: localize('picodeSyncNeedsAccount', "Sign in with a Pro account to keep your setup in the cloud.");
-		const actions = DOM.append(card, $('.picode-sync-hero-actions'));
-		this.button(actions, localize('picodeSyncSeeOverview', "Go to Overview"), false, 'picode.account.open', 'overview');
+		this.button(DOM.append(body, $('.picode-sync-hero-actions')), localize('picodeSyncSeeOverview', "Go to Overview"), false, 'picode.account.open', 'overview');
 	}
 
-	/** One card that answers "is my setup safe in the cloud?" and holds the actions that change it. */
-	private renderStatus(page: HTMLElement, enabled: boolean): void {
+	/**
+	 * The answer to "is my setup safe in the cloud?": a drawing of where it goes (this computer, the
+	 * cloud, the other computers), the state in words, and the actions that change it.
+	 */
+	private renderHero(page: HTMLElement, enabled: boolean): void {
 		const status = this.userDataSyncService.status;
 		const signedOut = enabled && this.workbenchService.accountStatus === AccountStatus.Unavailable;
 		const conflicts = this.userDataSyncService.conflicts.length;
 		const tone: Tone = !enabled ? 'off' : signedOut || conflicts > 0 ? 'warn' : status === SyncStatus.Syncing ? 'busy' : 'ok';
 
-		const card = DOM.append(page, $(`.picode-sync-hero.${tone}`));
-		const icon = DOM.append(card, $('.picode-sync-hero-icon'));
-		const text = DOM.append(card, $('.picode-sync-hero-text'));
+		const hero = DOM.append(page, $(`.picode-sync-hero.${tone}`));
+		this.renderFlow(hero, tone, enabled && !signedOut);
+		const body = DOM.append(hero, $('.picode-sync-hero-body'));
+		const text = DOM.append(body, $('.picode-sync-hero-text'));
 		const title = DOM.append(text, $('strong'));
 		const line = DOM.append(text, $('span'));
-		const actions = DOM.append(card, $('.picode-sync-hero-actions'));
+		const actions = DOM.append(body, $('.picode-sync-hero-actions'));
 
 		if (!enabled) {
-			icon.appendChild(renderIcon(Codicon.cloud));
 			title.textContent = localize('picodeSyncOff', "Sync is off");
 			line.textContent = localize('picodeSyncOffDetail', "Choose below what to keep in the cloud, then turn it on.");
-			// The tiles below are what the owner chose, so VS Code's own list is not asked a second time.
+			// The rows below are what the owner chose, so VS Code's own list is not asked a second time.
 			this.button(actions, localize('picodeSyncTurnOn', "Turn on sync"), false, COMMANDS.turnOn, { skipConfigure: true });
 			return;
 		}
 		if (signedOut) {
-			icon.appendChild(renderIcon(Codicon.warning));
 			title.textContent = localize('picodeSyncSignedOut', "Sign in to keep syncing");
 			line.textContent = localize('picodeSyncSignedOutDetail', "Your session ended. Nothing is sent until you sign in again.");
 			this.button(actions, localize('picodeSyncSignIn', "Sign in"), false, COMMANDS.signIn);
@@ -163,7 +203,6 @@ class PicodeAccountSyncSection extends Disposable {
 			return;
 		}
 		if (conflicts > 0) {
-			icon.appendChild(renderIcon(Codicon.warning));
 			title.textContent = localize('picodeSyncNeedsAttention', "Needs your attention");
 			line.textContent = conflicts === 1
 				? localize('picodeSyncOneConflict', "One part changed here and in the cloud. Choose which to keep.")
@@ -175,13 +214,7 @@ class PicodeAccountSyncSection extends Disposable {
 
 		const last = this.userDataSyncService.lastSyncTime;
 		const account = this.workbenchService.current?.accountName;
-		if (status === SyncStatus.Syncing) {
-			icon.appendChild(renderIcon(ThemeIcon.modify(Codicon.sync, 'spin')));
-			title.textContent = localize('picodeSyncSyncing', "Syncing…");
-		} else {
-			icon.appendChild(renderIcon(Codicon.passFilled));
-			title.textContent = localize('picodeSyncUpToDate', "Up to date");
-		}
+		title.textContent = status === SyncStatus.Syncing ? localize('picodeSyncSyncing', "Syncing…") : localize('picodeSyncUpToDate', "Up to date");
 		const when = last !== undefined ? localize('picodeSyncLast', "Last synced {0}", fromNow(last, true)) : localize('picodeSyncNeverYet', "First sync on its way");
 		line.textContent = account ? localize('picodeSyncLastWithAccount', "{0} · {1}", when, account) : when;
 		const now = this.button(actions, localize('picodeSyncNow', "Sync now"), false, COMMANDS.syncNow);
@@ -189,105 +222,41 @@ class PicodeAccountSyncSection extends Disposable {
 		this.button(actions, localize('picodeSyncTurnOff', "Turn off"), true, COMMANDS.turnOff);
 	}
 
-	private renderCategories(page: HTMLElement, enabled: boolean): void {
-		const head = DOM.append(page, $('.picode-sync-head'));
-		DOM.append(head, $('h3')).textContent = localize('picodeSyncWhat', "What is synced");
-		const count = CATEGORIES.filter(c => this.enablementService.isResourceEnabled(c.resource)).length
-			+ (this.chatsOn() ? 1 : 0);
-		DOM.append(head, $('span.picode-account-muted')).textContent = localize('picodeSyncCount', "{0} of {1}", count, CATEGORIES.length + 1);
-
-		const grid = DOM.append(page, $('.picode-sync-grid'));
-		const conflicted = new Set(this.userDataSyncService.conflicts.map(c => c.syncResource));
-		for (const category of CATEGORIES) {
-			const on = this.enablementService.isResourceEnabled(category.resource);
-			const tile = this.tile(grid, category.icon, category.label, category.description, on, value => this.enablementService.setResourceEnablement(category.resource, value));
-			this.tileState(tile, this.stateOf(enabled, on, conflicted.has(category.resource)));
+	/** This computer — the cloud — the other computers on the account, joined by lines that move while syncing. */
+	private renderFlow(hero: HTMLElement, tone: Tone, live: boolean): void {
+		const flow = DOM.append(hero, $('.picode-sync-flow'));
+		flow.setAttribute('aria-hidden', 'true');
+		this.flowNode(flow, Codicon.deviceDesktop, localize('picodeSyncThisComputer', "This computer"));
+		DOM.append(flow, $(`.picode-sync-flow-line${tone === 'busy' ? '.moving' : ''}`));
+		const cloud = DOM.append(flow, $('.picode-sync-flow-cloud'));
+		cloud.appendChild(renderIcon(tone === 'warn' ? Codicon.warning : tone === 'busy' ? ThemeIcon.modify(Codicon.sync, 'spin') : tone === 'ok' ? Codicon.check : Codicon.cloud));
+		DOM.append(flow, $(`.picode-sync-flow-line${tone === 'busy' ? '.moving' : ''}`));
+		const others = this.flowNode(flow, Codicon.vm, this.othersLabel(live));
+		const names = this.machines?.filter(m => !m.isCurrent && !m.disabled).map(m => m.name);
+		if (names?.length) {
+			others.title = names.join('\n');
 		}
-		this.renderChats(grid, enabled);
 	}
 
-	/**
-	 * Chats are one more tile. They are copied by the connector, one file per chat, while the switch
-	 * is on; *Restore* brings the copies back on this computer.
-	 */
-	private renderChats(grid: HTMLElement, enabled: boolean): void {
-		const on = this.chatsOn();
-		const tile = this.tile(grid, Codicon.commentDiscussion, localize('picodeSyncChats', "Chats"), localize('picodeSyncChatsDescription', "Your chats of the last 7 days."), on, value => { void this.configurationService.updateValue(CHATS_SETTING, value); });
-		const foot = this.tileState(tile, this.stateOf(enabled, on, false));
-		const restore = this.renderStore.add(new Button(foot, { ...defaultButtonStyles, secondary: true }));
-		restore.label = localize('picodeSyncRestore', "Restore");
-		restore.element.classList.add('picode-sync-small-button');
-		this.renderStore.add(restore.onDidClick(() => { void this.commandService.executeCommand(COMMANDS.restoreChats); }));
+	private flowNode(flow: HTMLElement, icon: ThemeIcon, label: string): HTMLElement {
+		const node = DOM.append(flow, $('.picode-sync-flow-node'));
+		DOM.append(node, $('.picode-sync-flow-device')).appendChild(renderIcon(icon));
+		DOM.append(node, $('span')).textContent = label;
+		return node;
 	}
 
-	private chatsOn(): boolean {
-		return this.configurationService.getValue<boolean>(CHATS_SETTING) === true;
-	}
-
-	private stateOf(enabled: boolean, on: boolean, conflicted: boolean): { tone: Tone; icon: ThemeIcon; label: string } {
-		if (!on) {
-			return { tone: 'off', icon: Codicon.circleSlash, label: localize('picodeSyncTileOff', "Stays on this computer") };
+	private othersLabel(live: boolean): string {
+		if (!live) {
+			return localize('picodeSyncFlowOthersOff', "Your other computers");
 		}
-		if (!enabled) {
-			return { tone: 'off', icon: Codicon.cloud, label: localize('picodeSyncTileReady', "Syncs when sync is on") };
-		}
-		if (conflicted) {
-			return { tone: 'warn', icon: Codicon.warning, label: localize('picodeSyncTileConflict', "Changed in two places") };
-		}
-		if (this.userDataSyncService.status === SyncStatus.Syncing) {
-			return { tone: 'busy', icon: ThemeIcon.modify(Codicon.sync, 'spin'), label: localize('picodeSyncSyncing', "Syncing…") };
-		}
-		return { tone: 'ok', icon: Codicon.passFilled, label: localize('picodeSyncTileSynced', "In the cloud") };
-	}
-
-	private tile(grid: HTMLElement, icon: ThemeIcon, label: string, description: string, on: boolean, change: (value: boolean) => void): HTMLElement {
-		const tile = DOM.append(grid, $(`.picode-sync-tile${on ? '.on' : ''}`));
-		const head = DOM.append(tile, $('label.picode-sync-tile-head'));
-		DOM.append(head, $('.picode-sync-tile-icon')).appendChild(renderIcon(icon));
-		DOM.append(head, $('strong')).textContent = label;
-		const box = DOM.append(head, $('input.picode-sync-switch')) as HTMLInputElement;
-		box.type = 'checkbox';
-		box.setAttribute('role', 'switch');
-		box.checked = on;
-		box.setAttribute('aria-label', label);
-		this.renderStore.add(DOM.addDisposableListener(box, DOM.EventType.CHANGE, () => change(box.checked)));
-		DOM.append(tile, $('p.picode-sync-tile-text')).textContent = description;
-		return tile;
-	}
-
-	private tileState(tile: HTMLElement, state: { tone: Tone; icon: ThemeIcon; label: string }): HTMLElement {
-		const foot = DOM.append(tile, $('.picode-sync-tile-foot'));
-		const badge = DOM.append(foot, $(`span.picode-sync-tile-state.${state.tone}`));
-		badge.appendChild(renderIcon(state.icon));
-		DOM.append(badge, $('span')).textContent = state.label;
-		return foot;
-	}
-
-	/** The computers that share this setup, so the owner sees where it goes. */
-	private renderMachines(page: HTMLElement): void {
-		if (this.workbenchService.accountStatus !== AccountStatus.Available) {
-			return;
-		}
-		DOM.append(page, $('h3')).textContent = localize('picodeSyncMachines', "Your computers");
-		const list = DOM.append(page, $('.picode-account-list'));
 		if (this.machines === undefined) {
-			DOM.append(list, $('.picode-account-row.picode-account-muted')).textContent = localize('picodeSyncMachinesLoading', "Looking for your computers…");
 			this.loadMachines();
-			return;
+			return '…';
 		}
-		const machines = this.machines.filter(m => !m.disabled).sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || a.name.localeCompare(b.name));
-		if (machines.length === 0) {
-			DOM.append(list, $('.picode-account-row.picode-account-muted')).textContent = localize('picodeSyncMachinesNone', "No computers yet. This one appears after its first sync.");
-			return;
-		}
-		for (const machine of machines) {
-			const row = DOM.append(list, $('.picode-account-row'));
-			DOM.append(row, $('.picode-sync-tile-icon')).appendChild(renderIcon(machine.platform && isWebPlatform(machine.platform) ? Codicon.globe : Codicon.deviceDesktop));
-			DOM.append(DOM.append(row, $('.picode-account-row-text')), $('strong')).textContent = machine.name;
-			if (machine.isCurrent) {
-				DOM.append(row, $('span.picode-account-badge')).textContent = localize('picodeSyncThisComputer', "This computer");
-			}
-		}
+		const count = this.machines.filter(m => !m.isCurrent && !m.disabled).length;
+		return count === 0 ? localize('picodeSyncFlowOthersNone', "No other computers yet")
+			: count === 1 ? localize('picodeSyncFlowOthersOne', "1 other computer")
+				: localize('picodeSyncFlowOthers', "{0} other computers", count);
 	}
 
 	private loadMachines(): void {
@@ -307,21 +276,110 @@ class PicodeAccountSyncSection extends Disposable {
 		});
 	}
 
-	/** What is already in the cloud: earlier copies, and the way to wipe it. */
-	private renderCloudData(page: HTMLElement): void {
-		DOM.append(page, $('h3')).textContent = localize('picodeSyncCloudData', "Your data in the cloud");
-		const list = DOM.append(page, $('.picode-account-list'));
-		this.linkRow(list, Codicon.history, localize('picodeSyncBackups', "Earlier copies"), localize('picodeSyncBackupsDetail', "See what was synced and bring back an earlier copy."), localize('picodeSyncOpen', "Open"), COMMANDS.backups);
-		this.linkRow(list, Codicon.trash, localize('picodeSyncClear', "Delete from the cloud"), localize('picodeSyncClearDetail', "Removes your synced data from the cloud. This computer keeps its own."), localize('picodeSyncDelete', "Delete…"), COMMANDS.clearCloud);
+	private renderGroup(page: HTMLElement, group: IGroup, enabled: boolean): void {
+		const head = DOM.append(page, $('.picode-sync-head'));
+		DOM.append(head, $('h3')).textContent = group.label;
+		const on = group.items.filter(item => this.isOn(item)).length;
+		DOM.append(head, $('span.picode-account-muted')).textContent = localize('picodeSyncCount', "{0} of {1}", on, group.items.length);
+		const card = DOM.append(page, $('.picode-sync-card'));
+		const conflicted = new Set(this.userDataSyncService.conflicts.map(c => c.syncResource));
+		for (const item of group.items) {
+			this.renderItem(card, item, enabled, item.resource !== undefined && conflicted.has(item.resource));
+		}
+		if (group.note) {
+			const note = DOM.append(page, $('p.picode-sync-note'));
+			note.appendChild(renderIcon(Codicon.lock));
+			DOM.append(note, $('span')).textContent = group.note;
+		}
 	}
 
-	private linkRow(list: HTMLElement, icon: ThemeIcon, label: string, description: string, action: string, commandId: string): void {
-		const row = DOM.append(list, $('.picode-account-row'));
-		DOM.append(row, $('.picode-sync-tile-icon')).appendChild(renderIcon(icon));
-		const text = DOM.append(row, $('.picode-account-row-text'));
-		DOM.append(text, $('strong')).textContent = label;
-		DOM.append(text, $('span')).textContent = description;
-		this.button(row, action, true, commandId);
+	private renderItem(card: HTMLElement, item: IItem, enabled: boolean, conflicted: boolean): void {
+		const on = this.isOn(item);
+		const row = DOM.append(card, $(`.picode-sync-item${on ? '.on' : ''}`));
+		const label = DOM.append(row, $('label.picode-sync-item-label'));
+		const icon = DOM.append(label, $('.picode-sync-item-icon'));
+		icon.style.setProperty('--picode-sync-item-color', `var(--vscode-charts-${item.color})`);
+		icon.appendChild(renderIcon(item.icon));
+		const text = DOM.append(label, $('.picode-sync-item-text'));
+		const name = DOM.append(text, $('strong'));
+		DOM.append(name, $('span')).textContent = item.label;
+		// The state shows only when it says something: in the cloud, or changed in two places.
+		if (on && enabled && this.workbenchService.accountStatus === AccountStatus.Available) {
+			const state = DOM.append(name, $(`span.picode-sync-item-state${conflicted ? '.warn' : ''}`));
+			state.appendChild(renderIcon(conflicted ? Codicon.warning : Codicon.passFilled));
+			state.title = conflicted ? localize('picodeSyncTileConflict', "Changed in two places") : localize('picodeSyncTileSynced', "In the cloud");
+		}
+		DOM.append(text, $('span')).textContent = item.description;
+		if (!on) {
+			row.title = localize('picodeSyncTileOff', "Stays on this computer");
+		}
+
+		if (item.id === CHATS_ID) {
+			const restore = this.renderStore.add(new Button(row, { ...defaultButtonStyles, secondary: true }));
+			restore.label = localize('picodeSyncRestore', "Restore");
+			restore.element.classList.add('picode-sync-small-button');
+			this.renderStore.add(restore.onDidClick(() => { void this.commandService.executeCommand(COMMANDS.restoreChats); }));
+		}
+		const box = DOM.append(row, $('input.picode-sync-switch')) as HTMLInputElement;
+		box.type = 'checkbox';
+		box.setAttribute('role', 'switch');
+		box.checked = on;
+		box.setAttribute('aria-label', item.label);
+		this.renderStore.add(DOM.addDisposableListener(box, DOM.EventType.CHANGE, () => { void this.setOn(item, box.checked); }));
+		// The whole label flips the switch too, the way a settings row does.
+		this.renderStore.add(DOM.addDisposableListener(label, DOM.EventType.CLICK, e => {
+			e.preventDefault();
+			void this.setOn(item, !on);
+		}));
+	}
+
+	private isOn(item: IItem): boolean {
+		if (item.resource === undefined) {
+			return this.configurationService.getValue<boolean>(CHATS_SETTING) === true;
+		}
+		const on = this.enablementService.isResourceEnabled(item.resource);
+		return item.part === undefined ? on : on && !this.skippedParts().has(item.part);
+	}
+
+	private skippedParts(): Set<PiProfilePart> {
+		return skippedPiProfileParts(this.configurationService.getValue(PI_PROFILE_SKIP_SETTING));
+	}
+
+	private async setOn(item: IItem, value: boolean): Promise<void> {
+		if (item.resource === undefined) {
+			await this.configurationService.updateValue(CHATS_SETTING, value);
+			return;
+		}
+		if (item.part === undefined) {
+			this.enablementService.setResourceEnablement(item.resource, value);
+			return;
+		}
+		// An agents' row switches its part; the agents' sync as a whole runs while any part is on.
+		const wasOn = this.enablementService.isResourceEnabled(item.resource);
+		const skipped = wasOn ? this.skippedParts() : new Set<PiProfilePart>(PI_PROFILE_PARTS);
+		if (value) {
+			skipped.delete(item.part);
+		} else {
+			skipped.add(item.part);
+		}
+		await this.configurationService.updateValue(PI_PROFILE_SKIP_SETTING, PI_PROFILE_PARTS.filter(part => skipped.has(part)));
+		this.enablementService.setResourceEnablement(item.resource, skipped.size < PI_PROFILE_PARTS.length);
+	}
+
+	/** What is already in the cloud: earlier copies, and the way to wipe it. Quiet, at the end. */
+	private renderCloudData(page: HTMLElement): void {
+		const foot = DOM.append(page, $('.picode-sync-foot'));
+		this.footLink(foot, Codicon.history, localize('picodeSyncBackups', "Earlier copies"), localize('picodeSyncBackupsDetail', "See what was synced and bring back an earlier copy."), COMMANDS.backups);
+		this.footLink(foot, Codicon.trash, localize('picodeSyncClear', "Delete from the cloud"), localize('picodeSyncClearDetail', "Removes your synced data from the cloud. This computer keeps its own."), COMMANDS.clearCloud);
+	}
+
+	private footLink(foot: HTMLElement, icon: ThemeIcon, label: string, tooltip: string, commandId: string): void {
+		const link = DOM.append(foot, $('button.picode-sync-foot-link'));
+		link.setAttribute('type', 'button');
+		link.title = tooltip;
+		link.appendChild(renderIcon(icon));
+		DOM.append(link, $('span')).textContent = label;
+		this.renderStore.add(DOM.addDisposableListener(link, DOM.EventType.CLICK, () => { void this.commandService.executeCommand(commandId); }));
 	}
 
 	private button(parent: HTMLElement, label: string, secondary: boolean, commandId: string, ...args: unknown[]): Button {
