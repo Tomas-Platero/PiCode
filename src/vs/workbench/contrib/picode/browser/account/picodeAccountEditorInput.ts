@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Codicon } from '../../../../../base/common/codicons.js';
+import { Emitter, Event } from '../../../../../base/common/event.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { localize } from '../../../../../nls.js';
 import { IModalEditorOptions, IModalEditorOptionsProvider } from '../../../../../platform/editor/common/editor.js';
@@ -19,6 +20,23 @@ export class PicodeAccountEditorInput extends EditorInput implements IModalEdito
 	readonly resource = undefined;
 
 	private static instance: PicodeAccountEditorInput | undefined;
+
+	private readonly _onDidRequestSection = this._register(new Emitter<string>());
+	/** Fires when someone asks for a page while the window is already open. */
+	readonly onDidRequestSection: Event<string> = this._onDidRequestSection.event;
+	private _requestedSection: string | undefined;
+
+	/** The page the window should show, set by whoever opens it (`picode.account.open <page>`). */
+	get requestedSection(): string | undefined {
+		return this._requestedSection;
+	}
+
+	requestSection(section: string | undefined): void {
+		this._requestedSection = section;
+		if (section !== undefined) {
+			this._onDidRequestSection.fire(section);
+		}
+	}
 
 	static getOrCreate(): PicodeAccountEditorInput {
 		if (!PicodeAccountEditorInput.instance || PicodeAccountEditorInput.instance.isDisposed()) {

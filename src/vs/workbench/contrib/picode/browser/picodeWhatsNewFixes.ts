@@ -24,6 +24,10 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.4.0',
+			text: localize('picodeWhatsNew.fix.keysStayHome', "**Your provider keys no longer travel to the cloud.** Keys written in full in your providers or MCP servers stay on each computer; the rest of those settings still syncs."),
+		},
+		{
 			since: '2.3.2',
 			text: localize('picodeWhatsNew.fix.questionFreeze', "**The chat no longer freezes when pi asks you something.** A question or a confirmation arriving while pi was answering could hang the whole window before the question was shown. It now appears and waits for your answer."),
 		},

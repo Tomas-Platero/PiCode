@@ -70,6 +70,14 @@ import { ActionBar } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 import { DropdownMenuActionViewItem } from '../../../../base/browser/ui/dropdown/dropdownActionViewItem.js';
 import { IEnvironmentService } from '../../../../platform/environment/common/environment.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import { VSBuffer } from '../../../../base/common/buffer.js';
+import { parse as parseJsonc } from '../../../../base/common/json.js';
+import { applyEdits, setProperty } from '../../../../base/common/jsonEdit.js';
+
+/** PiCode: each editor profile's own agent profile (registered in `picodeConfiguration.ts`). */
+const PICODE_AGENT_PROFILE_SETTING = 'picode.agents.profile';
 
 const editIcon = registerIcon('profiles-editor-edit-folder', Codicon.edit, localize('editIcon', 'Icon for the edit folder icon in the profiles editor.'));
 const removeIcon = registerIcon('profiles-editor-remove-folder', Codicon.close, localize('removeIcon', 'Icon for the remove folder icon in the profiles editor.'));
@@ -555,6 +563,7 @@ class ProfileWidget extends Disposable {
 				this._register(this.instantiationService.createInstance(ProfileIconRenderer)),
 				this._register(this.instantiationService.createInstance(UseForCurrentWindowPropertyRenderer)),
 				this._register(this.instantiationService.createInstance(UseAsDefaultProfileRenderer)),
+				this._register(this.instantiationService.createInstance(AgentProfileRenderer)),
 				this.copyFromProfileRenderer,
 				contentsRenderer,
 				associationsRenderer,
@@ -708,7 +717,7 @@ class ProfileWidget extends Disposable {
 
 }
 
-type ProfileProperty = 'name' | 'icon' | 'copyFrom' | 'useForCurrent' | 'useAsDefault' | 'contents' | 'workspaces';
+type ProfileProperty = 'name' | 'icon' | 'copyFrom' | 'useForCurrent' | 'useAsDefault' | 'agentProfile' | 'contents' | 'workspaces';
 
 interface ProfileTreeElement {
 	element: ProfileProperty;
@@ -736,6 +745,8 @@ class ProfileTreeDelegate extends CachedListVirtualDelegate<ProfileTreeElement> 
 			case 'useForCurrent':
 			case 'useAsDefault':
 				return 68;
+			case 'agentProfile':
+				return 90;
 			case 'contents':
 				return 258;
 			case 'workspaces':
@@ -764,6 +775,7 @@ class ProfileTreeDataSource implements IAsyncDataSource<AbstractUserDataProfileE
 					children.push({ element: 'icon', root: element });
 				}
 				children.push({ element: 'useAsDefault', root: element });
+				children.push({ element: 'agentProfile', root: element });
 				children.push({ element: 'contents', root: element });
 				children.push({ element: 'workspaces', root: element });
 			}
@@ -1233,6 +1245,99 @@ class UseAsDefaultProfileRenderer extends ProfilePropertyRenderer {
 			},
 			disposables,
 			elementDisposables
+		};
+	}
+}
+
+/**
+ * PiCode: the agent profile this editor profile uses (`picode.agents.profile`), read from and written
+ * to that profile's own settings file, so a profile that is not the current one can be set too. The
+ * names come from the connector; switching to the editor profile is what applies it.
+ */
+class AgentProfileRenderer extends ProfilePropertyRenderer {
+
+	readonly templateId: ProfileProperty = 'agentProfile';
+
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IContextViewService private readonly contextViewService: IContextViewService,
+		@ICommandService private readonly commandService: ICommandService,
+		@IFileService private readonly fileService: IFileService,
+		@IUserDataProfilesService private readonly userDataProfilesService: IUserDataProfilesService,
+	) {
+		super();
+	}
+
+	/** The settings file a profile reads: its own, or the default one when it shares the default settings. */
+	private settingsFile(profile: IUserDataProfile): URI {
+		return profile.useDefaultFlags?.settings ? this.userDataProfilesService.defaultProfile.settingsResource : profile.settingsResource;
+	}
+
+	private async read(profile: IUserDataProfile): Promise<string> {
+		try {
+			const value = parseJsonc((await this.fileService.readFile(this.settingsFile(profile))).value.toString())?.[PICODE_AGENT_PROFILE_SETTING];
+			return typeof value === 'string' ? value : '';
+		} catch {
+			return '';
+		}
+	}
+
+	private async write(profile: IUserDataProfile, value: string): Promise<void> {
+		const file = this.settingsFile(profile);
+		let text = '{}';
+		try {
+			text = (await this.fileService.readFile(file)).value.toString();
+		} catch {
+			// No settings file yet: it starts empty.
+		}
+		const edits = setProperty(text, [PICODE_AGENT_PROFILE_SETTING], value.length > 0 ? value : undefined, { tabSize: 4, insertSpaces: false, eol: '\n' });
+		await this.fileService.writeFile(file, VSBuffer.fromString(applyEdits(text, edits)));
+	}
+
+	renderTemplate(parent: HTMLElement): IProfilePropertyRendererTemplate {
+		const disposables = new DisposableStore();
+		const elementDisposables = disposables.add(new DisposableStore());
+		const container = append(parent, $('.profile-row-container.profile-copy-from-container'));
+		append(container, $('.profile-label-element', undefined, localize('picodeAgentProfile', "Agent profile")));
+		append(container, $('.profile-description-element', undefined, localize('picodeAgentProfileDescription', "The models your agents use while this editor profile is active. None keeps whichever profile is in use.")));
+		const select = disposables.add(this.instantiationService.createInstance(SelectBox, [], 0, this.contextViewService, defaultSelectBoxStyles, {
+			useCustomDrawn: true,
+			ariaLabel: localize('picodeAgentProfile', "Agent profile"),
+		}));
+		select.render(append(container, $('.profile-select-container')));
+		let names: string[] = [];
+		let profile: IUserDataProfile | undefined;
+		disposables.add(select.onDidSelect(({ index }) => {
+			if (profile !== undefined) {
+				void this.write(profile, index === 0 ? '' : names[index - 1] ?? '');
+			}
+		}));
+		const that = this;
+		return {
+			set element(element: ProfileTreeElement) {
+				profile = element.root instanceof UserDataProfileElement ? element.root.profile : undefined;
+				const shown = profile;
+				void (async () => {
+					let view: { profiles?: readonly { name: string }[] } | undefined;
+					try {
+						view = await that.commandService.executeCommand('picode.agentProfiles.state');
+					} catch {
+						view = undefined;
+					}
+					const current = shown === undefined ? '' : await that.read(shown);
+					if (profile !== shown) {
+						return;
+					}
+					names = (view?.profiles ?? []).map(entry => entry.name);
+					if (current.length > 0 && !names.includes(current)) {
+						names.push(current);
+					}
+					select.setOptions([{ text: localize('picodeAgentProfileNone', "None") }, ...names.map(name => ({ text: name }))]);
+					select.select(current.length > 0 ? names.indexOf(current) + 1 : 0);
+				})();
+			},
+			disposables,
+			elementDisposables,
 		};
 	}
 }

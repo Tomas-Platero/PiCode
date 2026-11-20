@@ -1801,6 +1801,29 @@ control Pro. Su lógica queda fuera de este ADR.
   de extremo a extremo. Hasta decidir cómo limpiarlo o cifrarlo, no sube. Tampoco la memoria de engram (`~/.engram`, ADR-022):
   es una base viva y compartida que pide su propio diseño.
 
+**Adenda 1 (2026-11-20) — La sincronización de los agentes, por partes y sin claves.**
+
+> *"La parte de sync de pi no lo nombres. Y en la parte de Agente desglosa que sincronizar (agentes, subagentes, skills, perfiles, mcp's) y revisa si se puede añadir algo más. por ejemplo modelos, proveedores, etc."*
+
+- **Por partes.** La página *Cloud sync* enseña una fila por parte, cada una con su interruptor: agentes (con sus cadenas), subagentes,
+  skills, perfiles de agentes (con sus respaldos), servidores MCP, modelos y proveedores, ajustes de los agentes (modelo por defecto,
+  lista de paquetes, cómo habla y cómo arrancan los chats, carpetas de confianza) y notas de memoria. Qué fichero va en qué parte lo
+  dice `piProfilePartOf` (`src/vs/platform/userDataSync/common/piProfileContent.ts`). Una parte apagada queda fuera de la mezcla por
+  los dos lados: este equipo no la sube ni la aplica, y la copia de la nube sigue para los otros. Se guarda en
+  `picode.sync.agentsSkip` (oculto en Ajustes).
+- **Las claves no salen del equipo.** Se encontró que `models.json`, que ya viajaba, llevaba la clave de un proveedor escrita entera.
+  Ahora `models.json` y `mcp.json` se comparan y se suben sin las claves escritas enteras (`apiKey`, `headers`, `env`…), y al bajar se
+  les devuelven las que ya tenía este equipo. Lo que solo apunta a una clave (una variable de entorno, `${VAR}`, `!comando`) sí viaja.
+  Con eso entra `mcp.json`, que esta ADR dejaba fuera a propósito: la lista de servidores viaja, sus claves no. Una clave escrita
+  dentro de `args` no se detecta.
+- **Versión 2.** El sincronizador sube su versión de 1 a 2. Un equipo con una versión anterior de PiCode escribiría esos ficheros sin
+  sus claves, así que se para ante la versión nueva de la nube y pide actualizar (apaga la sync en ese equipo, sin tocar nada).
+- **Fuera, a propósito:** los inicios de sesión (`auth.json`) y las claves siguen en cada equipo. Llevarlos a la nube pediría cifrado de
+  extremo a extremo y el consentimiento explícito de la sección 6 de `AGENTS.md`.
+- **Pendiente para el dueño:** la clave que ya estaba en la nube sigue en las copias anteriores del servidor; conviene cambiarla en el
+  proveedor.
+- En pantalla ya no se nombra a pi: el área sale como *Agents* también en las vistas de VS Code (copias anteriores, conflictos).
+
 ## ADR-042 — Issues de GitHub y Jira en la ventana Account, conectadas por OAuth
 
 > *"que se conectara a github y te mostrara que fallos te han reportado de tus repos y desde ahi le pudieras pedir a tu sistema agentico que te lo solucionara?"* — 2026-11-06
@@ -1927,3 +1950,33 @@ usuario; la App da lectura de issues y solo en los repos que el usuario elija al
 - **Tasks dice qué chat responde.** Cuando responden dos chats o más a la vez, *Tasks* (y *Estado*, que lee lo mismo) los pone primero en *En marcha*: su nombre, qué hace en ese momento, cuánto lleva y, si trabaja en un worktree, su rama. Con un solo chat no sale fila, porque ya se ve en su propio chat y encima del cuadro de escritura (`tasks-rows.ts`, `answeringChatRows` en `agent.ts`).
 - **pi-intercom con worktrees, comprobado en su código:** todas las sesiones del editor comparten intermediario y ámbito, que no depende de la carpeta. `list` enseña todas las sesiones; solo `list-cwd` filtra por carpeta, y ahí un worktree es otra carpeta, como debe ser. No hizo falta cambiar nada.
 - **El setup nuevo entra en la 2.3.0:** los tres commits de su rama se trajeron sin conflictos. Lleva su propia página en *What's New*, en el editor y en la web, junto a las dos de sesiones.
+
+## ADR-044 — Perfiles de agentes: los de Gentle AI, desde el editor y por perfil del editor
+
+> *"Los perfilers de picode que son los mismos que en vscode funcionan bien? hay que hacerles algo con todo lo que tenemos? A parte se que gentle-ai tiene perfiles ahora, ¿se podrían integrar?"* — 2026-11-18
+>
+> *"y usar los perfiles de vscode en picode (que ya viene integrado) e incluir ahí los de gentle-ai junto a sus sleectores o algo así?"* → *"Dale una pensada a toda la parte del diseño"* → *"Si y crea una rama para esto"* — 2026-11-19
+
+**Qué se decide.**
+- **Dos perfiles, cada uno a lo suyo.** El perfil del editor (VS Code) decide cómo se ve y se comporta el editor. El *perfil de agentes* (de gentle-pi 4.8.0, `/gentle:profiles`) decide qué modelo usa cada agente. En pantalla se llaman siempre *Agent profiles*, con el robot, para no confundirlos con *Profiles*.
+- **Los ficheros son los de Gentle, con su forma.** `<perfil>/gentle-ai/profiles.json` (porque PiCode fija `GENTLE_PI_CONFIG_HOME`), `profile-fallbacks.json` y las fijaciones por repositorio: `<git common dir>/gentle-ai/profile-pin.json` (solo este equipo) y `.pi/gentle-ai/profile.json` (en el repositorio). El editor solo toca las claves que cambia y conserva lo demás (`extensions/picode/src/agent-profiles.ts`).
+- **Aplicar un perfil lo hace Gentle.** Aplicar reescribe varios ficheros, mueve el agente principal en vivo y deshace si algo falla. Gentle lo ofrece como servicio en el bus de eventos de pi (`gentle:desktop:profiles-service`, que responde `gentle-ai.ts`). Cada sesión del chat lleva una extensión mínima que guarda su contexto (`agent-profiles-live.ts`), así que **el canal de control de Gentle Desktop sigue fuera** (`product-packages.ts`). Sin chat abierto, el editor marca el predeterminado y Gentle lo aplica entero al arrancar el siguiente chat.
+- **Dónde se ve.**
+  - *Personalización › Proveedores y modelos › Gentle AI*: la lista de perfiles con sus marcas (*Default*, *This project*, *This chat*, *Editor profile*) y el perfil abierto, con su forma de trabajar y una fila por agente (modelo, razonamiento, rápido). `/gentle:profiles`, `/gentle:models` y la fila de *Estado* abren esta página; el selector antiguo por pasos se quita.
+  - En el chat, junto al razonamiento, un botón con el perfil del chat, solo si hay más de uno. Elegir hace predeterminado y mueve este chat; *Only for this chat* mueve solo este.
+  - En la ventana *Profiles* del editor, una fila *Agent profile* que escribe `picode.agents.profile` en los ajustes de ese perfil del editor. Al cambiar a ese perfil del editor, los agentes pasan al suyo, con *Undo*.
+- **Qué manda:** este chat → este proyecto → perfil del editor → predeterminado, y la pantalla siempre dice cuál ganó. Gentle solo aplica la fijación de proyecto a los subagentes; la marca lo dice.
+- **Nube:** el paquete del perfil de pi lleva también `gentle-ai/profiles.json`, `profile-fallbacks.json`, `models.json`, `persona.json` y `permission-mode.json`. El resto de `gentle-ai/` es de esta máquina.
+- **Arreglos de perfiles del editor que salieron al revisar.** La carpeta de datos del usuario se calculaba mal fuera del perfil de serie (`user-data-path.ts`). Las alertas de *Límites de uso* pasan a ser de toda la app.
+
+**Alternativas descartadas.**
+- **Meter los perfiles de Gentle dentro del perfil del editor**, como un tipo más: los tipos son fijos en VS Code (`ProfileResourceType`) y habría que tocar su exportación e importación.
+- **Activar el canal de control de Gentle Desktop:** manda avisos que el editor no lee y añade `/gentle:desktop` al menú. El servicio de perfiles que usa ese canal está disponible sin él.
+- **Escribir los ficheros de Gentle desde el editor para aplicar:** copiaría la lógica de Gentle y se rompería con su siguiente versión.
+
+**Consecuencias.**
+- Los modelos de respaldo se ven (cuántos tiene cada perfil), pero aún no se editan desde el editor.
+- Exportar e importar un perfil a fichero sigue solo en el terminal de Gentle.
+- *What's New* lleva su página cuando salga en una release.
+- **gentle-pi 4.9.0** (2026-11-19): según sus notas, los chats nuevos «que lo admiten» usan el agente principal del perfil que les toca sin tocar el predeterminado. Comprobado el 2026-11-20 en su código (`lib/session-profile-freeze.ts`, `resolveInheritedProfile`): sí incluye el perfil fijado, así que un chat nuevo en un proyecto fijado arranca también el agente principal con el modelo de ese perfil. La marca *This project* ya lo dice así. El servicio de perfiles (`gentle-pi.desktop-profiles-service/v1`) no cambia. Sus extensiones nuevas `gentle-desktop-feed.ts`, `gentle-herdr-desktop-status.ts` y `gentle-tower.ts` quedan en el filtro de `product-packages.ts` (`node build/pins.mjs audit gentle-pi 4.8.0 4.9.0` solo marcaba esas tres).
+

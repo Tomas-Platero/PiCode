@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { agentProfilesExtension } from './agent-profiles-live';
 import * as vscode from 'vscode';
 import { withContext } from './context';
 import { currentBranch, noteTurnBranch, renameRecordedBranch, updateSessionGitStore } from './session-git';
@@ -2263,7 +2264,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					...(agentDir === undefined ? {} : { agentDir }),
 					...settingsForFolder(loaded.sdk, cwd, agentDir),
 					resourceLoaderOptions: {
-						extensionFactories: [...loaded.builtins, permissionExtension(deps.log, chat.turn), usageHeadersExtension(), chatModelExtension()],
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log, chat.turn), usageHeadersExtension(), chatModelExtension(), agentProfilesExtension(chat.key) as unknown as PiInlineExtension],
 						// PiCode's own skills (`skills/`), next to the profile's; `out/` is one level down.
 						additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
 					},

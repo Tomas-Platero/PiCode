@@ -108,7 +108,7 @@
 	providerWait: 'Non si salva nulla finché non premi Collega.',
 	providerConnectedDone: '{0} è connesso: {1} modelli pronti.',
 	layoutTitle: 'Come lavori',
-	layoutLead: 'Due modi di disporre PiCode. Scegli quello che ti va; puoi cambiarlo quando vuoi con il pulsante del robot in alto a destra.',
+	layoutLead: "Due modi di organizzare PiCode. Scegli quello che fa per te; puoi cambiarlo quando vuoi con l'interruttore Agent / Editor in alto a destra.",
 	layoutAgent: 'Agent',
 	layoutAgentNote: 'Dì a pi cosa vuoi e guardalo lavorare',
 	layoutAgentPoints: ['La chat è al centro', 'Le tue conversazioni sono sempre a portata', 'Un pannello laterale mostra cosa è cambiato e cosa è in corso'],

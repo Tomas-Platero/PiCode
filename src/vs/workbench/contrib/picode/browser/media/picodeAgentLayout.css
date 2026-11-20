@@ -871,9 +871,43 @@
 	visibility: visible;
 }
 
-/* -- the layout button's robot blinks while the layout changes ----------------------------- */
+/* -- the layout switch: Agent and Editor as one pill, the one in use lit ----------------------- */
 
-.monaco-workbench.picode-layout-blink .part.titlebar .codicon-robot::before {
+.part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-agent),
+.part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-editor) {
+	margin: 0;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+	background: var(--vscode-input-background, transparent);
+}
+
+.part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-agent) {
+	border-right: none;
+	border-radius: 6px 0 0 6px;
+	padding: 1px 0 1px 1px;
+}
+
+.part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-editor) {
+	border-left: none;
+	border-radius: 0 6px 6px 0;
+	margin-right: 4px;
+	padding: 1px 1px 1px 0;
+}
+
+.part.titlebar .action-label.codicon-picode-layout-agent,
+.part.titlebar .action-label.codicon-picode-layout-editor {
+	border-radius: 5px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.part.titlebar .action-label.codicon-picode-layout-agent.checked,
+.part.titlebar .action-label.codicon-picode-layout-editor.checked {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground));
+}
+
+/* -- the switch's robot blinks while the layout changes --------------------------------------- */
+
+.monaco-workbench.picode-layout-blink .part.titlebar .codicon-picode-layout-agent::before {
 	content: '';
 	display: inline-block;
 	width: 16px;
@@ -896,7 +930,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.monaco-workbench.picode-layout-blink .part.titlebar .codicon-robot::before {
+	.monaco-workbench.picode-layout-blink .part.titlebar .codicon-picode-layout-agent::before {
 		animation: none;
 	}
 }

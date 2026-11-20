@@ -21,6 +21,7 @@ import { IUriIdentityService } from '../../uriIdentity/common/uriIdentity.js';
 import { IUserDataProfile } from '../../userDataProfile/common/userDataProfile.js';
 import { AbstractSynchroniser, IAcceptResult, IFileResourcePreview, IMergeResult } from './abstractSynchronizer.js';
 import { areSame, IMergeResult as IPiProfileFilesMergeResult, merge } from './snippetsMerge.js';
+import { hasSecrets, PI_PROFILE_SKIP_SETTING, piProfilePartOf, restoreSecrets, scrubSecrets, skippedPiProfileParts } from './piProfileContent.js';
 import { Change, IRemoteUserData, ISyncData, IUserDataSyncLocalStoreService, IUserDataSynchroniser, IUserDataSyncLogService, IUserDataSyncEnablementService, IUserDataSyncStoreService, SyncResource, USER_DATA_SYNC_SCHEME } from './userDataSync.js';
 
 /**
@@ -53,7 +54,12 @@ const PI_PROFILE_DATA_VERSION = 1;
 const PI_PROFILE_DISTRIBUTION_SUBPATH = ['data', 'pi-agent'];
 const PI_PROFILE_SYNCED_FOLDERS = ['agents', 'subagents', 'skills', 'memory', 'chains', 'specpi'];
 // Root-level config files of the pi profile, synced alongside the folders.
-const PI_PROFILE_ROOT_FILES = ['settings.json', 'models.json', 'subagents.json', 'trust.json', 'mcp-adapter.json'];
+// Gentle AI's choices travel too: its agent profiles, their backup models, the agents' models, how
+// it talks and how new chats start. Only these files: the rest of `gentle-ai/` is Gentle's own
+// bookkeeping for this machine (managed assets, scratch space).
+const GENTLE_SYNCED_FILES = ['profiles.json', 'profile-fallbacks.json', 'models.json', 'persona.json', 'permission-mode.json'].map(name => `gentle-ai/${name}`);
+// `mcp.json` (the MCP servers) travels without the keys written in it: see `piProfileContent.ts`.
+const PI_PROFILE_ROOT_FILES = ['settings.json', 'models.json', 'subagents.json', 'trust.json', 'mcp-adapter.json', 'mcp.json', ...GENTLE_SYNCED_FILES];
 // Credentials are machine/session-bound (OAuth token rotation breaks across
 // machines) and never leave the device.
 const EXCLUDED_FILES = new Set(['auth.json', 'auth.json.bak-omniroute-only', 'crashes.json', 'models.json.bak-before-nan', 'models.json.bak-omniroute-only']);
@@ -92,11 +98,19 @@ function resolvePiProfileFolder(environmentService: INativeEnvironmentService): 
 
 export class PiProfileSynchroniser extends AbstractSynchroniser implements IUserDataSynchroniser {
 
-	protected readonly version: number = PI_PROFILE_DATA_VERSION;
+	// 2: keys are taken out of `models.json` and `mcp.json` before they leave, and put back from this
+	// computer's own copy when they come down. A computer on version 1 would write those files without
+	// its keys, so it stops at the newer version in the cloud and asks to update instead.
+	// The bundle's own format (`PI_PROFILE_DATA_VERSION`) is unchanged.
+	protected readonly version: number = 2;
 	private readonly piProfileFolder: URI;
 	// Last read of each file, reused while its size and modification time are unchanged so a
 	// sync cycle with no edits does not read the whole profile again.
 	private readonly contentCache = new Map<string, { mtime: number; size: number; content: IFileContent }>();
+	// Files with keys that could not be read as JSON in the last local read (half written, hand edited).
+	// They sit this sync out on every side: left out of the local set alone, the merge would read them as
+	// deleted and remove them from the cloud and from every other computer.
+	private unreadable = new Set<string>();
 
 	constructor(
 		profile: IUserDataProfile,
@@ -115,7 +129,7 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 		super({ syncResource: SyncResource.PiProfile, profile }, collection, fileService, environmentService, storageService, userDataSyncStoreService, userDataSyncLocalStoreService, userDataSyncEnablementService, telemetryService, logService, configurationService, uriIdentityService);
 		this.piProfileFolder = URI.file(resolvePiProfileFolder(environmentService));
 		this.logService.info(`${this.syncResourceLogLabel}: Using pi profile at ${this.piProfileFolder.fsPath}`);
-		for (const folder of PI_PROFILE_SYNCED_FOLDERS) {
+		for (const folder of [...PI_PROFILE_SYNCED_FOLDERS, 'gentle-ai']) {
 			this._register(this.fileService.watch(this.extUri.joinPath(this.piProfileFolder, folder)));
 		}
 		this._register(Event.filter(this.fileService.onDidFilesChange, e => e.affects(this.piProfileFolder))(() => this.triggerLocalChange()));
@@ -124,11 +138,11 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 	protected async generateSyncPreview(remoteUserData: IRemoteUserData, lastSyncUserData: IRemoteUserData | null, isRemoteDataFromCurrentMachine: boolean): Promise<IPiProfileResourcePreview[]> {
 		const local = await this.getLocalFileContents();
 		const localFiles = this.toFileContents(local);
-		const remoteFiles: IStringDictionary<string> | null = remoteUserData.syncData ? this.parsePiProfile(remoteUserData.syncData) : null;
+		const remoteFiles: IStringDictionary<string> | null = this.withoutSkipped(remoteUserData.syncData ? this.parsePiProfile(remoteUserData.syncData) : null);
 
 		// Use remote data as last sync data if last sync data does not exist and remote data is from same machine
 		lastSyncUserData = lastSyncUserData === null && isRemoteDataFromCurrentMachine ? remoteUserData : lastSyncUserData;
-		const lastSyncFiles: IStringDictionary<string> | null = lastSyncUserData && lastSyncUserData.syncData ? this.parsePiProfile(lastSyncUserData.syncData) : null;
+		const lastSyncFiles: IStringDictionary<string> | null = this.withoutSkipped(lastSyncUserData && lastSyncUserData.syncData ? this.parsePiProfile(lastSyncUserData.syncData) : null);
 
 		if (remoteFiles) {
 			this.logService.trace(`${this.syncResourceLogLabel}: Merging remote pi profile with local pi profile...`);
@@ -141,12 +155,12 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 	}
 
 	protected async hasRemoteChanged(lastSyncUserData: IRemoteUserData): Promise<boolean> {
-		const lastSyncFiles: IStringDictionary<string> | null = lastSyncUserData.syncData ? this.parsePiProfile(lastSyncUserData.syncData) : null;
+		const local = await this.getLocalFileContents();
+		const localFiles = this.toFileContents(local);
+		const lastSyncFiles: IStringDictionary<string> | null = this.withoutSkipped(lastSyncUserData.syncData ? this.parsePiProfile(lastSyncUserData.syncData) : null);
 		if (lastSyncFiles === null) {
 			return true;
 		}
-		const local = await this.getLocalFileContents();
-		const localFiles = this.toFileContents(local);
 		const mergeResult = merge(localFiles, lastSyncFiles, lastSyncFiles);
 		return Object.keys(mergeResult.remote.added).length > 0 || Object.keys(mergeResult.remote.updated).length > 0 || mergeResult.remote.removed.length > 0 || mergeResult.conflicts.length > 0;
 	}
@@ -465,13 +479,20 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 	}
 
 	private async updateLocalBackup(resourcePreviews: IFileResourcePreview[]): Promise<void> {
-		const local: IStringDictionary<IFileContent> = {};
+		const local: IStringDictionary<string> = {};
 		for (const resourcePreview of resourcePreviews) {
 			if (resourcePreview.fileContent) {
-				local[this.getKey(resourcePreview.localResource)] = resourcePreview.fileContent;
+				const key = this.getKey(resourcePreview.localResource);
+				local[key] = resourcePreview.fileContent.value.toString();
+				if (hasSecrets(key)) {
+					// The backup stays on this computer, so it keeps the file as it is, keys included.
+					try {
+						local[key] = (await this.fileService.readFile(this.extUri.joinPath(this.piProfileFolder, key))).value.toString();
+					} catch { /* keep the copy that was read */ }
+				}
 			}
 		}
-		await this.backupLocal(this.toSyncContent(this.toFileContents(local)));
+		await this.backupLocal(this.toSyncContent(local));
 	}
 
 	private async updateLocalFiles(resourcePreviews: IPiProfileAcceptedResourcePreview[], force: boolean): Promise<void> {
@@ -490,14 +511,14 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 				// Added
 				else if (localChange === Change.Added) {
 					this.logService.trace(`${this.syncResourceLogLabel}: Creating pi profile file...`, key);
-					await this.fileService.createFile(resource, VSBuffer.fromString(acceptResult.content!), { overwrite: force });
+					await this.fileService.createFile(resource, VSBuffer.fromString(await this.withOwnSecrets(key, resource, acceptResult.content!)), { overwrite: force });
 					this.logService.info(`${this.syncResourceLogLabel}: Created pi profile file`, key);
 				}
 
 				// Updated
 				else {
 					this.logService.trace(`${this.syncResourceLogLabel}: Updating pi profile file...`, key);
-					await this.fileService.writeFile(resource, VSBuffer.fromString(acceptResult.content!), force ? undefined : fileContent!);
+					await this.fileService.writeFile(resource, VSBuffer.fromString(await this.withOwnSecrets(key, resource, acceptResult.content!)), force ? undefined : fileContent!);
 					this.logService.info(`${this.syncResourceLogLabel}: Updated pi profile file`, key);
 				}
 			}
@@ -513,6 +534,13 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 				const key = localResource ? this.getKey(localResource) : this.getKey(remoteResource);
 				if (remoteChange === Change.Deleted) {
 					delete newFiles[key];
+				} else if (hasSecrets(key)) {
+					// Whatever path the content came by (a merge, an edited preview, a restored copy), keys
+					// written in full are taken out right before it leaves; unreadable content does not leave.
+					const scrubbed = scrubSecrets(key, acceptResult.content!);
+					if (scrubbed !== undefined) {
+						newFiles[key] = scrubbed;
+					}
 				} else {
 					newFiles[key] = acceptResult.content!;
 				}
@@ -526,6 +554,38 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 			this.logService.info(`${this.syncResourceLogLabel}: Updated remote pi profile`);
 		}
 		return remoteUserData;
+	}
+
+	/**
+	 * Leaves out the files of the parts switched off on the cloud sync page, so the merge neither sends
+	 * nor takes them; the cloud keeps its copy for the other computers.
+	 */
+	private withoutSkipped(files: IStringDictionary<string> | null): IStringDictionary<string> | null {
+		const skipped = skippedPiProfileParts(this.configurationService.getValue(PI_PROFILE_SKIP_SETTING));
+		if (!files || (skipped.size === 0 && this.unreadable.size === 0)) {
+			return files;
+		}
+		const kept: IStringDictionary<string> = {};
+		for (const [key, value] of Object.entries(files)) {
+			if (!skipped.has(piProfilePartOf(key)) && !this.unreadable.has(key)) {
+				kept[key] = value;
+			}
+		}
+		return kept;
+	}
+
+	/** A file that came down, with the keys this computer already had put back (`restoreSecrets`). */
+	private async withOwnSecrets(key: string, resource: URI, content: string): Promise<string> {
+		if (!hasSecrets(key)) {
+			return content;
+		}
+		let own: string | undefined;
+		try {
+			own = (await this.fileService.readFile(resource)).value.toString();
+		} catch {
+			own = undefined;
+		}
+		return restoreSecrets(key, content, own);
 	}
 
 	private getKey(resource: URI): string {
@@ -557,6 +617,8 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 	}
 
 	private async getLocalFileContents(): Promise<IStringDictionary<IFileContent>> {
+		const skipped = skippedPiProfileParts(this.configurationService.getValue(PI_PROFILE_SKIP_SETTING));
+		const unreadable = new Set<string>();
 		let candidates: { key: string; resource: URI; size: number; mtime: number }[] = [];
 		for (const folder of PI_PROFILE_SYNCED_FOLDERS) {
 			const folderResource = this.extUri.joinPath(this.piProfileFolder, folder);
@@ -577,6 +639,9 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 				// File does not exist — normal for optional config files.
 			}
 		}
+
+		// Parts switched off on the cloud sync page are not read at all.
+		candidates = candidates.filter(c => !skipped.has(piProfilePartOf(c.key)));
 
 		// Sort smallest first so that, when the bundle cap is hit, the largest files are skipped
 		candidates.sort((a, b) => a.size - b.size || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
@@ -603,7 +668,17 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 					total += cached.content.value.byteLength;
 					continue;
 				}
-				const content = await this.fileService.readFile(resource);
+				let content = await this.fileService.readFile(resource);
+				if (hasSecrets(key)) {
+					// Keys written in full never leave this computer: the file is compared and sent without them.
+					const scrubbed = scrubSecrets(key, content.value.toString());
+					if (scrubbed === undefined) {
+						this.logService.warn(`${this.syncResourceLogLabel}: Skipping pi profile file that could not be read as JSON: ${key}`);
+						unreadable.add(key);
+						continue;
+					}
+					content = { ...content, value: VSBuffer.fromString(scrubbed) };
+				}
 				this.contentCache.set(key, { mtime, size, content });
 				if (content.value.byteLength > MAX_FILE_SIZE) {
 					this.logService.warn(`${this.syncResourceLogLabel}: Skipping pi profile file because it is too large: ${key}`);
@@ -616,6 +691,7 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 				this.logService.error(e);
 			}
 		}
+		this.unreadable = unreadable;
 		// Forget files that no longer exist so the cache cannot grow without bound.
 		const present = new Set(candidates.map(c => c.key));
 		for (const key of this.contentCache.keys()) {
