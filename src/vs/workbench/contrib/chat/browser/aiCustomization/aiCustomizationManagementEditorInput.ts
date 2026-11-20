@@ -55,10 +55,9 @@ export class AICustomizationManagementEditorInput extends EditorInput implements
 	}
 
 	override getName(): string {
-		// One name for the tab, whatever engine is answering: the owner calls this screen "Chat
-		// Settings", and a title that changes with the harness ("Agent Customizations for pi")
-		// reads as a different window every time the runtime moves.
-		return localize('aiCustomizationManagementEditorName', "Chat Settings");
+		// PiCode: this is the one Settings window (preferences, account and agent), so it carries
+		// one plain name whatever engine is answering.
+		return localize('picodeSettingsEditorName', "Settings");
 	}
 
 	override getIcon(): ThemeIcon {

@@ -47,25 +47,37 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 	}
 
 	/**
-	 * The sections of the Agent Customizations window. Instructions, Prompts and
+	 * The sections of PiCode's Settings window. Instructions, Prompts and
 	 * Hooks are deliberately absent: this product's agent is pi, which has none of
 	 * them (see AGENTS.md, "The chat management window talks about pi, not
 	 * Copilot"). Harness descriptors can only hide sections, never re-show them.
 	 */
 	readonly managementSections: readonly AICustomizationManagementSection[] = [
+		// Preferences: the editor and chat options people change most, as rows.
+		AICustomizationManagementSection.General,
+		AICustomizationManagementSection.EditorPreferences,
+		AICustomizationManagementSection.ChatAgent,
+		AICustomizationManagementSection.Terminal,
+		AICustomizationManagementSection.Memory,
+		AICustomizationManagementSection.Updates,
+		AICustomizationManagementSection.Accessibility,
+		AICustomizationManagementSection.Keyboard,
+		// Account: everything that belongs to the PiCode account, Pro included.
+		AICustomizationManagementSection.Account,
+		AICustomizationManagementSection.CloudSync,
+		AICustomizationManagementSection.Connections,
+		AICustomizationManagementSection.Privacy,
+		// Agent: pi itself and what it can use.
 		AICustomizationManagementSection.Status,
+		// Providers and models together, right after the agent's own overview.
+		AICustomizationManagementSection.ProvidersModels,
 		AICustomizationManagementSection.Agents,
 		AICustomizationManagementSection.Skills,
-		// PiCode's own panel: providers and models together, beside "which agent" rather than after the
-		// shelves of installable things. It replaces the editor's full-screen Models page, which does
-		// not fit in a side panel.
-		AICustomizationManagementSection.ProvidersModels,
-		// How much of each plan is left: right under the providers it belongs to.
-		AICustomizationManagementSection.UsageLimits,
 		AICustomizationManagementSection.McpServers,
 		AICustomizationManagementSection.Plugins,
 		AICustomizationManagementSection.Tools,
-		AICustomizationManagementSection.HarnessSettings,
+		// How much of each plan is left.
+		AICustomizationManagementSection.UsageLimits,
 	];
 
 	readonly isSessionsWindow = false;

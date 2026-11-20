@@ -9,7 +9,7 @@ import { IWorkspaceTrustManagementService } from '../../../../../../platform/wor
 import { IWorkspaceContextService } from '../../../../../../platform/workspace/common/workspace.js';
 import { IEditorService } from '../../../../../services/editor/common/editorService.js';
 import { ACTION_ID_NEW_CHAT } from '../../../../chat/browser/actions/chatActions.js';
-import { PicodeAccountEditorInput } from '../picodeAccountEditorInput.js';
+import { AICustomizationManagementEditorInput } from '../../../../chat/browser/aiCustomization/aiCustomizationManagementEditorInput.js';
 import { PicodeConnectOutcome, IPicodeIssuesResult } from './picodeConnectorService.js';
 import { buildFixPrompt } from './picodeIssuePrompt.js';
 import { IPicodeIssue } from './picodeIssueSources.js';
@@ -68,10 +68,10 @@ export class PicodeIssueActions {
 
 	/** Puts the issue in a new chat, written but NOT sent: the person reads it and decides. */
 	async fix(issue: IPicodeIssue): Promise<void> {
-		// From the Account window the chat would stay hidden behind it, so that window goes first.
+		// From the Settings window the chat would stay hidden behind it, so that window goes first.
 		const active = this.editorService.activeEditor;
 		const groupId = this.editorService.activeEditorPane?.group.id;
-		if (active instanceof PicodeAccountEditorInput && groupId !== undefined) {
+		if (active instanceof AICustomizationManagementEditorInput && groupId !== undefined) {
 			await this.editorService.closeEditor({ editor: active, groupId });
 		}
 		await this.commandService.executeCommand(ACTION_ID_NEW_CHAT);
