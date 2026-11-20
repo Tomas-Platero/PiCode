@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "編輯器設定檔",
 	"picodePm.markEditorProfileTip": "你目前的編輯器設定檔使用此設定檔。",
 	"picodePm.markProject": "此專案",
-	"picodePm.markProjectTip": "此專案中的子代理程式使用此設定檔。主代理程式遵循預設設定檔。",
+	"picodePm.markProjectTip": "此專案中的新聊天會以此設定檔開始，包括主要代理程式。",
 	"picodePm.modeDelegation": "完全委派",
 	"picodePm.modeDelegationTip": "主代理程式會把每項工作都交給子代理程式。",
 	"picodePm.modeOrganic": "有機",

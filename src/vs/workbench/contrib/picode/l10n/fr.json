@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "Profil de l'éditeur",
 	"picodePm.markEditorProfileTip": "Votre profil de l'éditeur actuel utilise ce profil.",
 	"picodePm.markProject": "Ce projet",
-	"picodePm.markProjectTip": "Les sous-agents de ce projet utilisent ce profil. L'agent principal suit le profil par défaut.",
+	"picodePm.markProjectTip": "Les nouvelles conversations de ce projet démarrent avec ce profil, agent principal compris.",
 	"picodePm.modeDelegation": "Délégation complète",
 	"picodePm.modeDelegationTip": "L'agent principal confie chaque tâche à un sous-agent.",
 	"picodePm.modeOrganic": "Organique",

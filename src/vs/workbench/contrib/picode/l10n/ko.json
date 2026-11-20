@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "편집기 프로필",
 	"picodePm.markEditorProfileTip": "현재 편집기 프로필이 이 프로필을 사용합니다.",
 	"picodePm.markProject": "이 프로젝트",
-	"picodePm.markProjectTip": "이 프로젝트의 서브에이전트가 이 프로필을 사용합니다. 메인 에이전트는 기본값을 따릅니다.",
+	"picodePm.markProjectTip": "이 프로젝트의 새 채팅은 기본 에이전트를 포함해 이 프로필로 시작합니다.",
 	"picodePm.modeDelegation": "완전 위임",
 	"picodePm.modeDelegationTip": "메인 에이전트가 모든 작업을 서브에이전트에게 맡깁니다.",
 	"picodePm.modeOrganic": "오가닉",

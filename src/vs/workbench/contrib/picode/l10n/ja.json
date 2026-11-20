@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "エディター プロファイル",
 	"picodePm.markEditorProfileTip": "現在のエディター プロファイルがこのプロファイルを使っています。",
 	"picodePm.markProject": "このプロジェクト",
-	"picodePm.markProjectTip": "このプロジェクトのサブエージェントはこのプロファイルを使います。メイン エージェントは既定に従います。",
+	"picodePm.markProjectTip": "このプロジェクトの新しいチャットは、メインエージェントも含めてこのプロファイルで始まります。",
 	"picodePm.modeDelegation": "完全委任",
 	"picodePm.modeDelegationTip": "メイン エージェントはすべての作業をサブエージェントに任せます。",
 	"picodePm.modeOrganic": "オーガニック",

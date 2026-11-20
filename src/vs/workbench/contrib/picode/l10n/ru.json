@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "Профиль редактора",
 	"picodePm.markEditorProfileTip": "Ваш текущий профиль редактора использует этот профиль.",
 	"picodePm.markProject": "Этот проект",
-	"picodePm.markProjectTip": "Субагенты в этом проекте используют этот профиль. Главный агент следует профилю по умолчанию.",
+	"picodePm.markProjectTip": "Новые чаты в этом проекте начинаются с этим профилем, включая основного агента.",
 	"picodePm.modeDelegation": "Полное делегирование",
 	"picodePm.modeDelegationTip": "Главный агент передаёт каждую часть работы субагенту.",
 	"picodePm.modeOrganic": "Органичный",

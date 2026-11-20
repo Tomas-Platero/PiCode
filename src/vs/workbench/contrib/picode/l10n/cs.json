@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "Profil editoru",
 	"picodePm.markEditorProfileTip": "Váš aktuální profil editoru používá tento profil.",
 	"picodePm.markProject": "Tento projekt",
-	"picodePm.markProjectTip": "Subagenti v tomto projektu používají tento profil. Hlavní agent se řídí výchozím.",
+	"picodePm.markProjectTip": "Nové chaty v tomto projektu začínají s tímto profilem, včetně hlavního agenta.",
 	"picodePm.modeDelegation": "Plné delegování",
 	"picodePm.modeDelegationTip": "Hlavní agent předá každou práci subagentovi.",
 	"picodePm.modeOrganic": "Organicky",

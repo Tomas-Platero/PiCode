@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "Düzenleyici profili",
 	"picodePm.markEditorProfileTip": "Geçerli düzenleyici profiliniz bu profili kullanıyor.",
 	"picodePm.markProject": "Bu proje",
-	"picodePm.markProjectTip": "Bu projedeki alt ajanlar bu profili kullanır. Ana ajan varsayılanı izler.",
+	"picodePm.markProjectTip": "Bu projedeki yeni sohbetler, ana ajan dahil bu profille başlar.",
 	"picodePm.modeDelegation": "Tam devretme",
 	"picodePm.modeDelegationTip": "Ana ajan her işi bir alt ajana devreder.",
 	"picodePm.modeOrganic": "Organik",

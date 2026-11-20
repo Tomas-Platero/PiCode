@@ -1124,7 +1124,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 				mark(localize('picodePm.markDefault', "Default"), 'default', localize('picodePm.markDefaultTip', "New chats start with this profile."));
 			}
 			if (view.resolved.source !== 'default' && view.resolved.name === profile.name) {
-				mark(localize('picodePm.markProject', "This project"), 'project', localize('picodePm.markProjectTip', "Subagents in this project use this profile. The main agent follows the default."));
+				mark(localize('picodePm.markProject', "This project"), 'project', localize('picodePm.markProjectTip', "New chats in this project start with this profile, main agent included."));
 			}
 			if (view.chat === profile.name && view.chat !== view.resolved.name) {
 				mark(localize('picodePm.markChat', "This chat"), 'chat', localize('picodePm.markChatTip', "The chat you used last uses this profile."));

@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "Profil edytora",
 	"picodePm.markEditorProfileTip": "Twój obecny profil edytora używa tego profilu.",
 	"picodePm.markProject": "Ten projekt",
-	"picodePm.markProjectTip": "Podagenci w tym projekcie używają tego profilu. Agent główny używa domyślnego.",
+	"picodePm.markProjectTip": "Nowe czaty w tym projekcie zaczynają z tym profilem, łącznie z głównym agentem.",
 	"picodePm.modeDelegation": "Pełne delegowanie",
 	"picodePm.modeDelegationTip": "Agent główny przekazuje każdą pracę podagentowi.",
 	"picodePm.modeOrganic": "Organiczny",

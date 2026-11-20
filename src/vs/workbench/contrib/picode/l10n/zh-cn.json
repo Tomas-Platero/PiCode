@@ -489,7 +489,7 @@
 	"picodePm.markEditorProfile": "编辑器配置文件",
 	"picodePm.markEditorProfileTip": "你当前的编辑器配置文件使用此配置文件。",
 	"picodePm.markProject": "此项目",
-	"picodePm.markProjectTip": "此项目中的子 Agent 使用此配置文件。主 Agent 遵循默认配置文件。",
+	"picodePm.markProjectTip": "此项目中的新聊天以此配置文件开始，包括主 Agent。",
 	"picodePm.modeDelegation": "完全委派",
 	"picodePm.modeDelegationTip": "主 Agent 将每项工作都交给子 Agent。",
 	"picodePm.modeOrganic": "有机",
