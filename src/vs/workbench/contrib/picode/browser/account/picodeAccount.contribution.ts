@@ -51,7 +51,10 @@ registerAction2(class OpenPicodeAccountAction extends Action2 {
 		});
 	}
 
-	async run(accessor: ServicesAccessor): Promise<void> {
-		await accessor.get(IEditorService).openEditor(PicodeAccountEditorInput.getOrCreate(), { pinned: true });
+	/** `section` opens the window on that page (`'sync'`, `'connections'`…). */
+	async run(accessor: ServicesAccessor, section?: unknown): Promise<void> {
+		const input = PicodeAccountEditorInput.getOrCreate();
+		input.requestSection(typeof section === 'string' ? section : undefined);
+		await accessor.get(IEditorService).openEditor(input, { pinned: true });
 	}
 });
