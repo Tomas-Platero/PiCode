@@ -572,3 +572,48 @@ input.picode-set-input:focus {
 	from { opacity: 0; transform: scale(0.96); }
 	to { opacity: 1; transform: none; }
 }
+
+/* ---- Scrollbars: thin and in the theme's colours, like the rest of the editor ---------------
+ * Styled with the WebKit pseudo-elements only: setting `scrollbar-color` makes Chromium draw
+ * its standard bar, arrows included. */
+
+.picode-settings-nav-scroll::-webkit-scrollbar,
+.picode-set-page::-webkit-scrollbar,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.picode-settings-nav-scroll::-webkit-scrollbar-track,
+.picode-set-page::-webkit-scrollbar-track,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar-track,
+.picode-settings-nav-scroll::-webkit-scrollbar-corner,
+.picode-set-page::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+.picode-settings-nav-scroll::-webkit-scrollbar-button,
+.picode-set-page::-webkit-scrollbar-button,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar-button {
+	display: none;
+}
+
+.picode-settings-nav-scroll::-webkit-scrollbar-thumb,
+.picode-set-page::-webkit-scrollbar-thumb,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar-thumb {
+	border: 2px solid transparent;
+	border-radius: 999px;
+	background-clip: padding-box;
+	background-color: var(--vscode-scrollbarSlider-background);
+}
+
+.picode-settings-nav-scroll::-webkit-scrollbar-thumb:hover,
+.picode-set-page::-webkit-scrollbar-thumb:hover,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar-thumb:hover {
+	background-color: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+/* The side list only shows its bar while the pointer is over it. */
+.picode-settings-nav-scroll:not(:hover)::-webkit-scrollbar-thumb {
+	background-color: transparent;
+}
