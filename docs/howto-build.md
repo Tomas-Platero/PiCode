@@ -407,10 +407,9 @@ También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta d
 - La fase 8 se ha ejecutado sobre el empaquetado real de una compilación completa, pero no
   se ha arrancado el `PiCode.exe` resultante en esta máquina.
 - No hay análisis estático de los scripts (`shellcheck` no está instalado).
-- `undo_telemetry.sh` de VSCodium **no está integrado**: el pipeline no reescribe las URLs
-  `*.data.microsoft.com` de la fuente. El patch de telemetría y el delta ya desactivan el
-  envío, pero la reescritura de URLs es un hueco declarado en `build/README.md`. Sigue siendo
-  hueco hoy: el cambio nunca llegó a hacerse en el árbol.
+- `undo_telemetry.sh` de VSCodium no se ejecuta, pero su efecto está en el árbol desde la 2.4.1:
+  el colector `mobile.events.data.microsoft.com` de `src/vs/platform/telemetry/common/1dsAppender.ts`
+  apunta a `0.0.0.0` (ADR-045). Era la única URL de ese tipo que quedaba en `src/`.
 - Las teselas PNG del menú Inicio (`code_150x150.png`, `code_70x70.png`) **sí se
   redibujan** desde `build/distribution/picode.ico`, en la preparación: el empaquetado las copia
   antes de que la fase 8 pueda tocarlas. `build/README.md` explica por qué es ahí y no en el

@@ -546,6 +546,11 @@ label.picode-account-row:hover,
 	color: var(--vscode-descriptionForeground);
 }
 
+/* The privacy row says what is and is never sent: it wraps instead of being cut. */
+.picode-account-privacy .picode-sync-item-text > span {
+	white-space: normal;
+}
+
 .picode-sync-item:not(.on) .picode-sync-item-text strong {
 	color: var(--vscode-descriptionForeground);
 }

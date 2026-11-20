@@ -6,7 +6,8 @@
  * redirect to the real feed on raw.githubusercontent.com and, on the way, adds one to a few daily
  * counters. Nothing identifies a person or a machine: no id, no IP, no stored request. The only
  * things read are the path (channel, OS, architecture, package), the PiCode version header and the
- * "first check of the day/week/month" flags the editor works out locally.
+ * "first check of the day/week/month" flags the editor works out locally. A check that carries
+ * `X-PiCode-Usage: off` (the person turned the setting off) is redirected and not counted at all.
  */
 
 export const FEED_BRANCHES = ["HEAD", "master", "beta", "experimental"] as const;
@@ -25,6 +26,8 @@ export const FEED_ORIGIN = "https://raw.githubusercontent.com/Tomas-Platero/PiCo
 /** The editor sends these headers; both are optional (an old or foreign client sends neither). */
 export const VERSION_HEADER = "x-picode-version";
 export const ACTIVE_HEADER = "x-picode-active";
+/** `off` when the person turned "Help Improve PiCode" off; such a check is answered but never counted. */
+export const USAGE_HEADER = "x-picode-usage";
 
 export interface FeedRequest {
   branch: FeedBranch;
@@ -102,6 +105,11 @@ export function readVersion(value: string | null): string | undefined {
 export function readActive(value: string | null): ActiveFlags {
   const words = new Set((value ?? "").split(",").map((word) => word.trim().toLowerCase()));
   return { day: words.has("day"), week: words.has("week"), month: words.has("month") };
+}
+
+/** False only when the editor says usage sharing is off; older editors never send the header. */
+export function sharesUsage(headers: { get(name: string): string | null }): boolean {
+  return headers.get(USAGE_HEADER)?.trim().toLowerCase() !== "off";
 }
 
 export function sampleOf(request: FeedRequest, headers: { get(name: string): string | null }): UsageSample {
