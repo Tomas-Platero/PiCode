@@ -62,7 +62,7 @@ class PicodeAccountOverviewSection extends Disposable {
 		DOM.append(head, $('h3')).textContent = localize('picodeAccountPrivacy', "Privacy");
 		const card = DOM.append(page, $('.picode-sync-card'));
 		const on = this.configurationService.getValue<boolean>(SHARE_USAGE_SETTING) !== false;
-		const row = DOM.append(card, $(`.picode-sync-item${on ? '.on' : ''}`));
+		const row = DOM.append(card, $(`.picode-sync-item.picode-account-privacy${on ? '.on' : ''}`));
 		const label = DOM.append(row, $('label.picode-sync-item-label'));
 		const icon = DOM.append(label, $('.picode-sync-item-icon'));
 		icon.style.setProperty('--picode-sync-item-color', 'var(--vscode-charts-blue)');
@@ -83,7 +83,7 @@ class PicodeAccountOverviewSection extends Disposable {
 		}));
 		const origin = this.productService.picode?.webOrigin;
 		if (origin) {
-			const policy = this.button(page, localize('picodeAccountPrivacyPolicy', "Privacy policy"), true);
+			const policy = this.button(DOM.append(page, $('.picode-account-actions')), localize('picodeAccountPrivacyPolicy', "Privacy policy"), true);
 			this.renderStore.add(policy.onDidClick(() => { void this.openerService.open(URI.parse(`${origin}/legal/privacy`)); }));
 		}
 	}
