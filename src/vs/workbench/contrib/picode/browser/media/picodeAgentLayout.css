@@ -871,38 +871,51 @@
 	visibility: visible;
 }
 
-/* -- the layout switch: Agent and Editor as one pill, the one in use lit ----------------------- */
+/* -- the layout switch: one rounded track, the layout in use is the lit thumb ------------------ */
 
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-agent),
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-editor) {
 	margin: 0;
-	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
-	background: var(--vscode-input-background, transparent);
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 22%, transparent);
+	background: color-mix(in srgb, var(--vscode-foreground) 14%, var(--vscode-titleBar-activeBackground, transparent));
+	box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-agent) {
 	border-right: none;
-	border-radius: 6px 0 0 6px;
-	padding: 1px 0 1px 1px;
+	border-radius: 999px 0 0 999px;
+	padding: 2px 0 2px 2px;
 }
 
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-editor) {
 	border-left: none;
-	border-radius: 0 6px 6px 0;
+	border-radius: 0 999px 999px 0;
 	margin-right: 4px;
-	padding: 1px 1px 1px 0;
+	padding: 2px 2px 2px 0;
 }
 
 .part.titlebar .action-label.codicon-picode-layout-agent,
 .part.titlebar .action-label.codicon-picode-layout-editor {
-	border-radius: 5px;
+	width: 26px;
+	border-radius: 999px;
 	color: var(--vscode-descriptionForeground);
+	opacity: 0.75;
+	transition: background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+}
+
+.part.titlebar .action-label.codicon-picode-layout-agent:not(.checked):hover,
+.part.titlebar .action-label.codicon-picode-layout-editor:not(.checked):hover {
+	color: var(--vscode-foreground);
+	opacity: 1;
+	background: transparent !important;
 }
 
 .part.titlebar .action-label.codicon-picode-layout-agent.checked,
 .part.titlebar .action-label.codicon-picode-layout-editor.checked {
-	color: var(--vscode-foreground);
-	background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground));
+	color: var(--vscode-button-foreground);
+	opacity: 1;
+	background: var(--vscode-button-background) !important;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 /* -- the switch's robot blinks while the layout changes --------------------------------------- */
