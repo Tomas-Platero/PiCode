@@ -1385,10 +1385,10 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			actions.push(new Separator());
 			const pinnedHere = view.pins.local === profile.name;
 			run('picode.profile.pinLocal', pinnedHere ? localize('picodePm.unpinLocal', "Unpin from this project") : localize('picodePm.pinLocal', "Pin to this project"), true,
-				() => this.editProfiles({ type: 'pin', source: 'local', ...(pinnedHere ? {} : { name: profile.name }) }, pinnedHere ? undefined : localize('picodePm.pinnedLocal', "Subagents in this project now use {0}, on this computer only.", profile.name)));
+				() => this.editProfiles({ type: 'pin', source: 'local', ...(pinnedHere ? {} : { name: profile.name }) }, pinnedHere ? undefined : localize('picodePm.pinnedLocal', "New chats in this project now start with {0}, on this computer only.", profile.name)));
 			const shared = view.pins.repo === profile.name;
 			run('picode.profile.pinRepo', shared ? localize('picodePm.unpinRepo', "Stop sharing with the repository") : localize('picodePm.pinRepo', "Share with the repository"), true,
-				() => this.editProfiles({ type: 'pin', source: 'repo', ...(shared ? {} : { name: profile.name }) }, shared ? undefined : localize('picodePm.pinnedRepo', "Saved in the repository: commit it so everyone's subagents use {0}.", profile.name)));
+				() => this.editProfiles({ type: 'pin', source: 'repo', ...(shared ? {} : { name: profile.name }) }, shared ? undefined : localize('picodePm.pinnedRepo', "Saved in the repository: commit it so everyone's new chats here start with {0}.", profile.name)));
 		}
 		actions.push(new Separator());
 		const pinned = view.pins.local === profile.name || view.pins.repo === profile.name;
