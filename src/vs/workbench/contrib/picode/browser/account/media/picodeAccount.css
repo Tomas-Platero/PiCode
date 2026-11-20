@@ -546,6 +546,11 @@ label.picode-account-row:hover,
 	color: var(--vscode-descriptionForeground);
 }
 
+/* The privacy row says what is and is never sent: it wraps instead of being cut. */
+.picode-account-privacy .picode-sync-item-text > span {
+	white-space: normal;
+}
+
 .picode-sync-item:not(.on) .picode-sync-item-text strong {
 	color: var(--vscode-descriptionForeground);
 }
@@ -687,4 +692,138 @@ input.picode-sync-switch:focus-visible {
 	.picode-account-page {
 		padding: 20px 16px 28px;
 	}
+}
+
+/* Privacy (ADR-045): a shield hero, then what is sent, the connections and what stays off. */
+.picode-privacy-hero {
+	--picode-privacy-tone: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	padding: 20px 22px;
+	border: 1px solid color-mix(in srgb, var(--picode-privacy-tone) 30%, var(--vscode-panel-border));
+	border-radius: 14px;
+	background:
+		radial-gradient(90% 140% at 0% 50%, color-mix(in srgb, var(--picode-privacy-tone) 16%, transparent), transparent 70%),
+		var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-privacy-shield {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 52px;
+	height: 52px;
+	border-radius: 16px;
+	color: var(--picode-privacy-tone);
+	background: color-mix(in srgb, var(--picode-privacy-tone) 18%, transparent);
+	box-shadow: 0 0 0 6px color-mix(in srgb, var(--picode-privacy-tone) 7%, transparent);
+}
+
+.picode-privacy-shield .codicon[class*='codicon-'] {
+	font-size: 28px;
+}
+
+.picode-privacy-details {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px 16px 14px 60px;
+	background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
+	border-top: 1px solid var(--vscode-panel-border);
+}
+
+.picode-privacy-chips {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.picode-privacy-chips-title {
+	display: inline-flex;
+	flex: 0 0 132px;
+	align-items: center;
+	white-space: nowrap;
+	gap: 5px;
+	padding-top: 3px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-privacy-chips-title .codicon {
+	font-size: 12px;
+}
+
+.picode-privacy-chip-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.picode-privacy-chip {
+	padding: 2px 9px;
+	border-radius: 999px;
+	font-size: 12px;
+	line-height: 18px;
+}
+
+.picode-privacy-chips.sent.empty .picode-privacy-chip {
+	color: var(--vscode-descriptionForeground);
+	background: color-mix(in srgb, var(--vscode-descriptionForeground) 12%, transparent);
+}
+
+.picode-privacy-chips.sent:not(.empty) .picode-privacy-chip {
+	color: var(--vscode-charts-blue);
+	background: color-mix(in srgb, var(--vscode-charts-blue) 14%, transparent);
+}
+
+.picode-privacy-chips.never .picode-privacy-chip {
+	color: var(--vscode-descriptionForeground);
+	background: color-mix(in srgb, var(--vscode-descriptionForeground) 12%, transparent);
+	text-decoration: line-through;
+	text-decoration-color: color-mix(in srgb, var(--vscode-errorForeground) 70%, transparent);
+}
+
+.picode-privacy-choice-row {
+	flex-wrap: wrap;
+}
+
+.picode-privacy-segmented {
+	display: inline-flex;
+	padding: 3px;
+	gap: 2px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 9px;
+	background: var(--vscode-input-background);
+}
+
+.picode-privacy-segment {
+	padding: 4px 11px;
+	border: 0;
+	border-radius: 6px;
+	font: inherit;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+	background: transparent;
+	cursor: pointer;
+	transition: background 0.12s ease, color 0.12s ease;
+}
+
+.picode-privacy-segment:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground);
+}
+
+.picode-privacy-segment.chosen {
+	color: var(--vscode-button-foreground);
+	background: var(--vscode-button-background);
+}
+
+.picode-privacy-segment:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
 }

@@ -17,6 +17,7 @@ import {
   readActive,
   readVersion,
   sampleOf,
+  sharesUsage,
   summarize,
   type UsageDay,
 } from "../src/lib/usage.ts";
@@ -138,4 +139,14 @@ test("with no token configured nobody may read the stats", () => {
   assert.equal(isStatsCaller("Bearer ", undefined), false);
   assert.equal(isStatsCaller("Bearer anything", undefined), false);
   assert.equal(isStatsCaller("Bearer anything", ""), false);
+});
+
+test("a check from an editor that turned usage sharing off is not counted", () => {
+  assert.equal(sharesUsage(headers({ "x-picode-usage": "off" })), false);
+  assert.equal(sharesUsage(headers({ "x-picode-usage": " OFF " })), false);
+});
+
+test("a check without the sharing header (on, or an older editor) is counted", () => {
+  assert.equal(sharesUsage(headers({})), true);
+  assert.equal(sharesUsage(headers({ "x-picode-version": "2.4.1", "x-picode-active": "day" })), true);
 });
