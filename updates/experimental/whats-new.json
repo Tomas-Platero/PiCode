@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.3.2-experimental",
+			"notes": "### 🐛 Fixed\n\n- **The chat no longer freezes when pi asks you something.** A question or a confirmation that arrived while pi was answering could hang the whole window before the question was even shown. It now appears and waits for your answer."
+		},
+		{
 			"version": "2.3.1-experimental",
 			"notes": "### 🐛 Fixed\n\n- **Usage alerts belong to each window.** Every limit (5-hour, weekly, billing period…) now has its own bell beside it. Set an alert on the weekly window without the 5-hour one going off too, and the cards no longer repeat the same alerts block under every model. The alerts you had are copied to each window of their model.\n- **Update all no longer spins its cloud.** While PiCode updates, the button shows a progress spinner, and the memory engine restarts once instead of twice.\n- **What's New icons stay still.** The step you pick in a demo kept its icon turning; now only progress spinners turn."
 		},
@@ -115,10 +119,6 @@
 		{
 			"version": "0.7.4-experimental",
 			"notes": "### 🐛 Fixed\n\n- What's New now also opens on the update that brings it in.\n- Updating the portable version no longer opens empty command windows."
-		},
-		{
-			"version": "0.7.3-experimental",
-			"notes": "### ✨ New\n\n- Voice dictation in the chat: talk and your words are typed phrase by phrase, all on your own computer.\n- The microphone ring follows your voice, the text appears as you speak, and the message can send itself after a pause.\n- Dictation can be set up from the first-run setup; it downloads with progress, is checked before use and can be cancelled.\n- After an update, a window shows what changed.\n\n### 🐛 Fixed\n\n- The chat microphone shows up again, and dictation is no longer offered once it is installed."
 		}
 	]
 }
