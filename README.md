@@ -75,7 +75,7 @@
 </tr>
 </table>
 
-<p align="center"><sub>Switch whenever you like — one click, no restart.</sub></p>
+<p align="center"><sub>Switch whenever you like from the switch at the top right — one click, no restart.</sub></p>
 
 <img src="./resources/picode/screenshots/layout-editor.png" alt="PiCode in the Editor layout, with the chat beside the code" width="100%" />
 
@@ -111,6 +111,8 @@ What changed, what's still running, which tools are connected and which issues a
 ### ⚙️ Your AI, your rules
 
 Choose which model answers, give each agent its own, add tools and skills, and keep it all up to date — from one window.
+
+**🎚️ Agent profiles.** Save a model for each agent, with backups for when one fails, as a profile — everyday, cheap, deep work — and switch from the chat in one click. Pin one to a project, or let each editor profile bring its own.
 
 <img src="./resources/picode/screenshots/chat-settings.png" alt="The window where you set up your AI" width="100%" />
 
@@ -158,7 +160,7 @@ Choose which model answers, give each agent its own, add tools and skills, and k
 | --- | :---: | :---: |
 | The editor, the chat and the agent | ✅ | ✅ |
 | A PiCode account | ✅ | ✅ |
-| Your setup on every computer, encrypted | — | ✅ |
+| Your setup on every computer, part by part — your keys stay on yours | — | ✅ |
 | Last week's chats, wherever you are | — | ✅ |
 | Your GitHub and Jira issues in the editor | — | ✅ |
 
