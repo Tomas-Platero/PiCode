@@ -96,6 +96,22 @@ export function subagentInjectionEnv(gentlePiDir: string, fallbackExtension: str
 	return { [CHILD_INJECTION_ENV]: JSON.stringify({ version: 1, noExtensions: false, extensionPaths }) };
 }
 
+/** pi's switch for its anonymous install and update report; set, it wins over pi's own setting. */
+export const PI_TELEMETRY_ENV = 'PI_TELEMETRY';
+
+/**
+ * Ties pi's install and update report to "Help Improve PiCode" (`picode.privacy.shareUsage`,
+ * ADR-045). pi reads the variable each time it reports, so changing it applies at once: off tells
+ * pi to send nothing; on removes it, and pi's own setting decides as it would anywhere else.
+ */
+export function applyUsageSharing(share: boolean, target: NodeJS.ProcessEnv = process.env): void {
+	if (share) {
+		delete target[PI_TELEMETRY_ENV];
+	} else {
+		target[PI_TELEMETRY_ENV] = '0';
+	}
+}
+
 /** `env` with the product's variables laid over it; the product's values win. */
 export function withProductEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 	return { ...env, ...PRODUCT_ENV };

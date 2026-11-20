@@ -85,7 +85,7 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			scope: ConfigurationScope.APPLICATION,
 			title: localize('picodeShareUsageTitle', "Help Improve PiCode"),
-			markdownDescription: localize('picodeShareUsage', "Send anonymous usage counts with each update check: the PiCode version, your system and whether PiCode was used today, this week or this month. No code, chats, file names, account or identifier is ever sent. [Privacy policy](https://www.getpicode.app/legal/privacy)"),
+			markdownDescription: localize('picodeShareUsage', "Send anonymous usage counts with each update check: the PiCode version, your system and whether PiCode was used today, this week or this month. It also lets the agent send its own anonymous install and update notices. No code, chats, file names, account or identifier is ever sent. [Privacy policy](https://www.getpicode.app/legal/privacy)"),
 			tags: ['usesOnlineServices']
 		},
 		'update.titleBar': {
