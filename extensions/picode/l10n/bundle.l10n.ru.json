@@ -654,5 +654,6 @@
 	"🤖 Answers": "🤖 Ответы",
 	"🧠 Model": "🧠 Модель",
 	"🧠 Thinking set to **{0}**.": "🧠 Уровень рассуждений: **{0}**.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Уровень рассуждений: **{0}**. Выберите командой `/thinking <level>`: {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Уровень рассуждений: **{0}**. Выберите командой `/thinking <level>`: {1}.",
+	"The extension “{0}” could not load, so it is off in this chat.": "Не удалось загрузить расширение «{0}», поэтому в этом чате оно отключено."
 }

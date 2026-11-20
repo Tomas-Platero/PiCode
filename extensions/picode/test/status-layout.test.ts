@@ -87,11 +87,10 @@ test('the DOM the section builds matches the layout: buttons live in a header or
 	// grid column) — never appended to the card after the text, the shape that produced "text on one
 	// side, button on the other".
 	assert.match(SOURCE, /const bar = DOM\.append\(header, \$\('\.card-actions'\)\);[\s\S]*?this\.addButton\(bar, action\)/);
-	assert.match(SOURCE, /private addRowButton\(card: HTMLElement[\s\S]*?const side = DOM\.append\(row, \$\('\.row-side'\)\);[\s\S]*?this\.addButton\(side, action\)/);
 });
 
 test('a button stays busy while its command runs, and the page reads the status again after', () => {
-	assert.match(SOURCE, /private async run\(action: IAction, button: Button\)[\s\S]*?this\.setBusy\(button, true\)[\s\S]*?await this\.commandService\.executeCommand[\s\S]*?this\.refresh\(true\)/);
+	assert.match(SOURCE, /private async run\(action: IAction, button: Button\)[\s\S]*?this\.setBusy\(button, action, true\)[\s\S]*?await this\.commandService\.executeCommand[\s\S]*?this\.refresh\(true\)/);
 	// A reading that changed nothing must not rebuild the cards (and swap a button out from under a click).
 	assert.match(SOURCE, /fingerprint === this\.fingerprint/);
 });

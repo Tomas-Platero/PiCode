@@ -47,7 +47,7 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { answeringChatRows, BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { answeringChatRows, BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, availableThinkingLevels, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { registerWizardModelCommands } from './wizard-models';
@@ -1141,6 +1141,8 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	}));
 	// The Context block of Status: where a chat's context goes, and its Compact button.
 	disposables.push(vscode.commands.registerCommand('picode.context.breakdown', (chat: unknown) => getSessionContext(chat)));
+	// The thinking levels the chat's model accepts, for the chat's thinking picker.
+	disposables.push(vscode.commands.registerCommand('picode.pi.availableThinkingLevels', (chat: unknown) => availableThinkingLevels(chat)));
 	disposables.push(vscode.commands.registerCommand('picode.context.compact', async (chat: unknown) => {
 		const result = await compactSession(chat);
 		if (result === 'busy') {
