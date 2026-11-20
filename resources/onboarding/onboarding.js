@@ -191,7 +191,7 @@ const state = {
 	/** How PiCode is laid out (`picode.appearance.layout`). */
 	layout: 'editor',
 	/** The switches, as the editor has them in force; the backend says. */
-	extras: { mcp: true, context: true, voice: false },
+	extras: { mcp: true, context: true, voice: false, privacy: true },
 	voiceAvailable: false,
 	/** How much of the editor travels with a message (`picode.context.mode`). */
 	contextMode: 'project',
@@ -1611,6 +1611,7 @@ function doneView() {
 		el('p', { class: 'lead', text: t('doneLead') }),
 		summary(),
 		startPanel(),
+		privacyPanel(),
 		advancedBlock(),
 		el('p', { class: 'pro', text: t('proNote') }),
 	];
@@ -1653,6 +1654,14 @@ function languageRow() {
 		return { key: 'language', mark: '🌐', label: t('languageFact'), value: `${name} · ${t('languageOffline')}` };
 	}
 	return undefined;
+}
+
+/** "Help Improve PiCode": in plain sight, with what is and is never sent (ADR-045). */
+function privacyPanel() {
+	return el('div', { class: 'panel', key: 'privacy' },
+		el('div', { class: 'panel-head' }, el('span', { class: 'panel-title', text: `📊 ${t('privacyTitle')}` })),
+		toggleRow('privacy', t('privacyShare'), t('privacyShareWhy')),
+	);
 }
 
 /** One question, three answers. */
@@ -1889,6 +1898,11 @@ function go(index) {
 /** Records the setup and lets the editor open. */
 async function finish(skipped) {
 	await withBusy('', async () => {
+		// Whoever reached the last step saw the usage-sharing switch, so the choice is recorded even
+		// when left as it was; the editor then does not ask again. A skipped setup is asked there.
+		if (skipped !== true) {
+			await command('setExtras', { values: { privacy: state.extras.privacy === true } });
+		}
 		await window.picode.finish({ skipped: skipped === true, folder: state.folder });
 	});
 }

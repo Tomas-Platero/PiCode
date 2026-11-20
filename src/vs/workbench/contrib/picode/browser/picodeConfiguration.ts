@@ -26,6 +26,7 @@ import './picodeUsageMeter.js';
 import './picodeChatBranchChip.js';
 import './picodeChatProfileChip.js';
 import './picodeUsageAlerts.js';
+import './picodeUsageSharingNotice.js';
 import './picodeAgentStatusPill.js';
 import './picodeUsageStatus.js';
 import './picodeSetupCommands.js';
