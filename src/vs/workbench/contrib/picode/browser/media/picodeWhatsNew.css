@@ -473,6 +473,11 @@
 	cursor: pointer;
 }
 
+.picode-whatsnew-row.model .picode-whatsnew-row-detail {
+	margin-left: auto;
+	animation: picode-whatsnew-appear 0.25s ease-out;
+}
+
 .picode-whatsnew-sync-result {
 	margin-top: 8px;
 	color: var(--vscode-descriptionForeground);
