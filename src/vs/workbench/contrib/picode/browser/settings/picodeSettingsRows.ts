@@ -210,13 +210,27 @@ export class PicodeSettingsPage extends Disposable {
 				b.setAttribute('aria-checked', String(i === index));
 				b.tabIndex = i === index ? 0 : -1;
 			});
-			const chosen = buttons[index];
-			// Measured after layout: the pill takes the chosen option's place and size.
-			DOM.getWindow(group).requestAnimationFrame(() => {
-				pill.style.width = `${chosen.offsetWidth}px`;
-				pill.style.transform = `translateX(${chosen.offsetLeft - 2}px)`;
-			});
+			chosenIndex = index;
+			place();
 		};
+		let chosenIndex = 0;
+		// The pill takes the chosen option's place and size. A page that is built while hidden
+		// measures nothing, so the pill is placed again whenever the control gets its real size.
+		const place = () => {
+			const chosen = buttons[chosenIndex];
+			if (!chosen || chosen.offsetWidth === 0) {
+				return;
+			}
+			pill.style.width = `${chosen.offsetWidth}px`;
+			pill.style.transform = `translateX(${chosen.offsetLeft}px)`;
+			if (!group.classList.contains('ready')) {
+				// Only later moves slide: the first placement appears where it belongs.
+				DOM.getWindow(group).requestAnimationFrame(() => group.classList.add('ready'));
+			}
+		};
+		const observer = new (DOM.getWindow(group).ResizeObserver)(() => place());
+		observer.observe(group);
+		this._register({ dispose: () => observer.disconnect() });
 		paint();
 		for (const key of watchKeys) {
 			this.watch(key, () => paint());

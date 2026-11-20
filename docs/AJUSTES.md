@@ -15,15 +15,16 @@ Objetivo: una ventana **Settings** al estilo de Claude Code que junta los ajuste
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1 S2 S3 S5 | inline | en curso | |
-| T2 | S6 | inline | pendiente | |
-| T3 | S2 S3 S4 | inline | pendiente | |
-| T4 | S4 (Tools) | inline | pendiente | |
-| T5 | S6 (árbol) | inline | pendiente | |
-| T6 | idiomas, docs, What's New | inline | pendiente | |
+| T1 | S1 S2 S3 S5 | inline | hecho | 6f78deef |
+| T2 | S6 | inline | hecho | 6f78deef |
+| T3 | S2 S3 S4 | inline | hecho | 6f78deef |
+| T4 | S4 (Tools) | inline | hecho | 6f78deef |
+| T5 | S6 (árbol) | inline | hecho (parcial, ver L4) | 1d06299e |
+| T6 | idiomas, docs, What's New | inline | idiomas y docs hechos; What's New a la release | 692b53a7 |
 
 ## Log
 
 - **L1** (2026-11-20) · «quiero que las opciones de picode (vscode). Se vena así como aquí en claude code o como tenemos la de cuenta, etc. Así que dame un plan revisando TODAS las opciones, que añadir, que quitar y tal. Mejora la ui y la estética.»
 - **L2** · Elegido: una sola ventana. Pedidos después: diseños, revisión de duplicados, categorías como Claude Code, animaciones. Plan aprobado.
 - **L3** · Decisión de construcción: en vez de una ventana nueva, la ventana *Chat Settings* (`aiCustomizationManagementEditor`) pasa a ser *Settings*. Ya pinta Agents, Skills, Packages y Tools con su vista de detalle, ya es modal y ya admite páginas registradas (`aiCustomizationManagementSectionRegistry`). Se le añaden grupos en el menú, las páginas de Preferences y las de Cuenta (como páginas registradas). La ventana Cuenta se borra.
+- **L4** · Hecho y comprobado: compila, 5 pruebas de `picodeSettingsData` pasan, `l10n check` y `docs check` limpios. Decisiones: `picode.sync.*`, `picode.agents.profile` y `picode.privacy.shareUsage` no se ocultan del árbol (con `included: false` el editor se niega a escribirlos); la lectura de `pi.providers` del conector se queda (protege ajustes antiguos); las opciones `chat.*` de Copilot siguen en *All settings* hasta comprobar una a una que pi no las lee. La página de *What's New* se escribe con la release, cuando se sepa la versión.

@@ -499,7 +499,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 
 const contribution: IAICustomizationManagementSectionContribution = {
 	id: AICustomizationManagementSection.Status,
-	label: localize('picodeAgentOverviewLabel', "Overview"),
+	label: localize('picodeAgentStatusLabel', "Status"),
 	icon: Codicon.dashboard,
 	description: localize('picodeAgentOverviewDescription', "The pi in force, its model and the providers it can use."),
 	keywords: ['status', 'pi', 'version', 'restart', 'profile', 'model', 'providers'],

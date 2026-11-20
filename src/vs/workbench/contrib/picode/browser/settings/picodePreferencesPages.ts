@@ -410,7 +410,7 @@ registerPage({
 	keywords: ['version', 'update', 'pi', 'packages', 'gentle', 'engram', 'extensions', "what's new"],
 	build: (page, { commandService, productService }) => {
 		page.buttonRow(
-			{ name: `${productService.nameLong} ${productService.version}`, description: localize('picodePrefUpdatesChannel', "Checks for a newer PiCode."), icon: Codicon.versions },
+			{ name: `PiCode ${productService.picodeVersion ?? productService.version}`, description: localize('picodePrefUpdatesChannel', "Checks for a newer PiCode."), icon: Codicon.versions },
 			localize('picodePrefCheckNow', "Check now"),
 			() => commandService.executeCommand('update.checkForUpdate'),
 		);

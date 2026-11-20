@@ -890,6 +890,8 @@
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-editor) {
 	border-left: none;
 	border-radius: 0 999px 999px 0;
+	/* The title bar spaces its buttons 4px apart (`gap`); the two halves of the track must touch. */
+	margin-left: -4px;
 	margin-right: 4px;
 	padding: 2px 2px 2px 0;
 }
