@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.3.2",
+			"notes": "### 🐛 Fixed\n\n- **The chat no longer freezes when pi asks you something.** A question or a confirmation that arrived while pi was answering could hang the whole window before the question was even shown. It now appears and waits for your answer."
+		},
+		{
 			"version": "2.3.1",
 			"notes": "### 🐛 Fixed\n\n- **Usage alerts belong to each window.** Every limit (5-hour, weekly, billing period…) now has its own bell beside it. Set an alert on the weekly window without the 5-hour one going off too, and the cards no longer repeat the same alerts block under every model. The alerts you had are copied to each window of their model.\n- **Update all no longer spins its cloud.** While PiCode updates, the button shows a progress spinner, and the memory engine restarts once instead of twice.\n- **What's New icons stay still.** The step you pick in a demo kept its icon turning; now only progress spinners turn."
 		},
