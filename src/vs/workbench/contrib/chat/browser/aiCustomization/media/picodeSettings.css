@@ -397,6 +397,11 @@ input.picode-set-switch:focus-visible {
 	color: var(--vscode-button-foreground);
 }
 
+/* Icons take the option's colour: a themed icon colour would sink into the lit thumb. */
+.picode-set-segment .codicon {
+	color: inherit;
+}
+
 .picode-set-segment[aria-checked="false"] {
 	color: var(--vscode-descriptionForeground);
 }
