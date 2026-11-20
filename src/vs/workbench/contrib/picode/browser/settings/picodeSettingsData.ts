@@ -40,3 +40,15 @@ export function accountLinkTarget(page: string | undefined): 'account' | 'cloudS
 		default: return 'account';
 	}
 }
+
+/** A theme's kind, from the editor's colour scheme (`dark`, `light`, `hcDark`, `hcLight`). */
+export type ThemeKind = 'dark' | 'light' | 'hc';
+
+export function themeKind(type: string): ThemeKind {
+	return type === 'light' ? 'light' : type === 'hcDark' || type === 'hcLight' || type === 'hc' ? 'hc' : 'dark';
+}
+
+/** Whether a theme shows in the gallery for this search and kind filter. */
+export function themeMatches(query: string, filter: ThemeKind | 'all', label: string, kind: ThemeKind): boolean {
+	return (filter === 'all' || filter === kind) && settingsMatches(query, label, []);
+}

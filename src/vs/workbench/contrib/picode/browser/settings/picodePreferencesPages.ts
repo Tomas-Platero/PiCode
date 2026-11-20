@@ -139,7 +139,7 @@ registerPage({
 
 		const themeName = () => themeService.getColorTheme().label;
 		const themeRow = page.row({ name: localize('picodePrefColorTheme', "Color theme"), description: themeName(), keywords: 'colors' });
-		page.button(themeRow, localize('picodePrefBrowseThemes', "Browse themes"), () => commandService.executeCommand('workbench.action.selectTheme'), { icon: Codicon.symbolColor });
+		page.button(themeRow, localize('picodePrefBrowseThemes', "Browse themes"), () => commandService.executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.Themes), { icon: Codicon.symbolColor });
 		page.onSettingChange('workbench.colorTheme', () => {
 			const desc = themeRow.parentElement?.querySelector('.picode-set-row-desc');
 			if (desc) {
