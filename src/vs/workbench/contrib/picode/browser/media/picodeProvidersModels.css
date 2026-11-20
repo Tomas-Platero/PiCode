@@ -295,6 +295,14 @@
 	color: var(--vscode-editorWarning-foreground, #d29922);
 }
 
+/* A change that went through: quiet, not a warning. */
+.picode-pm-saved {
+	flex-shrink: 0;
+	margin: 0 0 8px;
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	color: var(--vscode-descriptionForeground);
+}
+
 /* A provider that works without a stored key: not a fault, so not the grey of a fault. */
 .picode-pm-badge.info {
 	color: var(--vscode-descriptionForeground);
@@ -1283,6 +1291,9 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 	align-items: center;
 	gap: 3px;
 	flex-shrink: 0;
+	/* Fixed width, so a row with a count lines up with the rows without one. */
+	box-sizing: border-box;
+	width: 40px;
 	padding: 2px 6px;
 	border: 1px solid transparent;
 	border-radius: 4px;
@@ -1309,4 +1320,7 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 	padding: 4px 10px;
 	color: var(--vscode-descriptionForeground);
 	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	/* The agent list below keeps room for its scrollbar; keep the same room so the buttons line up. */
+	overflow: hidden;
+	scrollbar-gutter: stable;
 }

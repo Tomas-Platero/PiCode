@@ -22,7 +22,7 @@ import { IActionViewItemService } from '../../../../platform/actions/browser/act
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { IActionWidgetService } from '../../../../platform/actionWidget/browser/actionWidget.js';
 import { IActionWidgetDropdownAction, IActionWidgetDropdownActionProvider } from '../../../../platform/actionWidget/browser/actionWidgetDropdown.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
@@ -34,6 +34,8 @@ import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { ChatAgentLocation } from '../../chat/common/constants.js';
 
 const PROFILE_CHIP_COMMAND = 'picode.chat.profileChip';
+/** Run by the connector after a profile changes, so the chip shows it at once. */
+const PROFILE_CHIP_REFRESH_COMMAND = 'picode.chat.profileChip.refresh';
 
 /** The part of `picode.agentProfiles.state` the chip reads. */
 interface IProfilesView {
@@ -226,6 +228,7 @@ class PicodeProfileChipContribution extends Disposable implements IWorkbenchCont
 	) {
 		super();
 		const model = this._register(new ProfileChipModel(commandService, chatWidgetService, hostService));
+		this._register(CommandsRegistry.registerCommand(PROFILE_CHIP_REFRESH_COMMAND, () => model.refresh()));
 		this._register(actionViewItemService.register(MenuId.ChatInput, PROFILE_CHIP_COMMAND, action => instantiationService.createInstance(ProfileChipActionViewItem, action, model)));
 	}
 }

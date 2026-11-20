@@ -33,5 +33,20 @@ export function isExpectedHelperNotice(message: string): boolean {
  */
 export function isStartupHousekeepingNotice(message: string): boolean {
 	return /applied saved model config to \d+ agent/i.test(message)
-		|| /delegation\/review assets ready/i.test(message);
+		|| /delegation\/review assets ready/i.test(message)
+		|| isProfileStartWithoutChange(message);
+}
+
+/**
+ * gentle-pi 4.9's note that a chat started with its agent profile, when the profile left the chat's
+ * model alone: the profile is already on the chip in the chat input. When the profile moved the chat
+ * to another model, or could not, the note says something worth reading and stays.
+ */
+function isProfileStartWithoutChange(message: string): boolean {
+	const [first, ...rest] = message.trim().split(/\r?\n/);
+	if (!/^el Gentleman started with profile ".+"\.$/.test(first.trim())) {
+		return false;
+	}
+	const note = rest.join('\n').trim();
+	return note === '' || /^profile ".+" has no orchestrator model; this session keeps its current model\.$/.test(note);
 }

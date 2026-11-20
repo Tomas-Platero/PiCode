@@ -34,3 +34,14 @@ test('a notice that asks for something is still shown', () => {
 	assert.equal(isStartupHousekeepingNotice('Skill registry refreshed (41 skills)'), false);
 	assert.equal(isStartupHousekeepingNotice(''), false);
 });
+
+test('the note that a chat started with its profile and nothing changed is dropped', () => {
+	assert.equal(isStartupHousekeepingNotice('el Gentleman started with profile "current".\nprofile "current" has no orchestrator model; this session keeps its current model.'), true);
+	assert.equal(isStartupHousekeepingNotice('el Gentleman started with profile "work".'), true);
+});
+
+test('the note that a profile moved the chat to another model, or could not, is still shown', () => {
+	assert.equal(isStartupHousekeepingNotice('el Gentleman started with profile "work".\nThis session now runs on openai/gpt-5 · high.'), false);
+	assert.equal(isStartupHousekeepingNotice('el Gentleman started with profile "work".\nopenai/gpt-5 is not in the model catalog; this session keeps its current model.'), false);
+	assert.equal(isStartupHousekeepingNotice('el Gentleman started with profile "work".\nno authentication is configured for openai; this session keeps its current model.'), false);
+});

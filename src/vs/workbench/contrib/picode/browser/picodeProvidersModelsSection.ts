@@ -998,8 +998,10 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		try {
 			this.gentleState = await this.commandService.executeCommand<IGentleSettings>('picode.gentle.setSetting', { key, value });
 			this.agentNote = localize('picodePm.agentSaved', "Saved. The agents use it from your next message.");
+			this.agentNoteIsError = false;
 		} catch (error) {
 			this.agentNote = localize('picodePm.agentFailed', "It could not be saved: {0}", error instanceof Error ? error.message : String(error));
+			this.agentNoteIsError = true;
 		}
 		if (this.tab === 'agents') {
 			this.render();
@@ -1193,7 +1195,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		}
 
 		if (this.agentNote.length > 0) {
-			append(detail, $(this.agentNoteIsError ? 'p.picode-pm-error' : 'p.picode-pm-note')).textContent = this.agentNote;
+			append(detail, $(this.agentNoteIsError ? 'p.picode-pm-error' : 'p.picode-pm-saved')).textContent = this.agentNote;
 		}
 
 		// Every model the editor can reach, by provider; a model the profile names that is not in the list is kept.

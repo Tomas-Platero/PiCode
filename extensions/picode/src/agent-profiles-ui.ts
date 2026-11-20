@@ -16,6 +16,8 @@ export const AGENT_PROFILES_EDIT_COMMAND = 'picode.agentProfiles.edit';
 export const AGENT_PROFILES_USE_COMMAND = 'picode.agentProfiles.use';
 /** The editor profile's own agent profile: a setting, so it lives in each editor profile's settings. */
 export const EDITOR_PROFILE_SETTING = 'picode.agents.profile';
+/** The editor's command that makes the profile chip in the chat input read the profiles again. */
+const PROFILE_CHIP_REFRESH_COMMAND = 'picode.chat.profileChip.refresh';
 
 export interface AgentProfilesView extends AgentProfilesState {
 	/** The agents a profile can route: the main agent first, then Gentle's agents. */
@@ -113,10 +115,13 @@ async function useProfile(profileDir: string, name: string, mode: 'default' | 's
 	return true;
 }
 
+/** Lets the profile chip in the chat input read the profiles again after a change made here. */
+function profilesChanged(): void {
+	void vscode.commands.executeCommand(PROFILE_CHIP_REFRESH_COMMAND).then(undefined, () => undefined);
+}
+
 export function registerAgentProfilesCommands(profileDir: string): vscode.Disposable[] {
-	const changed = new vscode.EventEmitter<void>();
 	return [
-		changed,
 		vscode.commands.registerCommand(AGENT_PROFILES_STATE_COMMAND, (): AgentProfilesView => view(profileDir)),
 		vscode.commands.registerCommand(AGENT_PROFILES_EDIT_COMMAND, async (edit: ProfileEdit): Promise<AgentProfilesView | { readonly error: string }> => {
 			try {
@@ -131,6 +136,7 @@ export function registerAgentProfilesCommands(profileDir: string): vscode.Dispos
 				if (edit.type === 'rename' && editorProfileChoice() === edit.name) {
 					await vscode.workspace.getConfiguration().update(EDITOR_PROFILE_SETTING, edit.to, vscode.ConfigurationTarget.Global);
 				}
+				profilesChanged();
 				return view(profileDir);
 			} catch (error) {
 				return { error: error instanceof ProfileEditError ? error.message : String(error) };
@@ -143,6 +149,7 @@ export function registerAgentProfilesCommands(profileDir: string): vscode.Dispos
 				// This editor profile asks for a profile: the choice becomes its own, or the next switch back would undo it.
 				await vscode.workspace.getConfiguration().update(EDITOR_PROFILE_SETTING, name, vscode.ConfigurationTarget.Global);
 			}
+			profilesChanged();
 			return view(profileDir);
 		}),
 		...followEditorProfile(profileDir),
@@ -172,10 +179,12 @@ function followEditorProfile(profileDir: string): vscode.Disposable[] {
 		if (!await useProfile(profileDir, wanted, 'default', false)) {
 			return;
 		}
+		profilesChanged();
 		const undo = vscode.l10n.t('Undo');
 		const answer = await vscode.window.showInformationMessage(vscode.l10n.t('Agents now use the {0} profile.', wanted), ...(previous === undefined ? [] : [undo]));
 		if (answer === undo && previous !== undefined) {
 			await useProfile(profileDir, previous, 'default', false);
+			profilesChanged();
 			await vscode.workspace.getConfiguration().update(EDITOR_PROFILE_SETTING, previous, vscode.ConfigurationTarget.Global);
 		}
 	};
