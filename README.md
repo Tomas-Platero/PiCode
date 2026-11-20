@@ -199,7 +199,7 @@ Windows builds are signed with a free certificate: *Free code signing provided b
 
 - **Only official builds are signed.** Every release is built from this repository by GitHub Actions and signed from that same run; nothing built on a personal machine is signed.
 - **Team roles.** [Tomás Platero](https://github.com/Tomas-Platero) is the author, reviewer and approver of every signing request.
-- **Privacy.** PiCode only talks to other systems when asked: it checks `getpicode.app` for updates, signs in to your PiCode Account, syncs your settings if you have Pro, and sends prompts to the AI providers you configure. Nothing else leaves your computer. See the [privacy policy](https://www.getpicode.app/legal/privacy).
+- **Privacy.** PiCode only talks to other systems when asked: it checks `getpicode.app` for updates, signs in to your PiCode Account, syncs your settings if you have Pro, and sends prompts to the AI providers you configure. Each update check also carries anonymous usage counts (PiCode version, system, and whether it was used today, this week or this month; never code, chats, files, your account or an identifier). Turn it off in the setup, in *Settings › Help Improve PiCode* or in *Account › Privacy*. Nothing else leaves your computer. See the [privacy policy](https://www.getpicode.app/legal/privacy).
 
 </details>
 

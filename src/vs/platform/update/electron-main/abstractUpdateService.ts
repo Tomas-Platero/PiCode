@@ -27,6 +27,7 @@ import { feedPathOf, verifyUpdateSignature } from '../node/updateSignature.js';
 
 const LAST_KNOWN_VERSION_STORAGE_KEY = 'abstractUpdateService/lastKnownVersion';
 const LAST_ACTIVE_DAY_STORAGE_KEY = 'abstractUpdateService/lastActiveDay';
+const SHARE_USAGE_SETTING = 'picode.privacy.shareUsage';
 
 /** How long a hotfix waits after publication before it is offered (a normal update waits `update.minReleaseAge`). */
 const HOTFIX_MIN_RELEASE_AGE_HOURS = 6;
@@ -702,10 +703,16 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 
 	/**
 	 * Headers for an update check: the platform ones, plus what the update server counts
-	 * anonymously (the PiCode version and the first-check-of-the-period flags).
+	 * anonymously (the PiCode version and the first-check-of-the-period flags). With
+	 * `picode.privacy.shareUsage` off, only `X-PiCode-Usage: off` is added and the server
+	 * records nothing for the check (ADR-045).
 	 */
 	protected updateCheckHeaders(): Record<string, string> {
 		const headers: Record<string, string> = { ...getUpdateRequestHeaders(this.productService.version, this.productService.nameShort ?? 'PiCode') };
+		if (this.configurationService.getValue<boolean>(SHARE_USAGE_SETTING) === false) {
+			headers['X-PiCode-Usage'] = 'off';
+			return headers;
+		}
 		if (this.productService.picodeVersion) {
 			headers['X-PiCode-Version'] = this.productService.picodeVersion;
 		}

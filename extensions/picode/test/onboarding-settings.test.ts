@@ -25,6 +25,7 @@ import {
 	HOST_ENV,
 	editorSettingsPath,
 	readEditorSetting,
+	readEditorSettings,
 	readPackages,
 	setExtras,
 	setLayout,
@@ -139,6 +140,14 @@ test('switching dictation on only leaves a note for the editor to act on', () =>
 	assert.strictEqual(JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'))['picode.voice.downloadOnStart'], true);
 	assert.deepStrictEqual(setExtras(paths, { voice: false }), { voice: false });
 	assert.strictEqual(JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'))['picode.voice.downloadOnStart'], false);
+});
+
+test('the usage-sharing choice is written to the setting the update check reads', () => {
+	const { paths } = profiles();
+	assert.deepStrictEqual(setExtras(paths, { privacy: false }), { privacy: false });
+	assert.strictEqual(readEditorSettings(paths).value['picode.privacy.shareUsage'], false);
+	assert.deepStrictEqual(setExtras(paths, { privacy: true }), { privacy: true });
+	assert.strictEqual(readEditorSettings(paths).value['picode.privacy.shareUsage'], true);
 });
 
 test('a value that is not a boolean is not written', () => {

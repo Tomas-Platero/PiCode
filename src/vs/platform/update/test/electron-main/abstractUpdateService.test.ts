@@ -94,6 +94,10 @@ class TestUpdateService extends AbstractUpdateService {
 		this._downloadCount++;
 	}
 
+	checkHeaders(): Record<string, string> {
+		return this.updateCheckHeaders();
+	}
+
 	checkLatestVersionExplicitly(): Promise<boolean | undefined> {
 		return this.doIsLatestVersion();
 	}
@@ -567,6 +571,48 @@ suite('AbstractUpdateService', () => {
 
 		assert.deepStrictEqual(service.state, { type: StateType.Disabled, reason: DisablementReason.ManuallyDisabled });
 		assert.deepStrictEqual(states, [StateType.Disabled], 'should go straight to Disabled without a Cancelling flash');
+	});
+});
+
+suite('AbstractUpdateService usage headers', () => {
+	const store = ensureNoDisposablesAreLeakedInTestSuite();
+	let stored: string[];
+
+	function createService(shareUsage: boolean | undefined): TestUpdateService {
+		const configurationService = new TestConfigurationService();
+		configurationService.setUserConfiguration('update.mode', 'none');
+		if (shareUsage !== undefined) {
+			configurationService.setUserConfiguration('picode.privacy.shareUsage', shareUsage);
+		}
+		stored = [];
+		return store.add(new TestUpdateService(
+			{ when: () => Promise.resolve(), setRelaunchHandler: () => { }, quit: () => Promise.resolve(false), onWillShutdown: Event.None } as unknown as ILifecycleMainService,
+			configurationService,
+			{ isBuilt: true, disableUpdates: false } as unknown as IEnvironmentMainService,
+			{ request: () => Promise.reject(new Error('not expected')) } as unknown as IRequestService,
+			store.add(new NullLogService()),
+			{ updateUrl: 'https://update.example', commit: 'abc123', quality: 'stable', version: '1.0.0', picodeVersion: '2.4.1', target: 'user' } as unknown as IProductService,
+			NullTelemetryService,
+			{ whenReady: Promise.resolve(), get: () => undefined, store: (_key: string, value: string) => { stored.push(value); } } as unknown as IApplicationStorageMainService,
+			store.add(new TestMeteredConnectionService(false)),
+			false
+		));
+	}
+
+	test('sharing is on by default: the version and the active periods are sent', () => {
+		const headers = createService(undefined).checkHeaders();
+		assert.strictEqual(headers['X-PiCode-Version'], '2.4.1');
+		assert.strictEqual(headers['X-PiCode-Active'], 'day,week,month');
+		assert.strictEqual(headers['X-PiCode-Usage'], undefined);
+		assert.strictEqual(stored.length, 1);
+	});
+
+	test('with sharing off, nothing countable is sent and the active day is not stored', () => {
+		const headers = createService(false).checkHeaders();
+		assert.strictEqual(headers['X-PiCode-Usage'], 'off');
+		assert.strictEqual(headers['X-PiCode-Version'], undefined);
+		assert.strictEqual(headers['X-PiCode-Active'], undefined);
+		assert.deepStrictEqual(stored, []);
 	});
 });
 

@@ -5,10 +5,12 @@
 
 import * as DOM from '../../../../../base/browser/dom.js';
 import { Button } from '../../../../../base/browser/ui/button/button.js';
+import { renderIcon } from '../../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { Disposable, DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { localize } from '../../../../../nls.js';
+import { ConfigurationTarget, IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../../platform/product/common/productService.js';
@@ -16,6 +18,7 @@ import { IStorageService, StorageScope } from '../../../../../platform/storage/c
 import { defaultButtonStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
 import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { PICODE_AUTH_PROVIDER_ID, PICODE_PICTURE_STORAGE_KEY } from '../picodeAccountProvider.js';
+import { SHARE_USAGE_SETTING } from '../picodeUsageSharingData.js';
 import { registerAccountSection } from './picodeAccountSections.js';
 import { IPicodeProEntitlement } from './picodeProEntitlement.js';
 
@@ -32,10 +35,16 @@ class PicodeAccountOverviewSection extends Disposable {
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IProductService private readonly productService: IProductService,
 		@IStorageService private readonly storageService: IStorageService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 		this.render();
 		this._register(this.entitlement.onDidChange(() => this.render()));
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(SHARE_USAGE_SETTING)) {
+				this.render();
+			}
+		}));
 	}
 
 	private render(): void {
@@ -43,6 +52,43 @@ class PicodeAccountOverviewSection extends Disposable {
 		DOM.clearNode(this.container);
 		const page = DOM.append(this.container, $('.picode-account-page'));
 		DOM.append(page, $('h2')).textContent = localize('picodeAccountOverviewTitle', "Your account");
+		this.renderAccount(page);
+		this.renderPrivacy(page);
+	}
+
+	/** "Help Improve PiCode", the same switch as the setting and the setup (ADR-045). */
+	private renderPrivacy(page: HTMLElement): void {
+		const head = DOM.append(page, $('.picode-sync-head'));
+		DOM.append(head, $('h3')).textContent = localize('picodeAccountPrivacy', "Privacy");
+		const card = DOM.append(page, $('.picode-sync-card'));
+		const on = this.configurationService.getValue<boolean>(SHARE_USAGE_SETTING) !== false;
+		const row = DOM.append(card, $(`.picode-sync-item${on ? '.on' : ''}`));
+		const label = DOM.append(row, $('label.picode-sync-item-label'));
+		const icon = DOM.append(label, $('.picode-sync-item-icon'));
+		icon.style.setProperty('--picode-sync-item-color', 'var(--vscode-charts-blue)');
+		icon.appendChild(renderIcon(Codicon.graph));
+		const text = DOM.append(label, $('.picode-sync-item-text'));
+		DOM.append(text, $('strong')).textContent = localize('picodeAccountShareUsage', "Help improve PiCode");
+		DOM.append(text, $('span')).textContent = localize('picodeAccountShareUsageWhy', "Sends anonymous counts with each update check: version, system and whether you used PiCode today. Never your code, chats, files or account.");
+		const box = DOM.append(row, $('input.picode-sync-switch')) as HTMLInputElement;
+		box.type = 'checkbox';
+		box.setAttribute('role', 'switch');
+		box.checked = on;
+		box.setAttribute('aria-label', localize('picodeAccountShareUsage', "Help improve PiCode"));
+		const set = (value: boolean) => { void this.configurationService.updateValue(SHARE_USAGE_SETTING, value, ConfigurationTarget.USER); };
+		this.renderStore.add(DOM.addDisposableListener(box, DOM.EventType.CHANGE, () => set(box.checked)));
+		this.renderStore.add(DOM.addDisposableListener(label, DOM.EventType.CLICK, e => {
+			e.preventDefault();
+			set(!on);
+		}));
+		const origin = this.productService.picode?.webOrigin;
+		if (origin) {
+			const policy = this.button(page, localize('picodeAccountPrivacyPolicy', "Privacy policy"), true);
+			this.renderStore.add(policy.onDidClick(() => { void this.openerService.open(URI.parse(`${origin}/legal/privacy`)); }));
+		}
+	}
+
+	private renderAccount(page: HTMLElement): void {
 
 		if (!this.entitlement.signedIn) {
 			DOM.append(page, $('p.picode-account-lead')).textContent = localize('picodeAccountSignedOut', "Sign in to keep your setup in the cloud and unlock Pro features.");
