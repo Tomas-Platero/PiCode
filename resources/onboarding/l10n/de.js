@@ -108,7 +108,7 @@
 	providerWait: 'Nichts wird gespeichert, bis du auf Verbinden klickst.',
 	providerConnectedDone: '{0} ist verbunden: {1} Modelle sind bereit.',
 	layoutTitle: 'So arbeitest du',
-	layoutLead: 'Zwei Arten, PiCode aufzuteilen. Nimm die, die dir passt; du kannst sie jederzeit über den Roboter-Knopf oben rechts ändern.',
+	layoutLead: "Zwei Arten, PiCode aufzuteilen. Nimm die, die dir passt; du kannst sie jederzeit über den Agent/Editor-Schalter oben rechts ändern.",
 	layoutAgent: 'Agent',
 	layoutAgentNote: 'Sag pi, was du willst, und schau zu',
 	layoutAgentPoints: ['Der Chat steht im Mittelpunkt', 'Deine Unterhaltungen sind immer zur Hand', 'Eine Seitenleiste zeigt Änderungen und Laufendes'],

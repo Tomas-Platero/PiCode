@@ -108,7 +108,7 @@
 	providerWait: 'Nic nie zostanie zapisane, dopóki nie naciśniesz Podłącz.',
 	providerConnectedDone: '{0} jest połączony: {1} modeli gotowych.',
 	layoutTitle: 'Jak pracujesz',
-	layoutLead: 'Dwie postacie PiCode. Wybierz tę, która Ci pasuje; zmienisz ją w każdej chwili przyciskiem robota w prawym górnym rogu.',
+	layoutLead: "Dwa sposoby układu PiCode. Wybierz ten, który ci odpowiada; możesz go zmienić w każdej chwili przełącznikiem Agent / Editor w prawym górnym rogu.",
 	layoutAgent: 'Agent',
 	layoutAgentNote: 'Powiedz pi, czego chcesz, i patrz, jak to robi',
 	layoutAgentPoints: ['Czat jest na środku', 'Poprzednie rozmowy masz zawsze pod ręką', 'Panel z boku pokazuje, co się zmieniło i co działa'],

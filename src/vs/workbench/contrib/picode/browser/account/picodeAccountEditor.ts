@@ -6,7 +6,8 @@
 import './media/picodeAccount.css';
 import * as DOM from '../../../../../base/browser/dom.js';
 import { renderIcon } from '../../../../../base/browser/ui/iconLabel/iconLabels.js';
-import { DisposableStore } from '../../../../../base/common/lifecycle.js';
+import { CancellationToken } from '../../../../../base/common/cancellation.js';
+import { DisposableStore, MutableDisposable } from '../../../../../base/common/lifecycle.js';
 import { localize } from '../../../../../nls.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IStorageService } from '../../../../../platform/storage/common/storage.js';
@@ -15,7 +16,9 @@ import { IThemeService } from '../../../../../platform/theme/common/themeService
 import { EditorPane } from '../../../../browser/parts/editor/editorPane.js';
 import { IEditorGroup } from '../../../../services/editor/common/editorGroupsService.js';
 import { getAccountSections, IPicodeAccountSection } from './picodeAccountSections.js';
-import { PICODE_ACCOUNT_EDITOR_ID } from './picodeAccountEditorInput.js';
+import { IEditorOpenContext } from '../../../../common/editor.js';
+import { IEditorOptions } from '../../../../../platform/editor/common/editor.js';
+import { PICODE_ACCOUNT_EDITOR_ID, PicodeAccountEditorInput } from './picodeAccountEditorInput.js';
 
 const $ = DOM.$;
 
@@ -32,6 +35,7 @@ export class PicodeAccountEditor extends EditorPane {
 	private readonly navItems = new Map<string, HTMLElement>();
 	private selectedId: string | undefined;
 	private readonly pageDisposables = this._register(new DisposableStore());
+	private readonly inputListener = this._register(new MutableDisposable());
 
 	constructor(
 		group: IEditorGroup,
@@ -55,6 +59,24 @@ export class PicodeAccountEditor extends EditorPane {
 		}
 		if (sections.length > 0) {
 			this.select(sections[0]);
+		}
+	}
+
+	override async setInput(input: PicodeAccountEditorInput, options: IEditorOptions | undefined, context: IEditorOpenContext, token: CancellationToken): Promise<void> {
+		await super.setInput(input, options, context, token);
+		this.selectById(input.requestedSection);
+		this.inputListener.value = input.onDidRequestSection(id => this.selectById(id));
+	}
+
+	override clearInput(): void {
+		this.inputListener.clear();
+		super.clearInput();
+	}
+
+	private selectById(id: string | undefined): void {
+		const section = id === undefined ? undefined : getAccountSections().find(s => s.id === id);
+		if (section) {
+			this.select(section);
 		}
 	}
 

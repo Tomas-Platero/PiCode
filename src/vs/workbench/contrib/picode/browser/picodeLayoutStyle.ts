@@ -8,6 +8,7 @@ import './media/picodeChatParts.css';
 import { localize, localize2 } from '../../../../nls.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Codicon } from '../../../../base/common/codicons.js';
+import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 import { timeout } from '../../../../base/common/async.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
@@ -183,7 +184,7 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 
 	private blinkTimer: ReturnType<typeof setTimeout> | undefined;
 
-	/** The robot on the layout button blinks while the columns move. */
+	/** The robot on the layout switch blinks while the columns move. */
 	private blink(): void {
 		const containers = [...this.layoutService.containers];
 		for (const container of containers) {
@@ -396,6 +397,11 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 // AfterRestored: moving the columns needs the restored layout underneath it.
 registerWorkbenchContribution2(PicodeLayoutContribution.ID, PicodeLayoutContribution, WorkbenchPhase.AfterRestored);
 
+/** The two halves of the layout switch at the right of the title bar. */
+const AGENT_LAYOUT_ICON = registerIcon('picode-layout-agent', Codicon.robot, localize('picode.layoutAgentIcon', "Icon of the Agent layout in the layout switch."));
+const EDITOR_LAYOUT_ICON = registerIcon('picode-layout-editor', Codicon.code, localize('picode.layoutEditorIcon', "Icon of the Editor layout in the layout switch."));
+
+/** Switches between the two layouts; from the Command Palette, since the title bar has the switch. */
 registerAction2(class SwitchLayoutAction extends Action2 {
 	constructor() {
 		super({
@@ -404,15 +410,6 @@ registerAction2(class SwitchLayoutAction extends Action2 {
 			category: localize2('picode.category', "PiCode"),
 			f1: true,
 			icon: Codicon.robot,
-			// Lit while the Agent layout is on, like the side bar toggles beside it.
-			toggled: ContextKeyExpr.equals(`config.${PICODE_LAYOUT_SETTING}`, 'agent'),
-			// First of the layout buttons at the right of the title bar.
-			menu: {
-				id: MenuId.LayoutControlMenu,
-				group: 'navigation',
-				order: -1,
-				when: IsAuxiliaryWindowContext.negate(),
-			},
 		});
 	}
 
@@ -422,6 +419,42 @@ registerAction2(class SwitchLayoutAction extends Action2 {
 		await configurationService.updateValue(PICODE_LAYOUT_SETTING, next, ConfigurationTarget.USER);
 	}
 });
+
+/**
+ * The layout switch: two buttons side by side at the right of the title bar, drawn as one pill
+ * (`picodeAgentLayout.css`), with the layout in use lit. Both are always there, so it is clear
+ * which layout is on and where the other click goes.
+ */
+for (const [layout, id, title, icon, order] of [
+	['agent', 'picode.appearance.useAgentLayout', localize2('picode.appearance.useAgentLayout', "Agent Layout"), AGENT_LAYOUT_ICON, -1.1],
+	['editor', 'picode.appearance.useEditorLayout', localize2('picode.appearance.useEditorLayout', "Editor Layout"), EDITOR_LAYOUT_ICON, -1],
+] as const) {
+	registerAction2(class extends Action2 {
+		constructor() {
+			super({
+				id,
+				title,
+				category: localize2('picode.category', "PiCode"),
+				f1: false,
+				icon,
+				toggled: ContextKeyExpr.equals(`config.${PICODE_LAYOUT_SETTING}`, layout),
+				menu: {
+					id: MenuId.LayoutControlMenu,
+					group: 'navigation',
+					order,
+					when: IsAuxiliaryWindowContext.negate(),
+				},
+			});
+		}
+
+		async run(accessor: ServicesAccessor): Promise<void> {
+			const configurationService = accessor.get(IConfigurationService);
+			if (picodeLayoutOf(configurationService) !== layout) {
+				await configurationService.updateValue(PICODE_LAYOUT_SETTING, layout, ConfigurationTarget.USER);
+			}
+		}
+	});
+}
 
 /**
  * "Reset Layout": every part where VS Code puts it, as if the Agent layout had never been used.
