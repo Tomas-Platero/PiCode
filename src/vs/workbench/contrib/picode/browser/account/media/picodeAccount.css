@@ -293,6 +293,382 @@ label.picode-account-row:hover,
 	min-height: 28px;
 }
 
+/* Cloud sync */
+.picode-sync-page {
+	gap: 18px;
+	max-width: 720px;
+}
+
+.picode-sync-title {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+/* The hero: a drawing of where the setup goes, then the state and its actions. */
+.picode-sync-hero {
+	--picode-sync-tone: var(--vscode-descriptionForeground);
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding: 22px 24px 20px;
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--picode-sync-tone) 30%, var(--vscode-panel-border));
+	border-radius: 14px;
+	background:
+		radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--picode-sync-tone) 14%, transparent), transparent 70%),
+		var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-sync-hero.ok {
+	--picode-sync-tone: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.picode-sync-hero.busy {
+	--picode-sync-tone: var(--vscode-charts-blue);
+}
+
+.picode-sync-hero.warn {
+	--picode-sync-tone: var(--vscode-editorWarning-foreground);
+}
+
+.picode-sync-flow {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	padding-top: 4px;
+}
+
+.picode-sync-flow-node {
+	display: flex;
+	flex: 0 0 120px;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-sync-flow-device {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 30%, transparent);
+	border-radius: 12px;
+	background: var(--vscode-editor-background);
+	color: var(--vscode-foreground);
+}
+
+.picode-sync-flow-device .codicon {
+	font-size: 18px;
+}
+
+.picode-sync-flow-line {
+	flex: 1 1 40px;
+	max-width: 110px;
+	height: 2px;
+	margin-bottom: 20px;
+	border-radius: 1px;
+	background: color-mix(in srgb, var(--picode-sync-tone) 55%, transparent);
+}
+
+.picode-sync-hero.off .picode-sync-flow-line {
+	background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--vscode-descriptionForeground) 45%, transparent) 0 6px, transparent 6px 11px);
+}
+
+.picode-sync-flow-line.moving {
+	background: repeating-linear-gradient(90deg, var(--picode-sync-tone) 0 8px, transparent 8px 14px);
+	background-size: 28px 2px;
+	animation: picode-sync-flow 0.9s linear infinite;
+}
+
+@keyframes picode-sync-flow {
+	from {
+		background-position: 0 0;
+	}
+
+	to {
+		background-position: 28px 0;
+	}
+}
+
+.picode-sync-flow-cloud {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 64px;
+	height: 64px;
+	margin-bottom: 20px;
+	border-radius: 50%;
+	color: var(--picode-sync-tone);
+	background: color-mix(in srgb, var(--picode-sync-tone) 16%, var(--vscode-editor-background));
+	box-shadow: 0 0 0 6px color-mix(in srgb, var(--picode-sync-tone) 7%, transparent), 0 0 28px color-mix(in srgb, var(--picode-sync-tone) 30%, transparent);
+}
+
+.picode-sync-hero.off .picode-sync-flow-cloud {
+	border: 1px dashed color-mix(in srgb, var(--vscode-descriptionForeground) 45%, transparent);
+	background: var(--vscode-editor-background);
+	box-shadow: none;
+}
+
+.picode-sync-flow-cloud .codicon {
+	font-size: 28px;
+}
+
+.picode-sync-hero-body {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding-top: 16px;
+	border-top: 1px solid var(--vscode-panel-border);
+}
+
+.picode-sync-hero-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+.picode-sync-hero-text strong {
+	font-size: 15px;
+}
+
+.picode-sync-hero-text span {
+	color: var(--vscode-descriptionForeground);
+	line-height: 1.4;
+}
+
+.picode-sync-hero-actions {
+	display: flex;
+	flex: 0 0 auto;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.picode-sync-hero-actions .monaco-button {
+	flex: 0 0 auto;
+	width: auto;
+	padding: 6px 18px;
+	border-radius: 8px;
+}
+
+/* Groups of rows, like a settings list. */
+.picode-sync-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	margin: 6px 2px -8px;
+}
+
+.picode-sync-head h3 {
+	margin: 0;
+}
+
+.picode-sync-card {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 12px;
+	background: var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-sync-item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 11px 16px;
+	transition: background 0.12s ease;
+}
+
+.picode-sync-item + .picode-sync-item {
+	border-top: 1px solid var(--vscode-panel-border);
+}
+
+.picode-sync-item:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-sync-item-label {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	cursor: pointer;
+}
+
+.picode-sync-item-icon {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+	color: var(--picode-sync-item-color);
+	background: color-mix(in srgb, var(--picode-sync-item-color) 16%, transparent);
+	transition: filter 0.12s ease, opacity 0.12s ease;
+}
+
+.picode-sync-item:not(.on) .picode-sync-item-icon {
+	filter: grayscale(1);
+	opacity: 0.55;
+}
+
+.picode-sync-item-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.picode-sync-item-text strong {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+}
+
+.picode-sync-item-text > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-sync-item:not(.on) .picode-sync-item-text strong {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-sync-item-state {
+	display: inline-flex;
+	color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.picode-sync-item-state .codicon {
+	font-size: 13px;
+}
+
+.picode-sync-item-state.warn {
+	color: var(--vscode-editorWarning-foreground);
+}
+
+.picode-sync-item .monaco-button.picode-sync-small-button {
+	flex: 0 0 auto;
+	width: auto;
+	padding: 2px 12px;
+	border-radius: 6px;
+}
+
+.picode-sync-note {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: -8px 4px 0;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-sync-note .codicon {
+	font-size: 12px;
+}
+
+/* A switch, not a checkbox: each row says on or off at a glance. */
+input.picode-sync-switch {
+	appearance: none;
+	flex: 0 0 auto;
+	position: relative;
+	width: 34px;
+	height: 20px;
+	margin: 0;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--vscode-descriptionForeground) 22%, transparent);
+	border: 1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 45%, transparent);
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+input.picode-sync-switch::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: var(--vscode-descriptionForeground);
+	transition: transform 0.15s ease, background 0.15s ease;
+}
+
+input.picode-sync-switch:checked {
+	background: var(--vscode-button-background);
+	border-color: var(--vscode-button-background);
+}
+
+input.picode-sync-switch:checked::after {
+	transform: translateX(14px);
+	background: var(--vscode-button-foreground);
+}
+
+input.picode-sync-switch:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+/* What the cloud itself holds: quiet links at the end. */
+.picode-sync-foot {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	padding: 4px 2px 0;
+}
+
+.picode-sync-foot-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 0;
+	border: none;
+	background: none;
+	color: var(--vscode-descriptionForeground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-sync-foot-link:hover {
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-sync-foot-link:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.picode-sync-flow-line.moving {
+		animation: none;
+	}
+}
+
+@media (max-width: 620px) {
+	.picode-sync-hero-body {
+		flex-wrap: wrap;
+	}
+
+	.picode-sync-flow-node {
+		flex-basis: 80px;
+	}
+}
+
 /* A narrow window turns the side list into a row of tabs. */
 @media (max-width: 620px) {
 	.picode-account {

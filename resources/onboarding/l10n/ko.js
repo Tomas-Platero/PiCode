@@ -108,7 +108,7 @@
 	providerWait: '‘연결’을 누르기 전에는 아무것도 저장되지 않습니다.',
 	providerConnectedDone: '{0} 연결됨: 모델 {1}개 사용 가능.',
 	layoutTitle: '일하는 방식',
-	layoutLead: 'PiCode를 배치하는 방법은 두 가지입니다. 맞는 쪽을 고르세요. 오른쪽 위 로봇 버튼으로 언제든 바꿀 수 있습니다.',
+	layoutLead: "PiCode를 배치하는 두 가지 방법입니다. 맞는 것을 고르세요. 오른쪽 위의 Agent / Editor 스위치로 언제든지 바꿀 수 있습니다.",
 	layoutAgent: 'Agent',
 	layoutAgentNote: 'pi에게 부탁하고 일하는 것을 지켜봅니다',
 	layoutAgentPoints: ['채팅이 화면 가운데', '지난 대화가 늘 손 닿는 곳에', '무엇이 바뀌고 무엇이 도는지 옆 패널에'],

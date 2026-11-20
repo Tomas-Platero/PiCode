@@ -295,6 +295,14 @@
 	color: var(--vscode-editorWarning-foreground, #d29922);
 }
 
+/* A change that went through: quiet, not a warning. */
+.picode-pm-saved {
+	flex-shrink: 0;
+	margin: 0 0 8px;
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	color: var(--vscode-descriptionForeground);
+}
+
 /* A provider that works without a stored key: not a fault, so not the grey of a fault. */
 .picode-pm-badge.info {
 	color: var(--vscode-descriptionForeground);
@@ -1112,4 +1120,207 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 .picode-pv-card-action.danger:focus-visible {
 	border-color: color-mix(in srgb, var(--vscode-errorForeground) 55%, transparent);
 	color: var(--vscode-errorForeground);
+}
+
+/* ------------------------------------------------- Gentle AI: agent profiles */
+
+/* The profiles on the left, the open one on the right; one column when the panel is narrow. */
+.picode-pm-body:has(> .picode-ap) {
+	container-type: inline-size;
+}
+
+.picode-ap {
+	display: grid;
+	grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
+	gap: 16px;
+	margin: 0 0 16px;
+}
+
+@container (max-width: 560px) {
+	.picode-ap {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.picode-ap-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.picode-ap-list-head,
+.picode-ap-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 0 0 6px;
+}
+
+.picode-ap-list-title {
+	font-weight: 600;
+}
+
+.picode-ap-icon-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	cursor: pointer;
+}
+
+.picode-ap-icon-button:hover {
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+
+.picode-ap-item {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	padding: 8px 10px;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	text-align: start;
+	cursor: pointer;
+}
+
+.picode-ap-item:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-ap-item.selected {
+	border-color: var(--vscode-focusBorder, rgba(59, 155, 255, 0.6));
+	background: var(--vscode-list-inactiveSelectionBackground, var(--vscode-list-hoverBackground));
+}
+
+.picode-ap-item-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	max-width: 100%;
+}
+
+.picode-ap-item-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-ap-marks {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.picode-ap-mark {
+	padding: 0 6px;
+	border-radius: 999px;
+	font-size: 11px;
+	line-height: 16px;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+}
+
+.picode-ap-mark.default {
+	background: var(--vscode-testing-iconPassed, #3fb950);
+	color: var(--vscode-editor-background, #000);
+}
+
+.picode-ap-mark.project {
+	background: var(--vscode-textLink-foreground, #3794ff);
+	color: var(--vscode-editor-background, #000);
+}
+
+.picode-ap-detail {
+	min-width: 0;
+}
+
+.picode-ap-name {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.picode-ap-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.picode-ap-actions .monaco-button {
+	width: auto;
+	padding: 2px 10px;
+}
+
+.picode-ap-modes {
+	display: flex;
+	gap: 6px;
+	margin: 0 0 10px;
+}
+
+.picode-ap-thinking {
+	flex: 0 0 auto;
+}
+
+.picode-ap-fast {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+
+/* The backups button at the end of an agent's row: an icon, and the count when it has some. */
+.picode-ap-backups {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex-shrink: 0;
+	/* Fixed width, so a row with a count lines up with the rows without one. */
+	box-sizing: border-box;
+	width: 40px;
+	padding: 2px 6px;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	cursor: pointer;
+}
+
+.picode-ap-backups:hover {
+	color: var(--vscode-foreground);
+	border-color: var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+}
+
+.picode-ap-backups.has {
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-ap-every {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 4px 10px;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	/* The agent list below keeps room for its scrollbar; keep the same room so the buttons line up. */
+	overflow: hidden;
+	scrollbar-gutter: stable;
 }

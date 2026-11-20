@@ -108,7 +108,7 @@
 	providerWait: 'Nada é salvo até você clicar em Conectar.',
 	providerConnectedDone: '{0} está conectado: {1} modelos prontos.',
 	layoutTitle: 'Como você trabalha',
-	layoutLead: 'Duas formas de organizar o PiCode. Escolha a que combina com você; dá para trocar a qualquer momento no botão do robô, no canto superior direito.',
+	layoutLead: "Duas formas de organizar o PiCode. Escolha a que combina com você; você pode trocar a qualquer momento com o seletor Agent / Editor no canto superior direito.",
 	layoutAgent: 'Agente',
 	layoutAgentNote: 'Diga ao pi o que você quer e veja ele trabalhar',
 	layoutAgentPoints: ['O chat é o protagonista', 'Suas conversas anteriores sempre à mão', 'Um painel lateral mostra o que mudou e o que está rodando'],

@@ -108,7 +108,7 @@
 	providerWait: 'Siz bağlamadan hiçbir şey kaydedilmez.',
 	providerConnectedDone: '{0} bağlandı: {1} model hazır.',
 	layoutTitle: 'Nasıl çalışırsınız',
-	layoutLead: 'PiCode\'u yerleştirmenin iki yolu. Size uyanı seçin; sağ üstteki robot düğmesiyle istediğiniz zaman değiştirebilirsiniz.',
+	layoutLead: "PiCode'u düzenlemenin iki yolu. Size uyanı seçin; istediğiniz zaman sağ üstteki Agent / Editor anahtarıyla değiştirebilirsiniz.",
 	layoutAgent: 'Agent',
 	layoutAgentNote: 'pi\'ye ne istediğinizi söyleyin, çalışmasını izleyin',
 	layoutAgentPoints: ['Sohbet tam ortada', 'Geçmiş konuşmalarınız hep elinizin altında', 'Yan panel neyin değiştiğini ve neyin çalıştığını gösterir'],
