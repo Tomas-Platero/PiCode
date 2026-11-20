@@ -1801,6 +1801,29 @@ control Pro. Su lógica queda fuera de este ADR.
   de extremo a extremo. Hasta decidir cómo limpiarlo o cifrarlo, no sube. Tampoco la memoria de engram (`~/.engram`, ADR-022):
   es una base viva y compartida que pide su propio diseño.
 
+**Adenda 1 (2026-11-20) — La sincronización de los agentes, por partes y sin claves.**
+
+> *"La parte de sync de pi no lo nombres. Y en la parte de Agente desglosa que sincronizar (agentes, subagentes, skills, perfiles, mcp's) y revisa si se puede añadir algo más. por ejemplo modelos, proveedores, etc."*
+
+- **Por partes.** La página *Cloud sync* enseña una fila por parte, cada una con su interruptor: agentes (con sus cadenas), subagentes,
+  skills, perfiles de agentes (con sus respaldos), servidores MCP, modelos y proveedores, ajustes de los agentes (modelo por defecto,
+  lista de paquetes, cómo habla y cómo arrancan los chats, carpetas de confianza) y notas de memoria. Qué fichero va en qué parte lo
+  dice `piProfilePartOf` (`src/vs/platform/userDataSync/common/piProfileContent.ts`). Una parte apagada queda fuera de la mezcla por
+  los dos lados: este equipo no la sube ni la aplica, y la copia de la nube sigue para los otros. Se guarda en
+  `picode.sync.agentsSkip` (oculto en Ajustes).
+- **Las claves no salen del equipo.** Se encontró que `models.json`, que ya viajaba, llevaba la clave de un proveedor escrita entera.
+  Ahora `models.json` y `mcp.json` se comparan y se suben sin las claves escritas enteras (`apiKey`, `headers`, `env`…), y al bajar se
+  les devuelven las que ya tenía este equipo. Lo que solo apunta a una clave (una variable de entorno, `${VAR}`, `!comando`) sí viaja.
+  Con eso entra `mcp.json`, que esta ADR dejaba fuera a propósito: la lista de servidores viaja, sus claves no. Una clave escrita
+  dentro de `args` no se detecta.
+- **Versión 2.** El sincronizador sube su versión de 1 a 2. Un equipo con una versión anterior de PiCode escribiría esos ficheros sin
+  sus claves, así que se para ante la versión nueva de la nube y pide actualizar (apaga la sync en ese equipo, sin tocar nada).
+- **Fuera, a propósito:** los inicios de sesión (`auth.json`) y las claves siguen en cada equipo. Llevarlos a la nube pediría cifrado de
+  extremo a extremo y el consentimiento explícito de la sección 6 de `AGENTS.md`.
+- **Pendiente para el dueño:** la clave que ya estaba en la nube sigue en las copias anteriores del servidor; conviene cambiarla en el
+  proveedor.
+- En pantalla ya no se nombra a pi: el área sale como *Agents* también en las vistas de VS Code (copias anteriores, conflictos).
+
 ## ADR-042 — Issues de GitHub y Jira en la ventana Account, conectadas por OAuth
 
 > *"que se conectara a github y te mostrara que fallos te han reportado de tus repos y desde ahi le pudieras pedir a tu sistema agentico que te lo solucionara?"* — 2026-11-06
