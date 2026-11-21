@@ -20,6 +20,7 @@ import {
 	memoryClientName,
 	memoryDetailMarkdown,
 	memoryDoctorMarkdown,
+	memoryDoctorSummary,
 	memoryWhen,
 	parseMemoryConflicts,
 	parseMemoryDetail,
@@ -186,4 +187,35 @@ test('a cloud-only failure is named as such, because the cloud is off here', () 
 	assert.match(markdown, /Everything that matters checked out/);
 	assert.doesNotMatch(markdown, /❌|need attention/);
 	assert.match(markdown, /Not used: cloud sync/);
+});
+
+test('the memory check summary for Settings: a healthy store says so warmly', () => {
+	const summary = memoryDoctorSummary(parseMemoryDoctor({
+		status: 'error',
+		summary: { total: 3, ok: 2, warnings: 0, blocked: 0, errors: 1 },
+		checks: [
+			{ check_id: 'store_is_served', result: 'ok', severity: 'info', message: 'No issues detected.' },
+			{ check_id: 'sessions_resolve', result: 'ok', severity: 'info', message: 'No issues detected.' },
+			{ check_id: 'sync_target_closed_space', result: 'error', severity: 'error', message: '2 finding(s) detected.' }
+		]
+	})!);
+	// The cloud is not used here, so its leftover is no problem at all.
+	assert.strictEqual(summary.healthy, true);
+	assert.strictEqual(summary.issues.length, 0);
+	assert.strictEqual(summary.passed, 2);
+	assert.match(summary.headline, /great shape/);
+});
+
+test('the memory check summary lists what needs attention, with the reason', () => {
+	const summary = memoryDoctorSummary(parseMemoryDoctor({
+		status: 'error',
+		summary: { total: 2, ok: 1, warnings: 0, blocked: 0, errors: 1 },
+		checks: [
+			{ check_id: 'store_is_served', result: 'ok', severity: 'info', message: 'No issues detected.' },
+			{ check_id: 'foreign_store', result: 'error', severity: 'error', message: 'Another instance owns it.', why: 'Two processes would write over each other.' }
+		]
+	})!);
+	assert.strictEqual(summary.healthy, false);
+	assert.deepStrictEqual(summary.issues, [{ severity: 'error', title: 'Another instance owns it.', detail: 'Two processes would write over each other.' }]);
+	assert.match(summary.headline, /1 thing/);
 });

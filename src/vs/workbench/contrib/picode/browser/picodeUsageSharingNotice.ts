@@ -32,10 +32,10 @@ class PicodeUsageSharingNotice extends Disposable implements IWorkbenchContribut
 		const choose = (value: boolean) => { void configurationService.updateValue(SHARE_USAGE_SETTING, value, ConfigurationTarget.USER); };
 		notificationService.prompt(
 			Severity.Info,
-			localize('picodeUsageNotice', "PiCode sends anonymous usage counts when it checks for updates: version, system and whether you used it today. Never your code, chats, files or account."),
+			localize('picodeUsageNotice.warm', "Want to help make PiCode better? We'd love to count, anonymously, how many people use it. Your code, your chats and your files always stay yours."),
 			[
-				{ label: localize('picodeUsageNoticeKeep', "Keep sharing"), run: () => choose(true) },
-				{ label: localize('picodeUsageNoticeOff', "Turn off"), run: () => choose(false) },
+				{ label: localize('picodeUsageNoticeKeep.warm', "Happy to help"), run: () => choose(true) },
+				{ label: localize('picodeUsageNoticeOff.warm', "No, thanks"), run: () => choose(false) },
 			],
 			{ sticky: true },
 		);
