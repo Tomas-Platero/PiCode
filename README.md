@@ -118,7 +118,7 @@ Choose which model answers, give each agent its own, add tools and skills, and k
 
 ### 🎛️ One Settings window
 
-Your preferences, your account and your AI live in one window, grouped on the left with a search box on top. Each row says what it does and changes at once; your avatar, Sync and the usage ring open their own page, and every editor setting is still one click away under *All settings*.
+Your preferences, your account and your AI live in one window, grouped on the left with a search box on top. Each row says what it does and changes at once; your avatar, Sync and the usage ring open their own page, and every editor setting is still one click away under *All settings*. Themes get a gallery of their own: every theme as a small window in its own colours, previewed on hover and installed from Open VSX in one click.
 
 <img src="./resources/picode/screenshots/settings.png" alt="The Settings window" width="100%" />
 
