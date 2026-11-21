@@ -73,6 +73,8 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 		// Providers and models together, right after the agent's own overview.
 		AICustomizationManagementSection.ProvidersModels,
 		AICustomizationManagementSection.Agents,
+		// Gentle AI's own preferences, right after the agents it drives.
+		AICustomizationManagementSection.Gentle,
 		AICustomizationManagementSection.Skills,
 		AICustomizationManagementSection.McpServers,
 		AICustomizationManagementSection.Plugins,

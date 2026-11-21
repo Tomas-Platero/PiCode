@@ -18,6 +18,7 @@
  * - nothing: not a slash command at all.
  */
 
+import { withoutTerminalCodes } from './background-cards.ts';
 import { l10n } from './l10n.ts';
 
 /** One command as the chat's slash list shows it. */
@@ -184,7 +185,8 @@ export function displayedCustomText(message: unknown): string | undefined {
 				return item !== null && typeof item === 'object' && item.type === 'text' && typeof item.text === 'string' ? [item.text] : [];
 			})
 			: [];
-	const text = parts.join('\n').trim();
+	// A notice that quotes a command's output keeps its colour codes, which the chat would show as boxes.
+	const text = withoutTerminalCodes(parts.join('\n')).trim();
 	return text.length === 0 ? undefined : text;
 }
 

@@ -18,6 +18,9 @@
  */
 
 import assert from 'assert';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { test } from 'node:test';
 import {
 	COMMAND_ARGUMENT_HINT_LIMIT,
@@ -25,6 +28,8 @@ import {
 	piArgumentHintOf,
 	piCommandsOfRunner,
 	promptFileText,
+	readSavedCommands,
+	writeSavedCommands,
 } from '../src/command-registry.ts';
 
 function sessionWithCommands(commands: readonly unknown[]): { extensionRunner: { getRegisteredCommands: () => unknown } } {
@@ -146,4 +151,22 @@ test('the prompt file carries the description, and the hint as argument-hint fro
 test('a command file name keeps the characters the file system and the editor accept', () => {
 	assert.strictEqual(fileNameOf({ name: 'mcp' }), 'mcp.prompt.md');
 	assert.strictEqual(fileNameOf({ name: 'weird name/x' }), 'weird-name-x.prompt.md');
+});
+
+test('a saved command list is read back only for the same key, and a damaged file is ignored', () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'picode-commands-'));
+	try {
+		const file = path.join(dir, 'pi-commands.json');
+		assert.equal(readSavedCommands(file, 'a'), undefined);
+		const commands = [{ name: 'omni', description: 'Pick a model', argumentHint: '<model>' }, { name: 'mcp' }];
+		writeSavedCommands(file, 'a', commands);
+		assert.deepEqual(readSavedCommands(file, 'a'), commands);
+		assert.equal(readSavedCommands(file, 'b'), undefined);
+		for (const text of ['{ nope', '{"key":"a","commands":"x"}', '{"key":"a","commands":[{"description":"no name"}]}']) {
+			fs.writeFileSync(file, text);
+			assert.equal(readSavedCommands(file, 'a'), undefined, text);
+		}
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
 });

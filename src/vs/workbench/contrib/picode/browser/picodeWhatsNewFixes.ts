@@ -24,6 +24,22 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.4.6',
+			text: localize('picodeWhatsNew.fix.gentlePage', "**Gentle AI has a page of its own.** In Settings, right under Agents: how your agents talk to you, what they may do without asking, and a new switch to let them keep long jobs running while you chat."),
+		},
+		{
+			since: '2.4.6',
+			text: localize('picodeWhatsNew.fix.jobCards', "**Finished background jobs look right again.** When a job ends, the chat shows its card with how it went and its last lines of output, without the odd boxes that terminal colours used to leave behind."),
+		},
+		{
+			since: '2.4.5',
+			text: localize('picodeWhatsNew.fix.fasterStart', "**pi gets going much sooner.** Opening a window used to get pi ready up to three times over, and everything froze while it did. Now it gets ready once, and your model list and slash commands appear right away."),
+		},
+		{
+			since: '2.4.5',
+			text: localize('picodeWhatsNew.fix.updateMemoryLock', "**Updates no longer get stuck on \"Access denied\".** If an update installs when you close PiCode, the memory helper now closes first, so the installer can finish."),
+		},
+		{
 			since: '2.4.4',
 			text: localize('picodeWhatsNew.fix.autoEverything', "**Automatic really means everything.** PiCode, pi, its packages and your extensions now update on their own, quietly, without a single console window popping up. And never in the middle of an answer."),
 		},
