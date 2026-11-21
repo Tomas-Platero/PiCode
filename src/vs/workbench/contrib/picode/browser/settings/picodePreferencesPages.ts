@@ -591,7 +591,17 @@ registerPage({
 			read: stored => stored !== 'none',
 			write: on => on ? 'all' : 'none',
 		});
-		page.numberRow({ key: 'editor.cursorWidth', name: localize('picodeSetCursorWidth', "Cursor width"), description: localize('picodeSetCursorWidthDesc', "A wider cursor is easier to see."), min: 1, max: 5 });
+		// 0 is the editor's own width (2 px): show it as Normal rather than as a bare zero.
+		page.selectRow<number>({
+			key: 'editor.cursorWidth',
+			name: localize('picodeSetCursorWidth', "Cursor width"),
+			description: localize('picodeSetCursorWidthDesc', "A wider cursor is easier to see."),
+			choices: [
+				{ value: 0, label: localize('picodeSetCursorNormal', "Normal") },
+				{ value: 3, label: localize('picodeSetCursorThick', "Thick") },
+				{ value: 5, label: localize('picodeSetCursorThickest', "Extra thick") },
+			],
+		});
 		page.switchRow({ key: 'accessibility.dimUnfocused.enabled', name: localize('picodeSetDimUnfocused', "Dim the panels you're not using"), description: localize('picodeSetDimUnfocusedDesc', "Keeps your attention on the one you're working in.") });
 
 		page.group(localize('picodeSetA11yPointer', "Mouse and movement"));
