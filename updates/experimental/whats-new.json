@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.2-experimental",
+			"notes": "### ✨ New\n\n- **One Settings window, like a modern app.** Your preferences, your account and your agent now live in one window, grouped on the left (Preferences, Account, Agent) with a search box on top. Each row says what it does and changes at once.\n- **Every button takes you to its page.** Ctrl+, and the gear open General; your avatar opens your account, Sync opens Cloud sync and the usage ring opens Usage limits. If the window is already open, it just turns to that page.\n- **Each thing lives in one place.** What Pro brings is on Account › Overview, every update (PiCode, pi, its packages and memory) is on Updates, and the full list of editor settings is still one click away under *All settings*.\n- **pi 1.6.** pi moves to its new version, with GPT-6.2 Sol as the default OpenAI and Codex model, a security update and more retries when a connection drops.\n\n### 🐛 Fixed\n\n- **pi tells you what went wrong.** An extension that could not load, or a model a saved chat could not get back, now shows once in the chat instead of silently missing.\n- **The thinking picker only offers what your model can do.** Levels a model refuses (GPT-6.2 has no Off or Minimal) are greyed out and say so.\n- **Tools lists pi's own tools**, each with a switch that really turns it off.\n- **Installing a pi package never hangs** waiting for a password nobody can type.\n- **The Agent / Editor switch** at the top no longer has a gap in the middle or a light-blue ring.\n- **The Theme choice switches the theme for real**, even when your preferred light or dark theme is not installed, and always shows the one in use.\n- **Thinner, theme-coloured scrollbars** in Settings."
+		},
+		{
 			"version": "2.4.1-experimental",
 			"notes": "### ✨ New\n\n- **You choose whether to help improve PiCode.** The anonymous counts that travel with each update check (PiCode version, system, and whether you used it today, this week or this month) now have their own switch, on by default. Turn it off and update checks carry nothing that can be counted. If you never made a choice, PiCode asks you once.\n- **One switch for the agent too.** When pi is installed or updated, it can send its makers an anonymous notice. That notice now follows the same switch: turn it off and pi sends nothing.\n- **A Privacy page in Account.** It shows what is sent and what is never included, and has the switch. It also sets how often PiCode looks for updates (automatic, at startup, when you ask, or off) and whether it checks for extension updates. Your code and chats are never collected; they only go to the AI provider you choose.\n- **The switch in the setup.** The setup's last step has a *Privacy* card. Whatever you leave there is saved when you finish.\n\n### 🎨 Editor\n\n- **Agent / Editor looks like a switch.** The layout control at the top right is now one rounded track, with the layout in use as a lit thumb.\n\n### 🔒 Privacy\n\n- **Nothing is left pointing at Microsoft.** The editor's old telemetry address now points nowhere, as a second lock. That telemetry was already removed from PiCode."
 		},
@@ -115,10 +119,6 @@
 		{
 			"version": "1.0.0-experimental",
 			"notes": "### ✨ New\n\n- **Two ways of working: Agent or Editor.** Agent puts the chat in the middle, your sessions on the left and a review bar on the right; Editor is the VS Code you know. Switch any time, no restart.\n- **A Status column** next to the chat: where the agent works, your MCP servers, the lines you changed (click to review every change), its tasks and what your memory holds.\n- **13 languages.** The editor, the setup and everything PiCode adds are translated, and the setup opens in your computer's language and gets it ready for the editor.\n- **A new setup:** pick your layout (Agent is marked by default), sign in or sign up from the account card, and the page keeps its place when you choose something.\n\n### 🐛 Fixed\n\n- The What's New history now reads in plain words for 0.8.0."
-		},
-		{
-			"version": "0.8.1-experimental",
-			"notes": "### ✨ New\n\n- If you skip versions, What's New now shows what changed in each one you missed, not only the latest.\n\n### 🐛 Fixed\n\n- The What's New window no longer shows a stray line under the list."
 		}
 	]
 }
