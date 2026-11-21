@@ -15,7 +15,7 @@ import { aiCustomizationManagementSectionRegistry } from '../../../chat/browser/
 import { AICustomizationManagementSection } from '../../../chat/common/aiCustomizationWorkspaceService.js';
 import { ColorThemeData } from '../../../../services/themes/common/colorThemeData.js';
 import { IWorkbenchColorTheme, IWorkbenchThemeService } from '../../../../services/themes/common/workbenchThemeService.js';
-import { themeKind, ThemeKind, themeMatches } from './picodeSettingsData.js';
+import { galleryThemeLabel, offerGalleryTheme, themeKind, ThemeKind, themeMatches } from './picodeSettingsData.js';
 import '../../../chat/browser/aiCustomization/media/picodeSettings.css';
 import '../../../chat/browser/aiCustomization/media/picodeThemes.css';
 
@@ -273,14 +273,17 @@ class PicodeThemesPage extends Disposable {
 			this.empty(this.galleryError, true);
 			return;
 		}
-		const visible = (this.galleryItems ?? []).filter(item => themeMatches('', this.filter, item.variant.label, item.uiTheme));
+		const installedLabels = this.themes.map(theme => theme.label);
+		const visible = (this.galleryItems ?? []).filter(item =>
+			offerGalleryTheme(item.publisher, galleryThemeLabel(item.variant.label, item.label), installedLabels)
+			&& themeMatches('', this.filter, galleryThemeLabel(item.variant.label, item.label), item.uiTheme));
 		if (visible.length === 0) {
 			this.empty(localize('picodeThemesNoneGallery', "Nothing found on Open VSX for that search."));
 			return;
 		}
 		for (const item of visible.slice(0, this.shown)) {
 			const installed = this.themes.some(theme => theme.label === item.variant.label);
-			const card = this.card(item.variant.label, `${item.publisher} · ${compactCount(item.downloads)}`, undefined);
+			const card = this.card(galleryThemeLabel(item.variant.label, item.label), `${item.publisher} · ${compactCount(item.downloads)}`, undefined);
 			const preview = card.querySelector<HTMLElement>('.picode-theme-preview')!;
 			const action = DOM.append(card.querySelector('.picode-theme-meta')!, $('span.picode-theme-action'));
 			action.textContent = installed ? localize('picodeThemesInstalledTag', "Installed") : localize('picodeThemesInstall', "Install");
@@ -326,7 +329,14 @@ class PicodeThemesPage extends Disposable {
 		const button = DOM.append(this.more, $('button.picode-set-button')) as HTMLButtonElement;
 		button.type = 'button';
 		button.textContent = localize('picodeThemesShowMore', "Show more");
-		this.gridStore.add(DOM.addDisposableListener(button, DOM.EventType.CLICK, () => { this.shown += PAGE_SIZE; this.paint(); }));
+		this.gridStore.add(DOM.addDisposableListener(button, DOM.EventType.CLICK, () => {
+			// The grid is painted again from the top; the page keeps where you were, so the new
+			// themes appear below the ones you were looking at.
+			const top = this.root.scrollTop;
+			this.shown += PAGE_SIZE;
+			this.paint();
+			this.root.scrollTop = top;
+		}));
 	}
 
 	/** Lights the card of the theme in use. */

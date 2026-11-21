@@ -7,7 +7,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { accountLinkTarget, settingsMatches, themeKind, themeMatches, toolEnabled, toolsAfterToggle } from '../settings/picodeSettingsData.js';
+import { accountLinkTarget, galleryThemeLabel, offerGalleryTheme, settingsMatches, themeKind, themeMatches, toolEnabled, toolsAfterToggle } from '../settings/picodeSettingsData.js';
 
 test('the search finds a page by its name or a row name, ignoring case and accents', () => {
 	assert.strictEqual(settingsMatches('THEME', 'General', ['theme', 'language']), true);
@@ -53,4 +53,15 @@ test('the theme gallery filters by kind and by name', () => {
 	assert.strictEqual(themeMatches('', 'light', 'Dracula', 'dark'), false);
 	assert.strictEqual(themeMatches('drac', 'dark', 'Dracula', 'dark'), true);
 	assert.strictEqual(themeMatches('nord', 'all', 'Dracula', 'dark'), false);
+});
+
+test('a gallery theme named by a translation key shows its package name instead', () => {
+	assert.strictEqual(galleryThemeLabel('%themeLabel%', 'Ayu'), 'Ayu');
+	assert.strictEqual(galleryThemeLabel('Ayu Mirage', 'Ayu'), 'Ayu Mirage');
+});
+
+test('the gallery leaves out the editor\'s own themes and the ones already installed', () => {
+	assert.strictEqual(offerGalleryTheme('vscode', 'Dark Modern', []), false);
+	assert.strictEqual(offerGalleryTheme('teabyii', 'Ayu Mirage', ['Ayu Mirage']), false);
+	assert.strictEqual(offerGalleryTheme('teabyii', 'Ayu Mirage', ['Abyss']), true);
 });

@@ -41,6 +41,22 @@ export function accountLinkTarget(page: string | undefined): 'account' | 'cloudS
 	}
 }
 
+/**
+ * The name a gallery theme is shown with. Some packages declare it as a translation key
+ * (`%themeLabel%`) that only their own language files fill in; the package's name stands in.
+ */
+export function galleryThemeLabel(declared: string, packageName: string): string {
+	return /^%[^%]+%$/.test(declared.trim()) ? packageName : declared;
+}
+
+/**
+ * Whether a gallery theme is worth offering: not one the editor already ships (publisher
+ * `vscode`), and not one already installed under the same name.
+ */
+export function offerGalleryTheme(publisher: string, label: string, installedLabels: readonly string[]): boolean {
+	return publisher.toLowerCase() !== 'vscode' && !installedLabels.includes(label);
+}
+
 /** A theme's kind, from the editor's colour scheme (`dark`, `light`, `hcDark`, `hcLight`). */
 export type ThemeKind = 'dark' | 'light' | 'hc';
 
