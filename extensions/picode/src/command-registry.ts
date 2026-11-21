@@ -12,6 +12,8 @@
  * lives in `commands.ts`.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { l10n } from './l10n.ts';
 
 /**
@@ -189,4 +191,48 @@ export function promptFileText(command: PiCommand): string {
 	const description = (command.description ?? l10n.t('pi\'s /{0} command', command.name)).replace(/\s+/g, ' ');
 	const hint = command.argumentHint === undefined ? '' : `argument-hint: ${command.argumentHint}\n`;
 	return `---\ndescription: ${description}\n${hint}---\n\nThe message text reaches pi as its /${command.name} command, with any arguments typed after it.\n`;
+}
+
+/**
+ * The command list a discovery session read, written down with the key it was read under.
+ *
+ * Reading the list means building a throwaway pi session, which loads every extension of every
+ * package on the extension host's only thread: a new window reads the saved list instead, and the
+ * key (runtime, folder, profile, package files) says whether it still holds.
+ */
+export function readSavedCommands(file: string, key: string): readonly PiCommand[] | undefined {
+	let saved: unknown;
+	try {
+		saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+	} catch {
+		return undefined;
+	}
+	const record = recordOf(saved);
+	if (record === undefined || record['key'] !== key || !Array.isArray(record['commands'])) {
+		return undefined;
+	}
+	const commands: PiCommand[] = [];
+	for (const item of record['commands']) {
+		const command = recordOf(item);
+		if (command === undefined || typeof command['name'] !== 'string' || command['name'].length === 0) {
+			return undefined;
+		}
+		commands.push({
+			name: command['name'],
+			...(typeof command['description'] === 'string' ? { description: command['description'] } : {}),
+			...(typeof command['argumentHint'] === 'string' ? { argumentHint: command['argumentHint'] } : {}),
+			...(typeof command['source'] === 'string' ? { source: command['source'] } : {}),
+		});
+	}
+	return commands;
+}
+
+/** Writes the list down for the next window; a file that cannot be written only costs a slower start. */
+export function writeSavedCommands(file: string, key: string, commands: readonly PiCommand[]): void {
+	try {
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		fs.writeFileSync(file, JSON.stringify({ key, commands }), 'utf8');
+	} catch {
+		// Nothing to report: the list is re-read the next time.
+	}
 }
