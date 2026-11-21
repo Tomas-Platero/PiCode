@@ -21,7 +21,7 @@ function profile(): string {
 const home = (dir: string, file: string): string => path.join(dir, 'gentle-ai', file);
 
 test('a profile with nothing saved starts on the default persona and normal permissions', () => {
-	assert.deepEqual(gentleSettings(profile()), { persona: 'gentleman', permissions: 'normal', permissionsBroken: false });
+	assert.deepEqual(gentleSettings(profile()), { persona: 'gentleman', permissions: 'normal', permissionsBroken: false, background: false });
 });
 
 test('the persona is written the way gentle writes it, and read back', () => {
@@ -64,4 +64,22 @@ test('a request for anything else is refused and writes nothing', () => {
 		assert.throws(() => setGentleSetting(dir, bad), () => true, JSON.stringify(bad));
 	}
 	assert.equal(fs.existsSync(path.join(dir, 'gentle-ai')), false);
+});
+
+test('background jobs are written in the shape gentle decodes, and start off', () => {
+	const dir = profile();
+	assert.equal(gentleSettings(dir).background, false);
+	assert.equal(setGentleSetting(dir, { key: 'background', value: 'on' }).background, true);
+	assert.deepEqual(JSON.parse(fs.readFileSync(home(dir, 'background-subagents.json'), 'utf8')), { schema: 'gentle-pi.background-subagents/v1', policy: 'on' });
+	assert.equal(setGentleSetting(dir, { key: 'background', value: 'off' }).background, false);
+});
+
+test('a background file gentle would not accept reads as off, as gentle fails closed', () => {
+	const dir = profile();
+	fs.mkdirSync(path.dirname(home(dir, 'x')), { recursive: true });
+	for (const text of ['{ nope', '{"policy":"on"}', '{"schema":"gentle-pi.background-subagents/v1","policy":"on","extra":1}', '{"schema":"gentle-pi.background-subagents/v1","policy":"yes"}']) {
+		fs.writeFileSync(home(dir, 'background-subagents.json'), text);
+		assert.equal(gentleSettings(dir).background, false, text);
+	}
+	assert.throws(() => setGentleSetting(dir, { key: 'background', value: true }));
 });

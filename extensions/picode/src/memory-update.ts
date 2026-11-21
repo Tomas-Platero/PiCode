@@ -21,7 +21,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { spawnSync } from 'child_process';
+import { execFile, spawnSync } from 'child_process';
 import { ENGRAM_VERSION_FILE, engramBinaryName } from './engram';
 import { l10n } from './l10n.ts';
 
@@ -204,6 +204,35 @@ function githubDownload(url: string): string | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+/** The version each engine binary answered, by path and modification time: it only changes when the file does. */
+const probedVersions = new Map<string, string | undefined>();
+
+/**
+ * `probeEngineVersion` without holding the thread: the update check runs in the extension host,
+ * where a synchronous spawn froze the whole window for as long as the engine took to answer.
+ */
+export function probeEngineVersionAsync(binary: string): Promise<string | undefined> {
+	let key: string;
+	try {
+		key = `${binary}|${fs.statSync(binary).mtimeMs}`;
+	} catch {
+		return Promise.resolve(undefined);
+	}
+	if (probedVersions.has(key)) {
+		return Promise.resolve(probedVersions.get(key));
+	}
+	return new Promise(resolve => {
+		execFile(binary, ['version'], { encoding: 'utf8', timeout: 10_000, windowsHide: true }, (error, stdout, stderr) => {
+			const match = error ? null : `${stdout ?? ''}\n${stderr ?? ''}`.match(/(\d+\.\d+\.\d+)/);
+			const version = match === null ? undefined : match[1];
+			if (version !== undefined) {
+				probedVersions.set(key, version);
+			}
+			resolve(version);
+		});
+	});
 }
 
 /** Runs the engine and reads the version it reports. `undefined` means it did not answer. */

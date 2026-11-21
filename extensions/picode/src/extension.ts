@@ -47,7 +47,7 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { answeringChatRows, BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, chatIsAnswering, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, availableThinkingLevels, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { answeringChatRows, BACKGROUND_JOBS_COMMAND, liveChatServices, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, chatIsAnswering, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, availableThinkingLevels, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { registerWizardModelCommands } from './wizard-models';
@@ -70,7 +70,7 @@ import { registerPendingExtensions } from './import-extensions';
 import { ensureProfilePackages } from './packages-install';
 import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
 import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from './product-packages';
-import { fetchLatestRelease, probeEngineVersion, updateEngine } from './memory-update';
+import { fetchLatestRelease, probeEngineVersionAsync, updateEngine } from './memory-update';
 import { readDefaultModel, readGit, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND, VOICE_CANCEL_COMMAND, VOICE_DOWNLOAD_COMMAND, VOICE_FINISH_COMMAND, VOICE_LISTEN_COMMAND, VOICE_POLL_COMMAND, VOICE_REMOVE_COMMAND } from './status-contract';
@@ -1656,8 +1656,18 @@ function refreshConfiguredModels(profile: string, configured: ProviderConfigurat
  * cache inside `subscriptionModels` absorbs the rebuilds; this cache absorbs the re-reads.
  */
 function refreshSubscriptionModels(agentDir: string | undefined, key: string): void {
+	const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+	// Re-reading means building pi's services, which loads every extension of every package on this
+	// process's only thread — the long freeze of a fresh window. With a list already saved and no
+	// chat to read from, the saved list stands until the first chat builds its services; then the
+	// re-read costs nothing (`onPiSessionChanged` in `activate`).
+	if ((subscriptionModelsCache.get(key)?.value.length ?? 0) > 0 && liveChatServices(cwd, agentDir) === undefined) {
+		subscriptionRefreshWaitsForChat = true;
+		return;
+	}
+	subscriptionRefreshWaitsForChat = false;
 	void singleFlight(subscriptionModelsInFlight, key, () =>
-		subscriptionModels(distributionRoot(requireProfileUri()), agentDir, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd()))
+		subscriptionModels(distributionRoot(requireProfileUri()), agentDir, cwd))
 		.then(models => {
 			const changed = !sameIds(subscriptionModelsCache.get(key)?.value ?? [], models);
 			storeModels(subscriptionModelsCache, key, models, Date.now());
@@ -1670,6 +1680,16 @@ function refreshSubscriptionModels(agentDir: string | undefined, key: string): v
 		})
 		.catch((error: unknown) =>
 			report(`models: pi's catalogue could not be read (${error instanceof Error ? error.message : String(error)})`));
+}
+
+/** A re-read of pi's catalogue was put off until a chat has built pi's services. */
+let subscriptionRefreshWaitsForChat = false;
+
+/** The first chat's services exist: the catalogue re-read that waited for them runs now, for free. */
+export function refreshModelsWaitingForChat(): void {
+	if (subscriptionRefreshWaitsForChat) {
+		warmUpModels();
+	}
 }
 
 /** Forgets the cached runtime, so the next listing reads credentials as they are now. */
@@ -1698,10 +1718,10 @@ let modelCacheFile: string | undefined;
  * pi's models arrive seconds later, once its runtime has been built again. The file holds what the
  * last window saw, which is what the wizard already hands the chat when it fetches the list.
  */
-export function loadCachedModels(): void {
+export function loadCachedModels(): boolean {
 	const file = modelCacheFile;
 	if (file === undefined) {
-		return;
+		return false;
 	}
 	try {
 		for (const [key, entry] of deserialiseCache<vscode.LanguageModelChatInformation[]>(fs.readFileSync(file, 'utf8'))) {
@@ -1711,6 +1731,7 @@ export function loadCachedModels(): void {
 		// No file yet, or one that cannot be read: the first listing refreshes it in the
 		// background, which is exactly what a cold window did before it existed.
 	}
+	return subscriptionModelsCache.size > 0;
 }
 
 /** Writes the catalogue down, so the next window opens with it. */
@@ -1759,8 +1780,11 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 	}
 	const sdk = loaded.sdk;
 
+	// A chat that already runs has built these services: reading its catalogue costs nothing, while
+	// building them again would load every extension a second time on this process's only thread.
+	const live = liveChatServices(cwd, agentDir) as PiRuntimeServices | undefined;
 	try {
-		if (runtimeCache === undefined || runtimeCache.cwd !== cwd || runtimeCache.agentDir !== agentDir) {
+		if (live === undefined && (runtimeCache === undefined || runtimeCache.cwd !== cwd || runtimeCache.agentDir !== agentDir)) {
 			// The same guard every pi load has: if any declared package is still missing, it is
 			// installed here (hidden, one run) rather than being left for pi's loader to install
 			// with its own process — and its own window — per package.
@@ -1773,7 +1797,10 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 		return [];
 	}
 
-	const runtime = runtimeCache.services.modelRuntime;
+	const runtime = (live ?? runtimeCache?.services)?.modelRuntime;
+	if (runtime === undefined) {
+		return [];
+	}
 	const models: vscode.LanguageModelChatInformation[] = [];
 	for (const provider of runtime.getProviders?.() ?? []) {
 		if (typeof runtime.hasConfiguredAuth === 'function' && !runtime.hasConfiguredAuth(provider.id)) {
@@ -2926,8 +2953,10 @@ const setupDeps = {
 	// What the last window saw is what this one opens with: the picker's list is read back before
 	// anyone asks for it, so the warm-up below only has to say whether the list moved.
 	modelCacheFile = path.join(context.globalStorageUri.fsPath, 'models-cache.json');
+	// A saved list is served at once; re-reading it waits for the first chat (`refreshSubscriptionModels`).
 	loadCachedModels();
 	warmUpModels();
+	context.subscriptions.push(onPiSessionChanged(() => refreshModelsWaitingForChat()));
 	const modelsTimer = setInterval(() => warmUpModels(), 30 * 60_000);
 	context.subscriptions.push(new vscode.Disposable(() => clearInterval(modelsTimer)));
 
@@ -3023,5 +3052,5 @@ async function memoryEngineCandidate(): Promise<CandidateTarget | undefined> {
 		return undefined;
 	}
 	const latest = await fetchLatestRelease(reason => report(`updates: memory engine — ${reason}`));
-	return { kind: 'engine', name: 'memory engine', installed: probeEngineVersion(binary), latest: latest?.version };
+	return { kind: 'engine', name: 'memory engine', installed: await probeEngineVersionAsync(binary), latest: latest?.version };
 }
