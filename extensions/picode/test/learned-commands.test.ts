@@ -70,6 +70,7 @@ test('a learned command is answered, not run', () => {
 
 test('what an extension posts for the person to read is shown', () => {
 	assert.equal(displayedCustomText({ role: 'custom', display: true, content: 'Done: 3 files' }), 'Done: 3 files');
+	assert.equal(displayedCustomText({ role: 'custom', display: true, content: 'Monitor reported:\n\u001b[32mok\u001b[39m build' }), 'Monitor reported:\nok build');
 	assert.equal(displayedCustomText({ role: 'custom', display: true, content: [{ type: 'text', text: 'a' }, { type: 'image' }, { type: 'text', text: 'b' }] }), 'a\nb');
 	assert.equal(displayedCustomText({ role: 'custom', display: false, content: 'hidden' }), undefined);
 	assert.equal(displayedCustomText({ role: 'assistant', content: 'x' }), undefined);

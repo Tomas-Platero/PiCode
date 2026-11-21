@@ -141,3 +141,34 @@ test('the card\u2019s sentences say the state it really has', () => {
 	assert.strictEqual(finishedResultLine({ summary: '' }), 'finished');
 	assert.strictEqual(completionFailed({ summary: '' }), false);
 });
+
+/** A finished job exactly as gentle-pi 4.8 posts it (`jobNoticeText`, `jobDetails`), colours included. */
+const gentleNotice = {
+	role: 'custom',
+	customType: 'gentle-jobs.notice',
+	display: true,
+	content: [
+		'Background job job-2 ("react-doctor website") exited with code 0 after 26s.',
+		'Command: npx -y react-doctor@latest . --verbose',
+		'Last output:',
+		'\u001b[32m✓\u001b[39m Scanned 64 files in 8.6s',
+		'\u001b[1mScore: 100 / 100\u001b[22m',
+		'Full output: C:\Temp\gentle-jobs\job-2.log (read it with the read tool if you need more).',
+	].join('\n'),
+	details: { gentleJobs: { jobId: 'job-2', kind: 'background', label: 'react-doctor website', status: 'exited', exitCode: 0, outputPath: 'C:\Temp\gentle-jobs\job-2.log' } },
+};
+
+test("gentle-pi's job notice becomes a finished card, with the output's colour codes gone", () => {
+	const completion = backgroundCompletionOf(gentleNotice);
+	assert.ok(completion);
+	assert.equal(completion.id, 'job-2');
+	assert.equal(completion.label, 'react-doctor website');
+	assert.equal(completion.exitCode, 0);
+	assert.equal(completion.state, 'exited');
+	assert.equal(completion.command, 'npx -y react-doctor@latest . --verbose');
+	assert.equal(completion.tail, '✓ Scanned 64 files in 8.6s\nScore: 100 / 100');
+});
+
+test("a monitor's batch of lines is not a job ending", () => {
+	assert.equal(backgroundCompletionOf({ ...gentleNotice, details: { gentleJobs: { ...gentleNotice.details.gentleJobs, kind: 'monitor', status: 'running', event: 'events' } } }), undefined);
+});
