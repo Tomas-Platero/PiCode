@@ -66,6 +66,8 @@ export const AICustomizationManagementSection = {
 	CloudSync: 'cloudSync',
 	Connections: 'connections',
 	Privacy: 'privacy',
+	/** PiCode: Gentle AI's own preferences — how it talks, its permissions and background jobs. */
+	Gentle: 'gentle',
 } as const;
 
 /** The groups of the Settings side list, in order. */

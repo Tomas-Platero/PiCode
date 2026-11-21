@@ -649,6 +649,79 @@ function listShortcuts(keybindingService: IKeybindingService): IShortcut[] {
 	return result.sort((a, b) => `${a.category ?? ''} ${a.title}`.localeCompare(`${b.category ?? ''} ${b.title}`));
 }
 
+// ---- Gentle AI --------------------------------------------------------------------------
+
+/** Gentle's own preferences as the connector reads them from the profile (`gentle-settings.ts`). */
+interface IGentleSettings {
+	readonly persona: 'gentleman' | 'neutral';
+	readonly permissions: 'normal' | 'auto' | 'yolo';
+	readonly permissionsBroken: boolean;
+	readonly background: boolean;
+}
+
+registerPage({
+	id: AICustomizationManagementSection.Gentle,
+	label: localize('picodeGentlePage', "Gentle AI"),
+	icon: Codicon.sparkle,
+	description: localize('picodeGentlePageDesc', "How your agents talk to you, what they may do on their own, and the work they can leave running."),
+	keywords: ['gentle', 'persona', 'gentleman', 'neutral', 'permissions', 'yolo', 'background', 'jobs', 'subagents'],
+	build: (page, { commandService }) => {
+		let state: IGentleSettings = { persona: 'gentleman', permissions: 'normal', permissionsBroken: false, background: false };
+		const repaint: Array<() => void> = [];
+		// Each change is written by the connector into PiCode's own profile, where Gentle reads it.
+		const save = async (key: 'persona' | 'permissions' | 'background', value: string, saved: HTMLElement) => {
+			try {
+				state = await commandService.executeCommand<IGentleSettings>('picode.gentle.setSetting', { key, value }) ?? state;
+				page.markSaved(saved);
+			} catch {
+				// Not saved: the control goes back to what is really stored.
+			}
+			repaint.forEach(paint => paint());
+		};
+		repaint.push(page.customSegmentedRow<IGentleSettings['persona']>(
+			{ name: localize('picodeGentlePersona', "How it talks"), description: localize('picodeGentlePersonaDesc', "Gentleman is direct and explains the why behind each step. Neutral keeps it plain and professional."), keywords: 'persona gentleman neutral voice tone' },
+			[
+				{ value: 'gentleman', label: localize('picodeGentlePersonaGentleman', "Gentleman") },
+				{ value: 'neutral', label: localize('picodeGentlePersonaNeutral', "Neutral") },
+			],
+			() => state.persona,
+			(value, saved) => void save('persona', value, saved),
+			[],
+		));
+		repaint.push(page.customSegmentedRow<IGentleSettings['permissions']>(
+			{ name: localize('picodeGentlePermissions', "Permissions for new chats"), description: localize('picodeGentlePermissionsDesc', "Normal asks before acting. Auto lets a second model decide, which costs a little extra. YOLO handles everyday steps on its own and still asks before anything destructive."), keywords: 'permissions mode normal auto yolo ask' },
+			[
+				{ value: 'normal', label: localize('picodeGentlePermNormal', "Normal") },
+				{ value: 'auto', label: localize('picodeGentlePermAuto', "Auto") },
+				{ value: 'yolo', label: localize('picodeGentlePermYolo', "YOLO") },
+			],
+			() => state.permissions,
+			(value, saved) => void save('permissions', value, saved),
+			[],
+		));
+		// The control just built, so a broken permissions file can lock its options.
+		const permissionsRow = [...page.element.querySelectorAll<HTMLElement>('.picode-set-segmented')].pop() ?? page.element;
+		repaint.push(page.customSwitchRow(
+			{ name: localize('picodeGentleBackground', "Background work"), description: localize('picodeGentleBackgroundDesc', "Let your agents keep long jobs running while you keep chatting. You'll find them in Tasks."), keywords: 'background jobs subagents tasks' },
+			() => state.background,
+			(on, saved) => void save('background', on ? 'on' : 'off', saved),
+			[],
+		));
+		void commandService.executeCommand<IGentleSettings>('picode.gentle.settings').then(read => {
+			if (read) {
+				state = read;
+				repaint.forEach(paint => paint());
+				if (read.permissionsBroken) {
+					// The saved permissions could not be read: replacing them is a person's call, not ours.
+					for (const value of ['normal', 'auto', 'yolo']) {
+						page.lockChoice(permissionsRow, value, localize('picodeGentlePermissionsBroken', "Your saved permissions couldn't be read. Delete the file and try again."));
+					}
+				}
+			}
+		}, () => { /* the connector is not running (AI off): the defaults stay on show */ });
+	},
+});
+
 // ---- Keyboard ---------------------------------------------------------------------------
 
 registerPage({

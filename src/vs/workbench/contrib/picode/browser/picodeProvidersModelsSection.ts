@@ -153,13 +153,6 @@ interface IAgentProfilesView {
 /** Gentle's reserved name for the main agent inside a profile. */
 const ORCHESTRATOR = 'orchestrator';
 
-/** Gentle's own preferences: how it talks and what new sessions start with. */
-interface IGentleSettings {
-	readonly persona: string;
-	readonly permissions: string;
-	readonly permissionsBroken: boolean;
-}
-
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 /**
@@ -203,7 +196,6 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	private selectedProfile: string | undefined;
 	private agentNote = '';
 	private agentNoteIsError = false;
-	private gentleState: IGentleSettings | undefined;
 	/**
 	 * The model the chat runs on, as this panel believes it.
 	 *
@@ -934,17 +926,12 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 
 	/* --------------------------------------------------------------------- agents */
 
-	/** Asks the connector for the agent profiles and Gentle's own preferences. */
+	/** Asks the connector for the agent profiles. */
 	private async loadAgents(): Promise<void> {
 		try {
 			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.state');
 		} catch {
 			this.profilesView = undefined;
-		}
-		try {
-			this.gentleState = await this.commandService.executeCommand<IGentleSettings>('picode.gentle.settings');
-		} catch {
-			this.gentleState = undefined;
 		}
 		if (this.tab === 'agents') {
 			this.render();
@@ -1005,70 +992,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		return name === undefined || name === value ? undefined : name;
 	}
 
-	/** One of Gentle's own preferences (`persona` or `permissions`). */
-	private async saveGentle(key: string, value: string): Promise<void> {
-		try {
-			this.gentleState = await this.commandService.executeCommand<IGentleSettings>('picode.gentle.setSetting', { key, value });
-			this.agentNote = localize('picodePm.agentSaved', "Saved. The agents use it from your next message.");
-			this.agentNoteIsError = false;
-		} catch (error) {
-			this.agentNote = localize('picodePm.agentFailed', "It could not be saved: {0}", error instanceof Error ? error.message : String(error));
-			this.agentNoteIsError = true;
-		}
-		if (this.tab === 'agents') {
-			this.render();
-		}
-	}
-
-	/** Gentle's own preferences: how it talks and what new conversations start with. */
-	private renderGentleBehaviour(): void {
-		const gentle = this.gentleState;
-		if (gentle !== undefined) {
-			const choice = (icon: ThemeIcon, label: string, description: string, warning: boolean, current: string, options: ReadonlyArray<[string, string]>, key: string, disabled: boolean): void => {
-				const card = append(this.body, $('.picode-pm-setting'));
-				append(card, $('span.picode-pm-setting-icon' + ThemeIcon.asCSSSelector(icon)));
-				const text = append(card, $('.picode-pm-setting-text'));
-				append(text, $('.picode-pm-setting-label')).textContent = label;
-				append(text, $('.picode-pm-setting-hint' + (warning ? '.warning' : ''))).textContent = description;
-				const select = document.createElement('select');
-				select.className = 'picode-pm-select picode-pm-setting-select';
-				select.setAttribute('aria-label', label);
-				select.disabled = disabled;
-				for (const [value, name] of options) {
-					select.append(new Option(name, value));
-				}
-				select.value = current;
-				card.append(select);
-				this.store.add(addDisposableListener(select, 'change', () => { void this.saveGentle(key, select.value); }));
-			};
-			choice(
-				Codicon.comment,
-				localize('picodePm.gentlePersona', "How it talks"),
-				localize('picodePm.gentlePersonaNote', "Gentleman is direct and teaches the why behind each step. Neutral is plain and professional."),
-				false,
-				gentle.persona,
-				[['gentleman', localize('picodePm.personaGentleman', "Gentleman")], ['neutral', localize('picodePm.personaNeutral', "Neutral")]],
-				'persona',
-				false,
-			);
-			choice(
-				Codicon.shield,
-				localize('picodePm.gentlePermissions', "Permissions for new conversations"),
-				gentle.permissionsBroken
-					? localize('picodePm.gentlePermissionsBroken', "The saved permissions could not be read. Delete the file and try again.")
-					: localize('picodePm.gentlePermissionsNote', "Normal asks before it acts. Auto lets a second model call decide, which costs extra. YOLO does ordinary development steps without asking; anything destructive still asks."),
-				gentle.permissionsBroken,
-				gentle.permissions,
-				[['normal', localize('picodePm.permNormal', "Normal")], ['auto', localize('picodePm.permAuto', "Auto")], ['yolo', localize('picodePm.permYolo', "YOLO")]],
-				'permissions',
-				gentle.permissionsBroken,
-			);
-		}
-	}
-
 	/**
 	 * The agent profiles: the list on the left, the open profile on the right (its way of working and
-	 * one row per agent), Gentle's own preferences under them. Gentle's terminal `/gentle:profiles`
+	 * one row per agent). Gentle's terminal `/gentle:profiles`
 	 * screen, drawn the editor's way.
 	 */
 	private renderAgents(): void {
@@ -1079,7 +1005,6 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		}
 		if (view.invalid) {
 			append(this.body, $('p.picode-pm-empty')).textContent = localize('picodePm.profilesInvalid', "Your agent profiles could not be read. Fix or delete the file, then come back.");
-			this.renderGentleBehaviour();
 			return;
 		}
 		if (view.agents.length <= 1) {
@@ -1097,7 +1022,6 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		if (selected !== undefined) {
 			this.renderProfile(detail, view, selected);
 		}
-		this.renderGentleBehaviour();
 	}
 
 	/** The profiles, each with the marks that say where it is in use. */

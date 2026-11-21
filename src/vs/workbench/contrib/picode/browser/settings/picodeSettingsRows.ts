@@ -159,7 +159,7 @@ export class PicodeSettingsPage extends Disposable {
 	}
 
 	/** A switch whose value is not one setting on its own: `get` reads it, `set` applies it. */
-	customSwitchRow(row: IPicodeSettingRow, get: () => boolean, set: (on: boolean, saved: HTMLElement) => void, watchKeys: readonly string[]): void {
+	customSwitchRow(row: IPicodeSettingRow, get: () => boolean, set: (on: boolean, saved: HTMLElement) => void, watchKeys: readonly string[]): () => void {
 		const control = this.row(row);
 		const saved = this.savedMark(control);
 		const input = DOM.append(control, $('input.picode-set-switch')) as HTMLInputElement;
@@ -172,6 +172,7 @@ export class PicodeSettingsPage extends Disposable {
 			this.watch(key, paint);
 		}
 		this._register(DOM.addDisposableListener(input, DOM.EventType.CHANGE, () => set(input.checked, saved)));
+		return paint;
 	}
 
 	/** Returns the control, so a page can lock an option it finds unavailable (`lockChoice`). */

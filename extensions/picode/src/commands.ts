@@ -13,7 +13,7 @@ import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, sdkEn
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
-import { chatSlashCommandsOf, fileNameOf, promptFileText, type PiCommand } from './command-registry';
+import { chatSlashCommandsOf, fileNameOf, promptFileText, readSavedCommands, writeSavedCommands, type PiCommand } from './command-registry';
 import { EDITOR_COMMANDS, isListedCommand } from './chat-commands';
 import { bindSessionExtensions, pinAgentDir, type PiSession } from './agent';
 import { listAgents } from './gentle-models';
@@ -188,6 +188,8 @@ function readTextFile(file: string): string | undefined {
  */
 export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, deps: PiCommandDeps): { refresh(): void; list(): Promise<readonly vscode.ChatResource[]>; dispose(): void } {
 	const commandsDir = path.join(context.globalStorageUri.fsPath, 'pi-commands');
+	/** The last discovery, written down so the next window does not rebuild pi to read it. */
+	const savedCommandsFile = path.join(context.globalStorageUri.fsPath, 'pi-commands-discovery.json');
 	const changed = new vscode.EventEmitter<void>();
 	/** The prompt files the last sync wrote, so a command that disappears loses its file. */
 	let written = new Set<string>();
@@ -218,9 +220,17 @@ export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, d
 		if (discovery?.key === key) {
 			return Promise.resolve(discovery.commands);
 		}
+		// What a window before this one read under the same key: a new window serves it instead of
+		// building a throwaway pi session, and the first chat's live session takes over from it.
+		const saved = readSavedCommands(savedCommandsFile, key);
+		if (saved !== undefined) {
+			discovery = { key, commands: saved };
+			return Promise.resolve(saved);
+		}
 		discovering ??= discoverCommands(deps, cwd, agentDir)
 			.then(commands => {
 				discovery = { key, commands };
+				writeSavedCommands(savedCommandsFile, key, commands);
 				return commands;
 			})
 			.finally(() => { discovering = undefined; });

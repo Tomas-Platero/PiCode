@@ -767,7 +767,7 @@
 			"default": false
 		}
 	},
-	"version": "1.146.17",
-	"picodeVersion": "2.4.4-beta",
+	"version": "1.146.19",
+	"picodeVersion": "2.4.6-beta",
 	"hotfixPublicKey": "MCowBQYDK2VwAyEAZes8irGrgqOvvCEWRBn3rwOG6qxSNp+zxWOX3HqXyjo="
 }

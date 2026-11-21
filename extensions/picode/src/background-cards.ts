@@ -30,6 +30,14 @@ export const BACKGROUND_TOOL = 'background';
 /** The completion message's own type, as the environment that runs the jobs marks it. */
 export const BACKGROUND_COMPLETION_TYPE = 'specpi-background';
 
+/** gentle-pi's own job notice (`JOB_NOTICE_TYPE` in its `background-jobs-tools.ts`): the same ending, in its own shape. */
+export const GENTLE_JOB_NOTICE_TYPE = 'gentle-jobs.notice';
+
+/** Terminal colour and cursor codes: a job's output keeps them, and a card would show them as boxes. */
+export function withoutTerminalCodes(text: string): string {
+	return text.replace(/\u001b\[[0-9;?]*[A-Za-z]|\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '');
+}
+
 /** The longest a command or an output tail gets in a card: a pointer, not a transcript. */
 export const CARD_COMMAND_CHARS = 300;
 export const CARD_TAIL_CHARS = 1200;
@@ -174,6 +182,9 @@ export interface BackgroundCompletion {
  */
 export function backgroundCompletionOf(message: unknown): BackgroundCompletion | undefined {
 	const record = objectOf(message);
+	if (record?.['customType'] === GENTLE_JOB_NOTICE_TYPE) {
+		return gentleJobEnding(record);
+	}
 	if (record?.['customType'] !== BACKGROUND_COMPLETION_TYPE) {
 		return undefined;
 	}
@@ -197,6 +208,36 @@ export function backgroundCompletionOf(message: unknown): BackgroundCompletion |
 		...(commandLine === undefined ? {} : { command: cardText(commandLine.slice('Command: '.length).trim(), CARD_COMMAND_CHARS) }),
 		summary: firstLine,
 		...(tailMarker === -1 ? {} : { tail: cardText(content.slice(tailMarker + 'Last lines of output:'.length).trim(), CARD_TAIL_CHARS) }),
+	};
+}
+
+/**
+ * gentle-pi's notice, read as a job's ending. The same type also carries a monitor's batch of new
+ * lines while it runs: only a notice whose job is no longer running is an ending.
+ */
+function gentleJobEnding(record: Record<string, unknown>): BackgroundCompletion | undefined {
+	const content = textOf(record['content']);
+	const job = recordOf(recordOf(record['details'])?.['gentleJobs']);
+	if (content === undefined || job === undefined || job['status'] === 'running' || job['event'] === 'events') {
+		return undefined;
+	}
+	const lines = withoutTerminalCodes(content).split('\n');
+	const id = textOf(job['jobId']);
+	const label = textOf(job['label']);
+	const state = textOf(job['status']);
+	const exitCode = job['exitCode'];
+	const commandLine = lines.find(line => line.startsWith('Command: '));
+	const tailStart = lines.indexOf('Last output:');
+	const tailEnd = lines.findIndex(line => line.startsWith('Full output: '));
+	const tail = tailStart === -1 ? '' : lines.slice(tailStart + 1, tailEnd > tailStart ? tailEnd : undefined).map(line => line.trimEnd()).join('\n').trim();
+	return {
+		...(id === undefined ? {} : { id }),
+		...(label === undefined ? {} : { label }),
+		...(typeof exitCode === 'number' && Number.isFinite(exitCode) ? { exitCode } : {}),
+		...(state === undefined ? {} : { state }),
+		...(commandLine === undefined ? {} : { command: cardText(commandLine.slice('Command: '.length).trim(), CARD_COMMAND_CHARS) }),
+		summary: lines[0],
+		...(tail.length === 0 ? {} : { tail: cardText(tail, CARD_TAIL_CHARS) }),
 	};
 }
 
