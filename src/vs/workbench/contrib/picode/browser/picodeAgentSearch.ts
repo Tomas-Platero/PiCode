@@ -80,7 +80,7 @@ function showSearchWindow(accessor: ServicesAccessor): void {
 			run: () => void instantiationService.invokeFunction(openSession, session),
 		})),
 		{ section: actions, icon: Codicon.add, label: localize('picode.agent.search.new', "New session"), run: () => void commandService.executeCommand(ACTION_ID_NEW_CHAT) },
-		{ section: actions, icon: PICODE_CUSTOMIZATION_ICON, label: localize('picode.agent.search.customization', "Customization"), run: () => void commandService.executeCommand(PICODE_CUSTOMIZATION_COMMAND_ID) },
+		{ section: actions, icon: PICODE_CUSTOMIZATION_ICON, label: localize('picode.agent.search.customization', "Customization"), run: () => void commandService.executeCommand(PICODE_CUSTOMIZATION_COMMAND_ID, 'status') },
 	];
 	const order = [attention, recent, actions];
 

@@ -12,7 +12,6 @@ import { OperatingSystem, OS } from '../../../../../base/common/platform.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { localize } from '../../../../../nls.js';
-import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
@@ -23,11 +22,8 @@ import { registerAccountSection } from './picodeAccountSections.js';
 
 const $ = DOM.$;
 
-const UPDATE_MODE_SETTING = 'update.mode';
-const EXTENSION_CHECKS_SETTING = 'extensions.autoCheckUpdates';
-const WATCHED = [SHARE_USAGE_SETTING, UPDATE_MODE_SETTING, EXTENSION_CHECKS_SETTING];
+const WATCHED = [SHARE_USAGE_SETTING];
 
-type UpdateMode = 'default' | 'start' | 'manual' | 'none';
 
 /**
  * Everything that leaves this computer, and the switches for it (ADR-045): the anonymous usage
@@ -40,7 +36,6 @@ class PicodeAccountPrivacySection extends Disposable {
 	constructor(
 		private readonly container: HTMLElement,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@ICommandService private readonly commandService: ICommandService,
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IProductService private readonly productService: IProductService,
 	) {
@@ -65,7 +60,6 @@ class PicodeAccountPrivacySection extends Disposable {
 
 		this.renderHero(page);
 		this.renderUsage(page);
-		this.renderConnections(page);
 		this.renderFooter(page);
 		if (scroller) {
 			scroller.scrollTop = scrollTop;
@@ -113,45 +107,6 @@ class PicodeAccountPrivacySection extends Disposable {
 		]);
 	}
 
-	private renderConnections(page: HTMLElement): void {
-		this.groupHead(page, localize('picodePrivacyConnectionsGroup', "Connections"));
-		const card = DOM.append(page, $('.picode-sync-card'));
-
-		const mode = this.configurationService.getValue<UpdateMode>(UPDATE_MODE_SETTING) ?? 'default';
-		const row = DOM.append(card, $(`.picode-sync-item.picode-account-privacy.picode-privacy-choice-row${mode === 'none' ? '' : '.on'}`));
-		const label = DOM.append(row, $('.picode-sync-item-label'));
-		this.icon(label, Codicon.cloudDownload, 'green');
-		const text = DOM.append(label, $('.picode-sync-item-text'));
-		DOM.append(text, $('strong')).textContent = localize('picodePrivacyUpdates', "PiCode updates");
-		DOM.append(text, $('span')).textContent = localize('picodePrivacyUpdatesWhy', "How often PiCode looks for a new version.");
-		const modes: { value: UpdateMode; label: string }[] = [
-			{ value: 'default', label: localize('picodePrivacyUpdatesAuto', "Automatic") },
-			{ value: 'start', label: localize('picodePrivacyUpdatesStart', "At startup") },
-			{ value: 'manual', label: localize('picodePrivacyUpdatesManual', "When I ask") },
-			{ value: 'none', label: localize('picodePrivacyUpdatesOff', "Off") },
-		];
-		const segmented = DOM.append(row, $('.picode-privacy-segmented'));
-		segmented.setAttribute('role', 'radiogroup');
-		segmented.setAttribute('aria-label', localize('picodePrivacyUpdates', "PiCode updates"));
-		for (const option of modes) {
-			const chosen = option.value === mode;
-			const button = DOM.append(segmented, $(`button.picode-privacy-segment${chosen ? '.chosen' : ''}`)) as HTMLButtonElement;
-			button.type = 'button';
-			button.textContent = option.label;
-			button.setAttribute('role', 'radio');
-			button.setAttribute('aria-checked', String(chosen));
-			this.renderStore.add(DOM.addDisposableListener(button, DOM.EventType.CLICK, () => this.update(UPDATE_MODE_SETTING, option.value)));
-		}
-
-		this.toggleRow(card, {
-			icon: Codicon.extensions, color: 'purple',
-			title: localize('picodePrivacyExtensions', "Extension updates"),
-			description: localize('picodePrivacyExtensionsWhy', "Look for new versions of your extensions on Open VSX."),
-			on: this.configurationService.getValue<boolean>(EXTENSION_CHECKS_SETTING) !== false,
-			set: value => this.update(EXTENSION_CHECKS_SETTING, value),
-		});
-	}
-
 	private renderFooter(page: HTMLElement): void {
 		const actions = DOM.append(page, $('.picode-account-actions'));
 		const origin = this.productService.picode?.webOrigin;
@@ -160,9 +115,6 @@ class PicodeAccountPrivacySection extends Disposable {
 			policy.label = localize('picodeAccountPrivacyPolicy', "Privacy policy");
 			this.renderStore.add(policy.onDidClick(() => { void this.openerService.open(URI.parse(`${origin}/legal/privacy`)); }));
 		}
-		const settings = this.renderStore.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
-		settings.label = localize('picodePrivacyOpenSettings', "Open in Settings");
-		this.renderStore.add(settings.onDidClick(() => { void this.commandService.executeCommand('workbench.action.openSettings', SHARE_USAGE_SETTING); }));
 	}
 
 	private toggleRow(card: HTMLElement, item: { icon: ThemeIcon; color: string; title: string; description: string; on: boolean; set: (value: boolean) => void }): void {
@@ -226,6 +178,7 @@ registerAccountSection({
 	id: 'privacy',
 	label: localize('picodeAccountPrivacy', "Privacy"),
 	icon: Codicon.shield,
-	order: 18,
+	description: localize('picodeAccountPrivacyDescription', "What PiCode sends, and what it never sends."),
+	keywords: ['telemetry', 'usage', 'data', 'privacy'],
 	create: (instantiationService: IInstantiationService, container: HTMLElement) => instantiationService.createInstance(PicodeAccountPrivacySection, container),
 });

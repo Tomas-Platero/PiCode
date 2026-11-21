@@ -35,7 +35,7 @@ const COMMONLY_USED_SETTINGS: readonly string[] = [
 	'editor.defaultFormatter',
 	'editor.fontFamily',
 	'editor.wordWrap',
-	'chat.agent.maxRequests',
+	'picode.pi.thinkingLevel',
 	'files.exclude',
 	'workbench.colorTheme',
 	'editor.tabSize',
@@ -182,18 +182,10 @@ export const tocData: ITOCEntry<string> = {
 			// where a person looks for anything the chat does.
 			label: localize('chat', "PiCode"),
 			children: [
-				// PiCode: the model providers are their **own node**, beside `pi` (owner, 2026-09-25). Two
-				// nodes and not one, because they answer two questions: this one is *which providers
-				// exist*, and `pi` is *how pi itself behaves*.
+				// PiCode: the model providers and MCP servers have no node here: they are managed in
+				// the Settings window (Agent › Providers and models, Agent › MCP servers), and their
+				// settings are hidden, so their nodes only ever rendered empty.
 				//
-				// Order (owner: "then sort the categories"): PiCode's own two nodes first —
-				// connecting a model is the first thing anyone does — and then the editor's, in
-				// the order it already had.
-				{
-					id: 'chat/providers',
-					label: localize('chatProviders', "Providers"),
-					settings: ['picode.providers']
-				},
 				// PiCode: pi's own settings. The node is called **Settings** (owner: "luego pi
 				// cambialo a Settings"): `pi` is the agent's name, and inside a node already called
 				// PiCode the word that helps is the one that says what the rows do.
@@ -264,11 +256,6 @@ export const tocData: ITOCEntry<string> = {
 						'chat.tools.*',
 						'chat.extensionTools.*'
 					]
-				},
-				{
-					id: 'chat/mcp',
-					label: localize('chatMcp', "MCP"),
-					settings: ['picode.mcp.*']
 				},
 				{
 					id: 'chat/context',

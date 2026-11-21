@@ -654,5 +654,6 @@
 	"🤖 Answers": "🤖 Yanıtlar",
 	"🧠 Model": "🧠 Model",
 	"🧠 Thinking set to **{0}**.": "🧠 Düşünme **{0}** olarak ayarlandı.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Düşünme: **{0}**. `/thinking <düzey>` ile birini seçin: {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Düşünme: **{0}**. `/thinking <düzey>` ile birini seçin: {1}.",
+	"The extension “{0}” could not load, so it is off in this chat.": "“{0}” uzantısı yüklenemedi, bu yüzden bu sohbette kapalı."
 }

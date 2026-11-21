@@ -2007,3 +2007,29 @@ usuario; la App da lectura de issues y solo en los repos que el usuario elija al
 **Consecuencias.**
 - Las cifras de la página privada de estadísticas bajan con cada persona que lo apaga, y no se sabe cuántas lo hicieron (no se cuenta el apagado).
 - Falta actualizar la política de privacidad de la web (otro repositorio).
+
+## ADR-046 — Una sola ventana Settings, al estilo de Claude Code
+
+> *"quiero que las opciones de picode (vscode). Se vean así como aquí en claude code o como tenemos la de cuenta, etc."* — 2026-11-20
+>
+> *"Podríamos unificar todo en la nueva ventana de settings y con "Categorías" llevar desde el botón por ejemplo de cuenta o sync a esas opciones. Como hacemos aquí en claude code"* — 2026-11-20
+
+**Punto de partida.** Tres sitios con tres aspectos: el árbol de ajustes de VS Code (más de mil filas, con apartados vacíos), la ventana *Account* y la ventana *Chat Settings*. Varios datos salían en tres o cuatro sitios (plan Pro, actualizaciones, proveedores, pensamiento).
+
+**Qué se decide.**
+- **Una ventana *Settings*** con el menú agrupado (*Preferences*, *Account*, *Agent*), un buscador que encuentra páginas por el nombre de sus filas y filas «nombre y explicación | control». Ctrl+, y el engranaje la abren en *General*.
+- **Se construye sobre *Chat Settings*** (`aiCustomizationManagementEditor.ts`), no desde cero: ya era modal, ya pintaba Agents, Skills y Packages con su vista de detalle y ya admitía páginas registradas. Su lista lateral pasa a ser `picodeSettingsNav.ts`. La ventana *Account* se borra y sus páginas se registran en el grupo *Account*.
+- **Cada botón abre su categoría** (avatar → *Account*, *Customization* → *Agent › Overview*, anillo de consumo → *Usage limits*…). Los comandos antiguos siguen funcionando: `picode.account.open sync` abre *Cloud sync*.
+- **Un dato, una casa**: *Pro features* se funde en *Account › Overview*; las actualizaciones (PiCode, pi, paquetes, memoria) viven en *Preferences › Updates* y salen de *Privacy* y de *Status*; el pensamiento, el razonamiento y el dictado, en *Chat and agent*; contexto, coste y rama se quedan en la columna *Status* (estado en vivo).
+- ***Tools*** enseña las herramientas de pi y escribe `picode.pi.disabledTools`; antes enseñaba las de Copilot CLI y no cambiaba nada.
+- **Movimiento**: la ventana entra con fundido y zoom corto, la marca del menú se desliza, la página entra subiendo, la fila buscada se ilumina; todo bajo `.monaco-enable-motion`, así que *Reduce motion* lo apaga.
+- **El árbol de VS Code** sigue como *All settings* (pie del menú y búsquedas sin resultado). Pierde los apartados vacíos *Providers* y *MCP*.
+
+**Alternativas descartadas.**
+- **Una ventana nueva desde cero:** habría que rehacer las listas de Agents, Skills y Packages con sus vistas de detalle; mucho código upstream duplicado.
+- **Ocultar con `included: false` los ajustes que ya maneja la ventana** (`picode.sync.*`, `picode.agents.profile`, `picode.privacy.shareUsage`): el editor se niega a escribir un ajuste no registrado, así que se quedan, solo encontrables buscando.
+- **Quitar la lectura de `pi.providers`** en el conector: protege los proveedores escritos en ajustes antiguos; quitarla los perdería.
+
+**Consecuencias.**
+- Las opciones `chat.*` pensadas para Copilot siguen en *All settings*: ocultarlas exige comprobar una a una que pi no las lee.
+- Una página nueva de PiCode se añade registrándola (`aiCustomizationManagementSectionRegistry`) y, si es de filas, con `PicodeSettingsPage`.

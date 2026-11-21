@@ -394,6 +394,7 @@ registerAccountSection({
 	id: 'sync',
 	label: localize('picodeSyncLabel', "Cloud sync"),
 	icon: Codicon.cloud,
-	order: 10,
+	description: localize('picodeSyncDescription', "Your setup on every computer you sign in to."),
+	keywords: ['sync', 'backup', 'cloud', 'devices'],
 	create: (instantiationService: IInstantiationService, container: HTMLElement) => instantiationService.createInstance(PicodeAccountSyncSection, container),
 });

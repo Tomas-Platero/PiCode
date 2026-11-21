@@ -423,7 +423,8 @@ export function createVSCodeHarnessDescriptor(): IHarnessDescriptor {
 		label: localize('harness.local', "PiCode (Pi)"),
 		icon: ThemeIcon.fromId(Codicon.vm.id),
 		supportsTroubleshoot: true,
-		hiddenSections: [AICustomizationManagementSection.Tools],
+		// PiCode: Tools is shown again. It used to list the Copilot CLI's tools; it now lists pi's own
+		// (`picodeToolsPage.ts`) and turns them off for real.
 		sectionOverrides: new Map([
 			[AICustomizationManagementSection.Instructions, {
 				rootFileShortcuts: [AGENT_MD_FILENAME],

@@ -1,17 +1,17 @@
-# 👤 La ventana Account
+# 👤 La cuenta
 
 > *"Quiero un panel a parte solo para «Account» como el que tenemos de «Chat Settings» donde poder ver todo lo que se sincroniza bien, a parte todo lo «pro» de la app que quiero añadir debería ir ahí no solo la sync."* — 2026-11-06
 
-**Una ventana, un sitio para todo lo de la cuenta.** Se abre con *PiCode: Open Account* y desde el menú de cuentas. Es un editor modal aparte de Chat Settings.
+**Un sitio para todo lo de la cuenta.** Desde el 2026-11-20 es el grupo *Account* de la ventana *Settings* (ADR-046), no una ventana aparte. Se llega con *PiCode: Open Account*, el avatar o el menú de cuentas, que abren *Settings* en la página que toca.
 
 ## Qué hay dentro
 
 | Página | Para qué |
 |---|---|
-| 👤 **Overview** | Correo, plan (Free / Pro), iniciar sesión, *Upgrade* o *Manage plan*, cerrar sesión. |
+| 👤 **Overview** | Correo, plan (Free / Pro), iniciar sesión, *Upgrade* o *Manage plan*, cerrar sesión, y lo que trae Pro con un *Open* a cada página (antes era la página *Pro features*). |
 | ☁️ **Cloud sync** | La única puerta a la sincronización (2026-11-20): el menú del engranaje (*Cloud Sync...*), la paleta y los avisos de VS Code abren esta página en vez de la lista propia de VS Code (`userDataSync.ts`, marcado PiCode; `picode.account.open sync`). Junto al dibujo, el estado (apagada, al día con la última vez y la cuenta, sincronizando, sesión caducada con *Sign in*, cambios en dos sitios con *Resolve*) con *Sync now* y *Turn off*. Arriba, un dibujo de a dónde va todo (este equipo, la nube, los otros equipos de la cuenta; las líneas se mueven mientras sincroniza). Debajo, dos grupos de filas con su interruptor y una marca verde cuando ya está en la nube: *Agents and chats* (agentes, subagentes, skills, perfiles de agentes, servidores MCP, modelos y proveedores, ajustes de los agentes, notas de memoria y *Chats*, los de los últimos 7 días con *Restore*; ajuste `picode.sync.chats`, apagado de serie) y *Editor* (perfiles del editor con el perfil de agentes de cada uno, ajustes, atajos, extensiones, fragmentos, tareas, MCP del editor y diseño). Las claves y los inicios de sesión no viajan (ADR-041, adenda 1). Al pie, copias anteriores y borrar de la nube. Sin Pro, la página lo explica. |
 | 🔌 **Connections** | Los servicios Pro que traen trabajo al chat (issues de GitHub, Jira…). Cada uno dice si está incluido, bloqueado o próximo. |
-| ⭐ **Pro features** | Todo lo que incluye el plan Pro, de un vistazo. |
+| 🛡️ **Privacy** | Lo que PiCode envía y lo que nunca envía, con *Help improve PiCode* (ADR-045). La frecuencia de las actualizaciones vive ahora en *Preferences › Updates*. |
 
 ## Cómo se añade una función Pro nueva
 

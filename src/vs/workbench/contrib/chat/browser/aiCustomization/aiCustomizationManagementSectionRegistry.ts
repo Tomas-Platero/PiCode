@@ -19,6 +19,8 @@ export interface IAICustomizationManagementSectionContribution {
 	readonly label: string;
 	readonly icon: ThemeIcon;
 	readonly description: string;
+	/** PiCode: extra words the Settings search box finds this page by (the names of its rows). */
+	readonly keywords?: readonly string[];
 	readonly supportsHarness: (harnessId: string) => boolean;
 	create(instantiationService: IInstantiationService, container: HTMLElement): IAICustomizationManagementSectionWidget;
 }

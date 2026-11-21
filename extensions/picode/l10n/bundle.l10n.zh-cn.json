@@ -654,5 +654,6 @@
 	"🤖 Answers": "🤖 回答",
 	"🧠 Model": "🧠 模型",
 	"🧠 Thinking set to **{0}**.": "🧠 思考强度已设为 **{0}**。",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 思考强度: **{0}**。可使用 `/thinking <level>` 选择: {1}。"
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 思考强度: **{0}**。可使用 `/thinking <level>` 选择: {1}。",
+	"The extension “{0}” could not load, so it is off in this chat.": "扩展“{0}”无法加载，因此在此聊天中已关闭。"
 }
