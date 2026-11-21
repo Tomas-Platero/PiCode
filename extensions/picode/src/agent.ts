@@ -1681,6 +1681,18 @@ export interface AvailableThinkingLevels {
 let sessionResetter: (() => void) | undefined;
 /** The live session's command registry reader, set by registerPiAgent for the slash list. */
 let sessionCommandsProvider: (() => { readonly key: string; readonly commands: readonly PiCommand[] } | undefined) | undefined;
+/** The pi services a chat already built, for a folder and profile; see `liveChatServices`. */
+let chatServicesProvider: ((cwd: string, agentDir: string | undefined) => PiServices | undefined) | undefined;
+/**
+ * The pi services a chat of this window already built for `cwd` and `agentDir`, or `undefined`.
+ *
+ * Building pi's services loads every extension of every package, synchronously, on this
+ * process's only thread: the model list reads a chat's services instead of building its own.
+ */
+export function liveChatServices(cwd: string, agentDir: string | undefined): PiServices | undefined {
+	return chatServicesProvider?.(cwd, agentDir);
+}
+
 /** Fires when the chat's session was created, replaced or dropped. */
 const sessionChangedEmitter = new vscode.EventEmitter<void>();
 
@@ -2018,6 +2030,15 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	// footer reads this flag to keep the vote actions off pi's responses (see
 	// `chatTitleActions.ts`). Set once for the window — the panel's chat is pi's.
 	void vscode.commands.executeCommand('setContext', CHAT_ACTIVE_CONTEXT, true);
+	chatServicesProvider = (cwd, agentDir) => {
+		for (const chat of chats.values()) {
+			const services = chat.services;
+			if (services !== undefined && path.resolve(services.cwd) === path.resolve(cwd) && (agentDir === undefined || path.resolve(services.agentDir) === path.resolve(agentDir))) {
+				return services;
+			}
+		}
+		return undefined;
+	};
 	sessionCommandsProvider = () => {
 		const session = active?.session;
 		const sessionFolder = active?.sessionFolder;

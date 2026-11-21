@@ -44,6 +44,12 @@ El comando `picode.perf.report` (no sale en la paleta; se lanza desde las herram
 - La búsqueda en conversaciones anteriores lee los ficheros sin bloquear y cede el turno entre uno y otro, así que el chat no se queda parado mientras busca.
 - La lista de sesiones describe cada transcrito leyendo solo sus dos extremos (64 KB cada uno) si es largo, y guarda su caché entre arranques en el almacenamiento del editor (`sessions-listing.json`). Solo vuelve a leer lo que cambió. Si un extremo corta una respuesta, lee el fichero entero, como antes.
 
+## ✅ Hecho (2026-11-21)
+
+- **pi se preparaba hasta tres veces al abrir la ventana** y cada vez cargaba todas las extensiones de todos los paquetes en el único hilo del conector (20–30 s de editor congelado en el registro de la 2.4.4). Ahora: la lista de modelos se sirve de la guardada y no la relee hasta que el primer chat ha creado sus servicios (`refreshSubscriptionModels`, `liveChatServices`); el menú `/` se sirve de la última lista descubierta con la misma clave (`readSavedCommands`); solo el primer mensaje prepara pi.
+- **La versión del motor de memoria** se preguntaba con una llamada síncrona de hasta 10 s en cada búsqueda de actualizaciones; ahora es asíncrona y se recuerda mientras el binario no cambie (`probeEngineVersionAsync`).
+- Sin medir en la app todavía: se publicó directamente (2.4.5-experimental).
+
 ## 🔜 Pendiente
 
 | Qué | Por qué | Esfuerzo |
