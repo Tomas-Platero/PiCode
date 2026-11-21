@@ -1349,6 +1349,9 @@ play. Unverified in a running editor.
 - **Context7 se ofrece una vez** (`product-mcp.ts`): al preparar el perfil se añade `context7` a su
   `mcp.json` (`https://mcp.context7.com/mcp`, responde sin iniciar sesión) y se apunta en
   `product-seeds.json`. Si el dueño lo borra, no vuelve; si ya tenía uno con ese nombre, se queda el suyo.
+  Se escribe **sin bloque `oauth`** (la 2.4.7 lo traía y la fila pedía «Iniciar sesión» sin hacer falta: Context7
+  responde sin cuenta, y su sesión solo sube límites); la regla de la fila (`mcp-provider.ts`) lo da por usable
+  con `worksWithoutSignIn`.
 - **Dos skills de gentle-ai que gentle-pi no trae** (`go-testing`, `systemic-issue-triage`) viajan con el
   conector en `extensions/picode/skills/`, copiadas tal cual.
 - **Fuera:** `pi-btw` (su `/btw` es un panel del terminal de pi, sin uso en el editor), `gentle-ai-bench` y

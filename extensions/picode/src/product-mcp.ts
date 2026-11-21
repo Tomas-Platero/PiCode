@@ -19,16 +19,32 @@
  * No `vscode` import, so `node --test` runs this file directly.
  */
 
-import { mcpServersWithAdded, serverNames, type AddServerDraft } from './mcp-add.ts';
+import { serverNames, type AddServerDraft } from './mcp-add.ts';
 
 /** The file, inside the profile, that remembers which product servers were already offered. */
 export const PRODUCT_SEEDS_FILE = 'product-seeds.json';
 
-/** What the product offers, in the shape the Add Server flow writes. */
+/**
+ * What the product offers.
+ *
+ * A server here works **without an account** (its sign-in, when it has one, only lifts limits), so
+ * its entry carries no `oauth` block — the Add Server flow writes `oauth: {}` for a remote server
+ * with no headers, and that is what made the row ask for a sign-in — and the status rows count it
+ * as usable (`worksWithoutSignIn`).
+ */
 export const PRODUCT_MCP_SERVERS: readonly AddServerDraft[] = [
 	// Public endpoint, answers without sign-in (checked 2026-11-21).
 	{ name: 'context7', transport: 'http', url: 'https://mcp.context7.com/mcp' },
 ];
+
+/** Whether this entry is one of the product's servers that works with no account. */
+export function worksWithoutSignIn(name: string, url: string): boolean {
+	return PRODUCT_MCP_SERVERS.some(server => server.name === name && server.url === url);
+}
+
+function plainEntry(server: AddServerDraft): Record<string, unknown> {
+	return { type: 'http', url: (server.url ?? '').trim() };
+}
 
 export interface ProductMcpResult {
 	/** The new `mcp.json` text, when it changed. */
@@ -86,7 +102,12 @@ export function withProductMcpServers(
 	const added: string[] = [];
 	for (const server of pending) {
 		if (!present.includes(server.name)) {
-			file = mcpServersWithAdded(file, server);
+			const root: Record<string, unknown> = typeof file === 'object' && file !== null && !Array.isArray(file) ? { ...(file as Record<string, unknown>) } : {};
+			const existing = root['mcpServers'];
+			const servers: Record<string, unknown> = typeof existing === 'object' && existing !== null && !Array.isArray(existing) ? { ...(existing as Record<string, unknown>) } : {};
+			servers[server.name] = plainEntry(server);
+			root['mcpServers'] = servers;
+			file = root;
 			added.push(server.name);
 		}
 	}

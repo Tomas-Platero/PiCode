@@ -9,7 +9,8 @@ import assert from 'assert';
 import { test } from 'node:test';
 import { PRODUCT_MCP_SERVERS, withProductMcpServers } from '../src/product-mcp.ts';
 
-const CONTEXT7 = { type: 'http', url: 'https://mcp.context7.com/mcp', oauth: {} };
+// No `oauth` block: Context7 answers without an account, and that block would mark the row "sign in".
+const CONTEXT7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
 
 test('the product offers Context7, the server Gentle AI provisions', () => {
 	assert.deepEqual(PRODUCT_MCP_SERVERS.map(server => server.name), ['context7']);
