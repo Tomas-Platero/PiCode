@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.4-experimental",
+			"notes": "### ✨ New\n\n- **Automatic really means everything.** PiCode, pi, its packages, the memory engine and your extensions now update on their own, quietly, without a single console window popping up. And never in the middle of an answer.\n- **Profiles live with your agents.** Choosing the model each agent works with is now the first tab of *Agents*, right next to your own agents.\n- **All your shortcuts at a glance.** The *Keyboard* page lists every shortcut, with a search box to find one fast.\n- **More ways to make PiCode comfortable.** *Accessibility* gains underlined links, a thicker cursor, dimmed panels you're not using, smooth scrolling, zoom with the mouse wheel and more.\n\n### 🛠️ Improved\n\n- **Check your memory right where you are.** The check answers on the same page, with a clear verdict and only what needs a look.\n- **No dead ends.** Using your own pi is greyed out until there's one on your computer, and it tells you why.\n- **Friendlier words.** The usage notice, *Privacy* and *What's New* speak in a warmer tone, in all 13 languages."
+		},
+		{
 			"version": "2.4.3-experimental",
 			"notes": "### ✨ New\n\n- **A theme gallery you can browse.** Themes have their own page in Settings: every theme as a small window in its own colours, the ones you have and the ones on Open VSX. Hover a theme to see it on the whole editor, click to keep it, and search or show only dark, light or high-contrast themes. A theme from the gallery installs and applies in one click. The gear's *Color Theme* and Ctrl+K Ctrl+T open it.\n- **The Editor layout gets the Status panel.** PiCode's panel in the Editor layout now shows the same Status as the Agent layout: environment, MCP servers, changes, tasks, issues and memory, in one place.\n\n### 🐛 Fixed\n\n- **Settings speak like the apps you know.** Options read the way other editors name them: *Auto save · After delay*, *Word wrap*, *Reasoning effort · Default*, *Include editor context*.\n- **The theme gallery keeps your place** when you show more themes, and leaves out the ones you already have."
 		},
@@ -115,10 +119,6 @@
 		{
 			"version": "1.0.2-experimental",
 			"notes": "### ✨ New\n\n- **Show What's New in the Help menu.** Open the window with what changed whenever you want. If this version has no notes of its own, it shows the latest ones.\n\n### 🐛 Fixed\n\n- After an update, PiCode no longer sends you to the repository's release list in your browser; you only see its own What's New window."
-		},
-		{
-			"version": "1.0.1-experimental",
-			"notes": "### ✨ New\n\n- **Try the Agent layout from What's New.** If you are still on the Editor layout, the window that shows what changed now has a button to switch to Agent.\n- **Easier code sign-in.** When signing in with a code, PiCode copies the code and opens the page for you.\n- **Clearer cost.** In Status, a \"~\" before the cost means it is an estimate, not what your provider charged.\n- **What's new in your packages.** After updating a package that lists its changes, a \"What's new\" button shows them.\n\n### 🔧 Other changes\n\n- The built-in AI agent (pi) is updated to 1.5.0: safer sign-ins, better stability on Windows and faster answers."
 		}
 	]
 }
