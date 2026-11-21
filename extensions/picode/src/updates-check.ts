@@ -362,6 +362,12 @@ export interface UpdateRunContext {
 	readonly npmCli?: string;
 	/** The process run. Defaults to `execFile` with an args array. */
 	readonly spawn?: SpawnFn;
+	/**
+	 * Leaves the profile's packages alone: the caller updates them itself, one hidden npm run each.
+	 * `pi update --extensions` spawns npm through a shell with no `windowsHide`, and on Windows each
+	 * of those runs opened a console window.
+	 */
+	readonly skipPackages?: boolean;
 }
 
 /** The npm package the runtime is installed from, and the one npm reinstalls when updating it. */
@@ -422,6 +428,9 @@ export async function runPiUpdate(context: UpdateRunContext): Promise<{ ok: bool
 		});
 		if (!runtime.ok) {
 			return failed(runtime, l10n.t('PiCode could not update pi.'), reason => l10n.t('PiCode could not update pi: {0}', reason));
+		}
+		if (context.skipPackages === true) {
+			return { ok: true, message: l10n.t('PiCode updated.') };
 		}
 		const packages = await spawn(process.execPath, [context.cliEntry, 'update', '--extensions'], {
 			// The editor's executable is Electron: without this flag it would try to open an app

@@ -47,7 +47,7 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { answeringChatRows, BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, availableThinkingLevels, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { answeringChatRows, BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, chatIsAnswering, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, availableThinkingLevels, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { registerWizardModelCommands } from './wizard-models';
@@ -2256,46 +2256,72 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	 * pi and the packages the owner installed (`pi update`), the product's own packages, whose pin is
 	 * a floor the app moves (`updateProductPackages`), and the memory engine (`memory-update.ts`).
 	 */
-	const runUpdateFlow = async (): Promise<void> => {
+	/**
+	 * Runs every update the last check found. `quiet` is the automatic run (update mode Automatic):
+	 * a failure goes to the log and the usual notice instead of an error, and success says so once,
+	 * gently, without asking for anything.
+	 */
+	const runUpdateFlow = async (quiet = false): Promise<boolean> => {
+		const tell = (message: string): void => {
+			if (quiet) {
+				report(`updates: the automatic update stopped (${message})`);
+				showUpdatesNotice(readUpdatesSnapshot(context.globalState));
+			} else {
+				void vscode.window.showInformationMessage(message);
+			}
+		};
 		// The check is quiet with the machine's pi in force, but a snapshot from before a runtime switch
 		// (or the status-bar item it left) must not be able to talk this flow into writing there.
 		if (readRuntimeMode() === 'external') {
-			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: your own pi and its packages update where they live — this editor never writes to them.'));
-			return;
+			if (!quiet) {
+				void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: your own pi and its packages update where they live — this editor never writes to them.'));
+			}
+			return false;
 		}
 		const cliEntry = piCliEntry();
 		if (!fs.existsSync(cliEntry)) {
-			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode could not be updated: pi is missing from this installation.'));
-			return;
+			tell(vscode.l10n.t('PiCode could not be updated: pi is missing from this installation.'));
+			return false;
 		}
 		const targets = readUpdatesSnapshot(context.globalState)?.targets ?? [];
 		const products = targets.filter(target => target.kind === 'package' && isProductPackage(target.name));
 		const engine = targets.find(target => target.kind === 'engine');
 		let engineRestarted = false;
-		const piWork = targets.length === 0 || targets.some(target => target.kind === 'runtime' || (target.kind === 'package' && !isProductPackage(target.name)));
+		const piPackages = targets.filter(target => target.kind === 'package' && !isProductPackage(target.name));
+		const runtimeWork = targets.length === 0 || targets.some(target => target.kind === 'runtime');
 		// The chat runs pi in this very process: its session must be gone before the files under
 		// it change, or it keeps running the code being replaced.
 		resetChatSession();
-		if (piWork) {
-			const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce(), npmCli: locateNpmCli() });
+		if (runtimeWork) {
+			// With a known list the packages go one by one below, hidden; with none (a forced run
+			// before any check), pi's own update covers them.
+			const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce(), npmCli: locateNpmCli(), skipPackages: targets.length > 0 });
 			if (!result.ok) {
-				void vscode.window.showInformationMessage(result.message);
-				return;
+				tell(result.message);
+				return false;
+			}
+		}
+		for (const target of piPackages) {
+			const source = `npm:${target.name}`;
+			const result = await updatePackage(source, { npmProject: npmProjectFor(source, profileInForce()), npmCli: locateNpmCli() });
+			if (!result.ok) {
+				tell(result.message);
+				return false;
 			}
 		}
 		if (products.length > 0) {
 			const result = await updateProductPackages(products);
 			if (!result.ok) {
-				void vscode.window.showInformationMessage(result.message);
-				return;
+				tell(result.message);
+				return false;
 			}
 		}
 		if (engine !== undefined) {
 			// The owner already said Update: the engine's own question is answered yes.
 			const result = await updateEngine({ home: os.homedir(), currentVersion: engine.installed, confirm: async () => true, progress: line => report(`updates: ${line}`) });
 			if (!result.ok) {
-				void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: the memory engine was not updated. {0}', result.message));
-				return;
+				tell(vscode.l10n.t('PiCode: the memory engine was not updated. {0}', result.message));
+				return false;
 			}
 			// The old engine keeps serving until it is restarted: do it now, so the update takes effect.
 			if (result.restart === true) {
@@ -2306,8 +2332,18 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		// that runs after the reload rebuilds the truth from scratch.
 		await context.globalState.update(UPDATES_STATE_KEY, undefined);
 		showStatus(undefined);
-		// The memory engine runs on its own, outside the window: a reload keeps the old one serving.
 		const reloadLabel = vscode.l10n.t('Reload Window');
+		if (quiet) {
+			// Nothing to decide: the next chat already loads the new pi. The reload is only a shortcut.
+			forgetPiRuntime();
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode is up to date. Your next chat already uses the new version.'), reloadLabel).then(choice => {
+				if (choice === reloadLabel) {
+					void vscode.commands.executeCommand('workbench.action.reloadWindow');
+				}
+			});
+			return true;
+		}
+		// The memory engine runs on its own, outside the window: a reload keeps the old one serving.
 		void vscode.window.showInformationMessage(
 			engine === undefined || engineRestarted
 				? vscode.l10n.t('PiCode updated. Reload the window to start using the new version.')
@@ -2318,6 +2354,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 				void vscode.commands.executeCommand('workbench.action.reloadWindow');
 			}
 		});
+		return true;
 	};
 
 	/** Forgets npm's cached answers: what was "latest" before an update may not be after it. */
@@ -2347,6 +2384,28 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(vscode.commands.registerCommand('picode.updates.show', () =>
 		showUpdatesNotice(readUpdatesSnapshot(context.globalState))));
 
+	/** Update mode Automatic covers everything: PiCode itself, pi, its packages and the memory engine. */
+	const automaticUpdates = (): boolean => vscode.workspace.getConfiguration('update').get<string>('mode', 'default') === 'default';
+	let autoTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Applies what the check found, but never in the middle of an answer: it waits for the chats to finish. */
+	const applyAutomatically = (): void => {
+		if (autoTimer !== undefined) {
+			return;
+		}
+		const attempt = (): void => {
+			autoTimer = undefined;
+			if (!automaticUpdates() || (readUpdatesSnapshot(context.globalState)?.targets.length ?? 0) === 0) {
+				return;
+			}
+			if (chatIsAnswering()) {
+				autoTimer = setTimeout(attempt, 60_000);
+				return;
+			}
+			void runUpdateFlow(true);
+		};
+		attempt();
+	};
+
 	let checking = false;
 	let firstBackgroundCheck = true;
 	/**
@@ -2370,9 +2429,12 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		try {
 			const snapshot = await runUpdateCheck(context.globalState);
 			showStatus(snapshot);
-			// Say it once, on the first background check of the session, when something new appeared
-			// since the last time. After that the status bar carries the news until the owner acts.
-			if (firstBackgroundCheck && snapshot !== undefined && snapshot.targets.length > 0) {
+			// Automatic: no question to ask, the update just happens (once the chats are quiet).
+			if (!force && snapshot !== undefined && snapshot.targets.length > 0 && automaticUpdates() && readRuntimeMode() !== 'external') {
+				applyAutomatically();
+			} else if (firstBackgroundCheck && snapshot !== undefined && snapshot.targets.length > 0) {
+				// Say it once, on the first background check of the session, when something new appeared
+				// since the last time. After that the status bar carries the news until the owner acts.
 				void showUpdatesNotice(snapshot);
 			}
 			firstBackgroundCheck = false;
@@ -2402,6 +2464,9 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(new vscode.Disposable(() => {
 		clearTimeout(firstCheck);
 		clearInterval(interval);
+		if (autoTimer !== undefined) {
+			clearTimeout(autoTimer);
+		}
 	}));
 
 	// The status panel's Updates block reaches the very same two flows: this extension has one update

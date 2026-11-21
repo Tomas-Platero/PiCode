@@ -622,3 +622,228 @@ input.picode-set-input:focus {
 .picode-settings-nav-scroll:not(:hover)::-webkit-scrollbar-thumb {
 	background-color: transparent;
 }
+
+/* An option this computer cannot use right now: visible, greyed out, explained on hover. */
+.picode-set-segment:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+/* The memory check's answer, right under its button. */
+.picode-set-memory-result {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 4px 0 10px;
+	padding: 12px 14px;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	background: var(--vscode-editorWidget-background, transparent);
+	font-size: 12px;
+}
+
+.monaco-enable-motion .picode-set-memory-result {
+	animation: picode-settings-page-in 220ms var(--picode-settings-ease);
+}
+
+.picode-set-memory-result.checking {
+	flex-direction: row;
+	align-items: center;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-set-memory-result.ok {
+	border-color: color-mix(in srgb, var(--vscode-charts-green) 45%, transparent);
+	background: color-mix(in srgb, var(--vscode-charts-green) 8%, transparent);
+}
+
+.picode-set-memory-result.warn {
+	border-color: color-mix(in srgb, var(--vscode-charts-yellow) 45%, transparent);
+	background: color-mix(in srgb, var(--vscode-charts-yellow) 7%, transparent);
+}
+
+.picode-set-memory-head,
+.picode-set-memory-issue {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+}
+
+.picode-set-memory-result.ok .picode-set-memory-head > .codicon {
+	color: var(--vscode-charts-green);
+}
+
+.picode-set-memory-result.warn .codicon {
+	color: var(--vscode-charts-yellow);
+}
+
+.picode-set-memory-head > .codicon {
+	font-size: 18px;
+}
+
+.picode-set-memory-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.picode-set-memory-text strong {
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.picode-set-memory-text span {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-set-memory-issue {
+	padding-left: 28px;
+}
+
+/* The shortcut list on the Keyboard page: a search box and one line per command. */
+.picode-set-keys {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 10px 0;
+}
+
+input.picode-set-input.picode-set-keys-search {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.picode-set-keys-list {
+	display: flex;
+	flex-direction: column;
+	max-height: 420px;
+	overflow-y: auto;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	border-radius: 10px;
+}
+
+.picode-set-keys-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 7px 12px;
+	font-size: 12px;
+}
+
+.picode-set-keys-item + .picode-set-keys-item {
+	border-top: 1px solid color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+}
+
+.picode-set-keys-item:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-set-keys-name {
+	display: flex;
+	gap: 6px;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-set-keys-category {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-set-keys-category::after {
+	content: ':';
+}
+
+.picode-set-keys-chord {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	flex-shrink: 0;
+}
+
+.picode-set-keys-chord kbd {
+	font-family: inherit;
+	font-size: 11px;
+	padding: 1px 6px;
+	border-radius: 5px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 18%, transparent);
+	border-bottom-width: 2px;
+	background: var(--vscode-keybindingLabel-background, transparent);
+	color: var(--vscode-keybindingLabel-foreground, inherit);
+}
+
+.picode-set-keys-then {
+	margin: 0 3px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+.picode-set-keys-empty {
+	padding: 16px 12px;
+	color: var(--vscode-descriptionForeground);
+	text-align: center;
+}
+
+/* The Agents page: Profiles (which model each agent uses) and Your agents, as two tabs. */
+.picode-agents-head {
+	padding: 4px 12px 0;
+}
+
+/* The list keeps its search and button; its own title is the page heading above. */
+.prompts-content-container.picode-agents-page .ai-customization-list-widget .section-title-header {
+	display: none;
+}
+
+.picode-agents-tabs {
+	display: flex;
+	gap: 4px;
+	margin: 8px 12px 12px;
+	padding: 3px;
+	width: fit-content;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
+}
+
+.picode-agents-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 14px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.monaco-enable-motion .picode-agents-tab {
+	transition: background-color 160ms var(--picode-settings-ease), color 160ms var(--picode-settings-ease);
+}
+
+.picode-agents-tab:hover {
+	color: var(--vscode-foreground);
+}
+
+.picode-agents-tab.active {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-agents-tab:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.picode-agents-profiles {
+	overflow-y: auto;
+	padding: 0 12px 16px;
+	box-sizing: border-box;
+}
+
+.monaco-enable-motion .picode-agents-profiles {
+	animation: picode-settings-page-in 220ms var(--picode-settings-ease);
+}

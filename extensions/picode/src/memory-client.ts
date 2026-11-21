@@ -281,6 +281,32 @@ export function memoryDetailMarkdown(detail: MemoryDetail): string {
  * target that no longer exists, and the engine calls that an error. PiCode's memory never leaves
  * this machine, so the tab says so, instead of sending the owner to repair something harmless.
  */
+/** The memory check as Settings shows it: a warm verdict, then only what needs attention. */
+export interface MemoryDoctorSummary {
+	readonly healthy: boolean;
+	readonly headline: string;
+	readonly passed: number;
+	readonly issues: readonly { readonly severity: string; readonly title: string; readonly detail: string }[];
+}
+
+export function memoryDoctorSummary(report: MemoryDoctorReport): MemoryDoctorSummary {
+	// Cloud sync is not used here: the engine's note about it is a leftover, not a problem.
+	const issues = report.checks
+		.filter(check => check.result !== 'ok' && !check.id.startsWith('sync_'))
+		.map(check => ({ severity: check.severity, title: check.message || l10n.t('Something needs a look'), detail: check.why }));
+	const passed = report.checks.filter(check => check.result === 'ok').length;
+	return {
+		healthy: issues.length === 0,
+		headline: issues.length === 0
+			? l10n.t('Your memory is in great shape.')
+			: issues.length === 1
+				? l10n.t('1 thing could use a look.')
+				: l10n.t('{0} things could use a look.', issues.length),
+		passed,
+		issues,
+	};
+}
+
 export function memoryDoctorMarkdown(report: MemoryDoctorReport): string {
 	const { summary } = report;
 	const failing = report.checks.filter(check => check.result !== 'ok');

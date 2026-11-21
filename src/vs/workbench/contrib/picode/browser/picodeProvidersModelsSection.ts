@@ -175,7 +175,12 @@ let pendingTab: PanelTab | undefined;
 export const OPEN_PROVIDERS_MODELS_COMMAND = 'picode.providersModels.open';
 
 CommandsRegistry.registerCommand(OPEN_PROVIDERS_MODELS_COMMAND, async (accessor, tab?: PanelTab) => {
-	const target: PanelTab = tab === 'models' || tab === 'agents' ? tab : 'providers';
+	// The agent profiles live on the Agents page now, as its first tab.
+	if (tab === 'agents') {
+		await accessor.get(ICommandService).executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.Agents);
+		return;
+	}
+	const target: PanelTab = tab === 'models' ? tab : 'providers';
 	pendingTab = target;
 	tabRequests.fire(target);
 	await accessor.get(ICommandService).executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.ProvidersModels);
@@ -221,6 +226,8 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 
 	constructor(
 		container: HTMLElement,
+		/** `profiles`: only the agent profiles, as the Agents page's first tab (no header, no tabs). */
+		private readonly mode: 'all' | 'profiles',
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
 		@IContextViewService private readonly contextViewService: IContextViewService,
@@ -232,6 +239,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		super();
 
 		this.root = append(container, $('.picode-pm'));
+		this.root.classList.toggle('profiles-only', mode === 'profiles');
 		const header = append(this.root, $('.picode-pm-header'));
 		const headerText = append(header, $('.picode-pm-header-text'));
 		append(headerText, $('h2.picode-pm-title')).textContent = localize('picodePm.title', "Providers & Models");
@@ -244,7 +252,10 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		this.body = append(this.root, $('.picode-pm-body'));
 
 		this.activeRef = this.configurationService.getValue<string>('chat.defaultModel') ?? '';
-		if (pendingTab !== undefined) {
+		if (mode === 'profiles') {
+			header.remove();
+			this.tab = 'agents';
+		} else if (pendingTab !== undefined) {
 			this.tab = pendingTab;
 			pendingTab = undefined;
 		}
@@ -332,7 +343,8 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		clearNode(this.tabsBar);
 		clearNode(this.body);
 
-		for (const [key, label] of [['providers', localize('picodePm.tabProviders', "Providers")], ['models', localize('picodePm.tabModels', "Models")], ['agents', localize('picodePm.tabAgents', "Gentle AI")]] as const) {
+		const tabs = this.mode === 'profiles' ? [] : [['providers', localize('picodePm.tabProviders', "Providers")], ['models', localize('picodePm.tabModels', "Models")]] as const;
+		for (const [key, label] of tabs) {
 			const button = append(this.tabsBar, $('button.picode-pm-tab'));
 			button.setAttribute('type', 'button');
 			button.textContent = label;
@@ -1609,10 +1621,14 @@ const contribution: IAICustomizationManagementSectionContribution = {
 	icon: Codicon.vm,
 	description: localize('picodePm.sectionDescription', "The services PiCode can talk to, and the models they offer."),
 	supportsHarness: () => true,
-	create: (instantiationService, container) => instantiationService.createInstance(PiCodeProvidersModelsSection, container),
+	create: (instantiationService, container) => instantiationService.createInstance(PiCodeProvidersModelsSection, container, 'all'),
 };
 
 aiCustomizationManagementSectionRegistry.register(contribution);
+
+// The agent profiles are the first tab of the Agents page: which model each agent answers with.
+aiCustomizationManagementSectionRegistry.agentProfilesPanel = (instantiationService, container) =>
+	instantiationService.createInstance(PiCodeProvidersModelsSection, container, 'profiles');
 
 /** Token counts the way people say them: 200k, 1M. */
 function formatTokenCount(tokens: number): string {
