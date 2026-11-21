@@ -1512,7 +1512,8 @@ async function judgeCommandRun(session: PiSession, name: string, args: string, w
 
 /** The button each terminal-only command points at, when the editor has a way there. */
 const UNAVAILABLE_BUTTONS: Record<NonNullable<UnavailableCommand['action']>, vscode.Command> = {
-	tasks: { command: 'picode.status.tasks.focus', title: vscode.l10n.t('Open Tasks') },
+	// Status shows the tasks in both layouts (its own column in Agent, PiCode's panel in Editor).
+	tasks: { command: 'picode.status.show', title: vscode.l10n.t('Open Tasks') },
 	agentModels: { command: 'picode.agents.chooseModels', title: vscode.l10n.t('Choose agent models') },
 	sessions: { command: 'agentSessions.showAgentSessionsSidebar', title: vscode.l10n.t('Open Sessions') },
 };

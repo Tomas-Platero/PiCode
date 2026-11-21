@@ -18,7 +18,9 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { IViewPaneOptions, ViewPane } from '../../../browser/parts/views/viewPane.js';
 import { ViewPaneContainer } from '../../../browser/parts/views/viewPaneContainer.js';
-import { Extensions as ViewExtensions, IViewContainersRegistry, IViewDescriptorService, IViewsRegistry, ViewContainerLocation } from '../../../common/views.js';
+import { Extensions as ViewExtensions, IViewContainersRegistry, IViewDescriptorService, IViewsRegistry, ViewContainer, ViewContainerLocation } from '../../../common/views.js';
+import { IViewsService } from '../../../services/views/common/viewsService.js';
+import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { PICODE_STATUS_CONTAINER_ID } from '../../../browser/parts/sidebar/sidebarSideColumn.js';
 import { PICODE_LAYOUT_SETTING } from './picodeLayoutStyle.js';
 import { PICODE_STATUS_COLUMN_SHOWN, PicodeAgentOverview } from './picodeAgentOverviewView.js';
@@ -108,11 +110,66 @@ registerAction2(class PicodeChooseStatusSectionsAction extends Action2 {
 			category: localize2('picode.category', "PiCode"),
 			icon: Codicon.eye,
 			f1: true,
-			menu: { id: MenuId.ViewTitle, when: ContextKeyExpr.equals('view', PICODE_STATUS_VIEW_ID), group: '1_sections' },
+			menu: { id: MenuId.ViewTitle, when: ContextKeyExpr.or(ContextKeyExpr.equals('view', PICODE_STATUS_VIEW_ID), ContextKeyExpr.equals('view', 'picode.status.overview')), group: '1_sections' },
 		});
 	}
 
 	run(accessor: ServicesAccessor): Promise<void> {
 		return pickStatusSections(accessor.get(IQuickInputService), accessor.get(IStorageService));
+	}
+});
+
+/**
+ * The same Status in the Editor layout: it fills PiCode's container in the activity bar, where the
+ * separate Context, Tasks, Memory and Issues views used to be, so both layouts show one panel.
+ */
+export const PICODE_EDITOR_STATUS_VIEW_ID = 'picode.status.overview';
+const PICODE_EDITOR_CONTAINER_ID = 'workbench.view.extension.picode-status';
+
+function registerEditorStatus(editorContainer: ViewContainer): void {
+	Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
+		id: PICODE_EDITOR_STATUS_VIEW_ID,
+		name: localize2('picode.status.view', "Status"),
+		containerIcon: Codicon.dashboard,
+		ctorDescriptor: new SyncDescriptor(PicodeStatusView),
+		canToggleVisibility: false,
+		canMoveView: false,
+		order: 0,
+		when: ContextKeyExpr.and(
+			ContextKeyExpr.notEquals(`config.${PICODE_LAYOUT_SETTING}`, 'agent'),
+			ContextKeyExpr.not('config.chat.disableAIFeatures'),
+		),
+	}], editorContainer);
+}
+
+// The container comes from the connector's manifest, so it may not exist yet: the view joins it when it does.
+const viewContainers = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);
+let editorStatusRegistered = false;
+const joinEditorContainer = (candidate: ViewContainer | undefined): void => {
+	if (!editorStatusRegistered && candidate?.id === PICODE_EDITOR_CONTAINER_ID) {
+		editorStatusRegistered = true;
+		registerEditorStatus(candidate);
+	}
+};
+joinEditorContainer(viewContainers.get(PICODE_EDITOR_CONTAINER_ID));
+viewContainers.onDidRegister(({ viewContainer }) => joinEditorContainer(viewContainer));
+
+/** Shows Status in whichever layout is on: the chat's "Open Tasks" button lands here. */
+registerAction2(class PicodeShowStatusAction extends Action2 {
+	constructor() {
+		super({
+			id: 'picode.status.show',
+			title: localize2('picode.status.show', "Show Status"),
+			category: localize2('picode.category', "PiCode"),
+			f1: true,
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		if (accessor.get(IConfigurationService).getValue(PICODE_LAYOUT_SETTING) === 'agent') {
+			await accessor.get(IPaneCompositePartService).openPaneComposite(PICODE_STATUS_CONTAINER_ID, ViewContainerLocation.Sidebar);
+		} else {
+			await accessor.get(IViewsService).openView(PICODE_EDITOR_STATUS_VIEW_ID, true);
+		}
 	}
 });
