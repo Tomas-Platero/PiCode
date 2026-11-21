@@ -119,6 +119,16 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 
 		lifecycleMainService.setRelaunchHandler(this);
 
+		// PiCode: an update staged in the background is finished by the installer once this process
+		// quits, without passing through `doQuitAndInstall`. The memory engine running from this
+		// installation would keep its files open and the installer would stop at "Access denied", so
+		// with an update waiting it is closed on quit too — only the one inside the folder being replaced.
+		this._register(lifecycleMainService.onWillShutdown(() => {
+			if (this.state.type === StateType.Ready) {
+				this.stopMemoryEngine();
+			}
+		}));
+
 		if (getUpdateType() === UpdateType.Archive) {
 			void this.confirmUpdateStarted();
 		}

@@ -7,8 +7,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Gentle's two preferences the editor lets the owner change: how it talks (its persona) and how much
- * it asks before acting (its default permissions).
+ * Gentle's preferences the editor lets the owner change: how it talks (its persona), how much it
+ * asks before acting (its default permissions) and whether its agents may leave long jobs running
+ * in the background.
  *
  * Gentle keeps each in a small file of its own in `<profile>/gentle-ai/` and reads it when a chat
  * session starts. Its terminal changes them with `/gentle:persona` and `/gentle:mode default …`;
@@ -29,12 +30,17 @@ export const PERMISSIONS: readonly Permissions[] = ['normal', 'auto', 'yolo'];
 /** The first line of the permissions file, which gentle refuses to read without. */
 const PERMISSIONS_SCHEMA = 'gentle-pi.permission-mode/v1';
 
+/** Gentle's background jobs policy file (`lib/background-subagents-policy.ts` in gentle-pi). */
+const BACKGROUND_SCHEMA = 'gentle-pi.background-subagents/v1';
+
 export interface GentleSettings {
 	readonly persona: Persona;
 	/** What new sessions start with. */
 	readonly permissions: Permissions;
 	/** The permissions file exists but gentle could not read it: it must be repaired before it is replaced. */
 	readonly permissionsBroken: boolean;
+	/** Agents may start jobs that keep running while the chat goes on. Gentle's default is off. */
+	readonly background: boolean;
 }
 
 function personaFile(profileDir: string): string {
@@ -43,6 +49,10 @@ function personaFile(profileDir: string): string {
 
 function permissionsFile(profileDir: string): string {
 	return path.join(profileDir, 'gentle-ai', 'permission-mode.json');
+}
+
+function backgroundFile(profileDir: string): string {
+	return path.join(profileDir, 'gentle-ai', 'background-subagents.json');
 }
 
 export function isPersona(value: unknown): value is Persona {
@@ -88,9 +98,19 @@ function readPermissions(profileDir: string): { readonly mode: Permissions; read
 	return { mode: 'normal', broken: true };
 }
 
+/** On only with exactly the schema and `on`, as gentle decodes it; anything else fails closed to off. */
+function readBackground(profileDir: string): boolean {
+	const { value } = readJson(backgroundFile(profileDir));
+	if (typeof value !== 'object' || value === null || Array.isArray(value) || Object.keys(value).length !== 2) {
+		return false;
+	}
+	const record = value as { schema?: unknown; policy?: unknown };
+	return record.schema === BACKGROUND_SCHEMA && record.policy === 'on';
+}
+
 export function gentleSettings(profileDir: string): GentleSettings {
 	const permissions = readPermissions(profileDir);
-	return { persona: readPersona(profileDir), permissions: permissions.mode, permissionsBroken: permissions.broken };
+	return { persona: readPersona(profileDir), permissions: permissions.mode, permissionsBroken: permissions.broken, background: readBackground(profileDir) };
 }
 
 function writeAtomic(file: string, text: string): void {
@@ -101,7 +121,7 @@ function writeAtomic(file: string, text: string): void {
 }
 
 /**
- * One change from the settings page: `key` is `persona` or `permissions`. Anything else is
+ * One change from the settings page: `key` is `persona`, `permissions` or `background`. Anything else is
  * refused, and so is replacing a permissions file gentle could not read — that one needs a person.
  */
 export function setGentleSetting(profileDir: string, request: unknown): GentleSettings {
@@ -113,6 +133,8 @@ export function setGentleSetting(profileDir: string, request: unknown): GentleSe
 			throw new Error(l10n.t('The saved permissions could not be read. Delete the file and try again.'));
 		}
 		writeAtomic(permissionsFile(profileDir), `${JSON.stringify({ schema: PERMISSIONS_SCHEMA, mode: value })}\n`);
+	} else if (key === 'background' && (value === 'on' || value === 'off')) {
+		writeAtomic(backgroundFile(profileDir), `${JSON.stringify({ schema: BACKGROUND_SCHEMA, policy: value })}\n`);
 	} else {
 		throw new Error(l10n.t('That is not a setting Gentle has.'));
 	}
