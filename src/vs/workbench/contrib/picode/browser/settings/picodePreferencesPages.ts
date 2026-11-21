@@ -4,14 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as DOM from '../../../../../base/browser/dom.js';
+import { renderIcon } from '../../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { IDisposable } from '../../../../../base/common/lifecycle.js';
 import { language } from '../../../../../base/common/platform.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { localize } from '../../../../../nls.js';
+import { MenuRegistry } from '../../../../../platform/actions/common/actions.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
+import { IKeybindingService } from '../../../../../platform/keybinding/common/keybinding.js';
 import { IProductService } from '../../../../../platform/product/common/productService.js';
 import { ColorScheme } from '../../../../../platform/theme/common/theme.js';
 import { IThemeService } from '../../../../../platform/theme/common/themeService.js';
@@ -83,6 +86,43 @@ function languageName(locale: string): string {
 		return name ? name.charAt(0).toLocaleUpperCase(locale) + name.slice(1) : locale;
 	} catch {
 		return locale;
+	}
+}
+
+/** The memory check as the connector sums it up (`memory-client.ts`, `memoryDoctorSummary`). */
+interface IMemoryCheckSummary {
+	readonly healthy: boolean;
+	readonly headline: string;
+	readonly passed: number;
+	readonly issues: readonly { readonly severity: string; readonly title: string; readonly detail: string }[];
+}
+
+function paintMemoryCheck(target: HTMLElement, summary: IMemoryCheckSummary | undefined): void {
+	DOM.clearNode(target);
+	if (!summary) {
+		target.className = 'picode-set-memory-result warn';
+		DOM.append(target, DOM.$('.picode-set-memory-head')).append(
+			renderIcon(Codicon.warning),
+			DOM.$('span', undefined, localize('picodeSetMemoryNoAnswer', "The memory isn't answering right now. Try again in a moment.")),
+		);
+		return;
+	}
+	target.className = `picode-set-memory-result ${summary.healthy ? 'ok' : 'warn'}`;
+	const head = DOM.append(target, DOM.$('.picode-set-memory-head'));
+	head.appendChild(renderIcon(summary.healthy ? Codicon.passFilled : Codicon.warning));
+	const text = DOM.append(head, DOM.$('.picode-set-memory-text'));
+	DOM.append(text, DOM.$('strong')).textContent = summary.headline;
+	DOM.append(text, DOM.$('span')).textContent = summary.passed === 1
+		? localize('picodeSetMemoryPassedOne', "1 check passed.")
+		: localize('picodeSetMemoryPassed', "{0} checks passed.", summary.passed);
+	for (const issue of summary.issues) {
+		const item = DOM.append(target, DOM.$('.picode-set-memory-issue'));
+		item.appendChild(renderIcon(issue.severity === 'error' ? Codicon.error : Codicon.warning));
+		const body = DOM.append(item, DOM.$('.picode-set-memory-text'));
+		DOM.append(body, DOM.$('strong')).textContent = issue.title;
+		if (issue.detail) {
+			DOM.append(body, DOM.$('span')).textContent = issue.detail;
+		}
 	}
 }
 
@@ -256,7 +296,7 @@ registerPage({
 	description: localize('picodeSetChatDesc', "Model behavior and the context pi receives."),
 	keywords: ['pi', 'thinking', 'reasoning', 'context', 'project', 'tools', 'voice', 'dictation', 'ai'],
 	build: (page, { commandService }) => {
-		page.segmentedRow({
+		const runtime = page.segmentedRow({
 			key: 'picode.pi.runtime',
 			name: localize('picodeSetRuntime', "pi runtime"),
 			description: localize('picodeSetRuntimeDesc', "Use the version bundled with PiCode or the one installed on your system. Applies to new chats."),
@@ -265,6 +305,12 @@ registerPage({
 				{ value: 'external', label: localize('picodeSetRuntimeExternal', "System") },
 			],
 		});
+		// System only makes sense when this computer has its own pi: without one the option is locked.
+		void commandService.executeCommand<{ readonly found: boolean }>('picode.setup.probeExternal').then(probe => {
+			if (probe && !probe.found) {
+				page.lockChoice(runtime, 'external', localize('picodeSetRuntimeNoSystem', "There's no pi installed on this computer yet. Install it to use your own."));
+			}
+		}, () => { /* the connector is not running (AI off): nothing to say */ });
 		page.selectRow<string>({
 			key: 'picode.pi.thinkingLevel',
 			name: localize('picodeSetThinking', "Reasoning effort"),
@@ -404,10 +450,33 @@ registerPage({
 			name: localize('picodeSetMemoryOn', "Enable memory"),
 			description: localize('picodeSetMemoryOnDesc', "Let pi save decisions and learnings and recall them in later chats."),
 		});
-		page.buttonRow(
+		// The check runs here and its answer appears right below, instead of in a document of its own.
+		let result: HTMLElement | undefined;
+		const checkButton = page.buttonRow(
 			{ name: localize('picodePrefMemoryCheck', "Check memory"), description: localize('picodeSetMemoryCheckDesc', "Find and fix problems in stored memories.") },
 			localize('picodePrefCheck', "Check"),
-			() => commandService.executeCommand('picode.memory.check'),
+			async () => {
+				const row = checkButton.closest('.picode-set-row');
+				if (!row) {
+					return;
+				}
+				result ??= DOM.$('.picode-set-memory-result');
+				row.insertAdjacentElement('afterend', result);
+				DOM.clearNode(result);
+				result.className = 'picode-set-memory-result checking';
+				DOM.append(result, DOM.$('span')).appendChild(renderIcon(ThemeIcon.modify(Codicon.loading, 'spin')));
+				DOM.append(result, DOM.$('span')).textContent = localize('picodeSetMemoryChecking', "Taking a look at your memories…");
+				checkButton.disabled = true;
+				let summary: IMemoryCheckSummary | undefined;
+				try {
+					summary = await commandService.executeCommand<IMemoryCheckSummary>('picode.memory.checkSummary');
+				} catch {
+					summary = undefined;
+				}
+				checkButton.disabled = false;
+				paintMemoryCheck(result, summary);
+			},
+			{ icon: Codicon.pulse },
 		);
 	},
 });
@@ -420,7 +489,7 @@ registerPage({
 	icon: Codicon.cloudDownload,
 	description: localize('picodeSetUpdatesDesc', "Versions of PiCode and the agent."),
 	keywords: ['version', 'update', 'pi', 'packages', 'gentle', 'engram', 'extensions', "what's new"],
-	build: (page, { commandService, productService }) => {
+	build: (page, { commandService, productService, configurationService }) => {
 		page.buttonRow(
 			{ name: `PiCode ${productService.picodeVersion ?? productService.version}`, description: localize('picodeSetUpdatesChannel', "Check for a newer version of PiCode."), icon: Codicon.versions },
 			localize('picodePrefCheckNow', "Check now"),
@@ -451,6 +520,7 @@ registerPage({
 		page.segmentedRow({
 			key: 'update.mode',
 			name: localize('picodeSetUpdateMode', "Update mode"),
+			description: localize('picodeSetUpdateModeDesc', "Automatic keeps everything up to date for you: PiCode, pi, its packages and your extensions."),
 			choices: [
 				{ value: 'default', label: localize('picodePrefUpdateAuto', "Automatic") },
 				{ value: 'start', label: localize('picodeSetUpdateStart', "On startup") },
@@ -459,7 +529,20 @@ registerPage({
 			],
 		});
 		page.switchRow({ key: 'picode.updates.check', name: localize('picodeSetAgentUpdates', "Check for agent updates"), description: localize('picodeSetAgentUpdatesDesc', "pi, its packages and memory, in the background.") });
-		page.switchRow({ key: 'extensions.autoCheckUpdates', name: localize('picodeSetExtensionUpdates', "Check for extension updates") });
+		page.switchRow({
+			key: 'extensions.autoUpdate',
+			name: localize('picodeSetExtensionAutoUpdate', "Update extensions automatically"),
+			description: localize('picodeSetExtensionAutoUpdateDesc', "New versions install quietly in the background."),
+			read: stored => stored !== false,
+			write: on => on,
+		});
+		// Automatic means everything: choosing it turns extension updates on too, and the other modes off.
+		page.onSettingChange('update.mode', () => {
+			const automatic = configurationService.getValue<string>('update.mode') === 'default';
+			if ((configurationService.getValue('extensions.autoUpdate') !== false) !== automatic) {
+				void configurationService.updateValue('extensions.autoUpdate', automatic, ConfigurationTarget.USER);
+			}
+		});
 		page.buttonRow(
 			{ name: localize('picodePrefWhatsNew', "What's new"), description: localize('picodeSetWhatsNewDesc', "See what's new in this version.") },
 			localize('picodePrefOpen', "Open"),
@@ -498,8 +581,73 @@ registerPage({
 				{ value: 'off', label: localize('picodePrefOff', "Off") },
 			],
 		});
+
+		page.group(localize('picodeSetA11yReading', "Reading"));
+		page.switchRow({ key: 'accessibility.underlineLinks', name: localize('picodeSetUnderlineLinks', "Underline links"), description: localize('picodeSetUnderlineLinksDesc', "Makes links easy to spot without relying on colour.") });
+		page.switchRow({
+			key: 'editor.renderLineHighlight',
+			name: localize('picodeSetLineHighlight', "Highlight the current line"),
+			description: localize('picodeSetLineHighlightDesc', "Helps you keep track of where you are in the file."),
+			read: stored => stored !== 'none',
+			write: on => on ? 'all' : 'none',
+		});
+		// 0 is the editor's own width (2 px): show it as Normal rather than as a bare zero.
+		page.selectRow<number>({
+			key: 'editor.cursorWidth',
+			name: localize('picodeSetCursorWidth', "Cursor width"),
+			description: localize('picodeSetCursorWidthDesc', "A wider cursor is easier to see."),
+			choices: [
+				{ value: 0, label: localize('picodeSetCursorNormal', "Normal") },
+				{ value: 3, label: localize('picodeSetCursorThick', "Thick") },
+				{ value: 5, label: localize('picodeSetCursorThickest', "Extra thick") },
+			],
+		});
+		page.switchRow({ key: 'accessibility.dimUnfocused.enabled', name: localize('picodeSetDimUnfocused', "Dim the panels you're not using"), description: localize('picodeSetDimUnfocusedDesc', "Keeps your attention on the one you're working in.") });
+
+		page.group(localize('picodeSetA11yPointer', "Mouse and movement"));
+		page.switchRow({ key: 'editor.mouseWheelZoom', name: localize('picodeSetWheelZoom', "Zoom with Ctrl and the mouse wheel"), description: localize('picodeSetWheelZoomDesc', "Make the text bigger or smaller as you scroll.") });
+		page.switchRow({ key: 'editor.smoothScrolling', name: localize('picodeSetSmoothScroll', "Smooth scrolling"), description: localize('picodeSetSmoothScrollDesc', "Glide instead of jumping when you scroll the editor.") });
+		page.selectRow<number>({
+			key: 'workbench.hover.delay',
+			name: localize('picodeSetHoverDelay', "Show tips after"),
+			description: localize('picodeSetHoverDelayDesc', "How long to wait before a tip appears under the pointer."),
+			choices: [300, 500, 1000, 1500, 2000].map(ms => ({ value: ms, label: localize('picodeSetMilliseconds', "{0} s", (ms / 1000).toLocaleString()) })),
+		});
+		page.numberRow({ key: 'workbench.tree.indent', name: localize('picodeSetTreeIndent', "List indentation"), description: localize('picodeSetTreeIndentDesc', "More space makes nested files easier to follow."), min: 4, max: 40 });
 	},
 });
+
+/** Arrow keys read better as arrows. */
+const KEY_SYMBOLS: Record<string, string> = { UpArrow: '↑', DownArrow: '↓', LeftArrow: '←', RightArrow: '→' };
+
+interface IShortcut {
+	readonly title: string;
+	readonly category: string | undefined;
+	readonly keys: string;
+}
+
+/** Every command with a name and a shortcut, once each, sorted by name. Internal commands have no name and stay out. */
+function listShortcuts(keybindingService: IKeybindingService): IShortcut[] {
+	const seen = new Set<string>();
+	const result: IShortcut[] = [];
+	for (const item of keybindingService.getKeybindings()) {
+		const command = item.command;
+		const keys = item.resolvedKeybinding?.getLabel();
+		if (!command || command.startsWith('-') || !keys || seen.has(command)) {
+			continue;
+		}
+		const action = MenuRegistry.getCommand(command);
+		const title = action ? (typeof action.title === 'string' ? action.title : action.title.value) : undefined;
+		if (!title) {
+			continue;
+		}
+		seen.add(command);
+		const category = action?.category ? (typeof action.category === 'string' ? action.category : action.category.value) : undefined;
+		result.push({ title, category, keys });
+	}
+	// Sorted by what the row shows first: the category, then the name.
+	return result.sort((a, b) => `${a.category ?? ''} ${a.title}`.localeCompare(`${b.category ?? ''} ${b.title}`));
+}
 
 // ---- Keyboard ---------------------------------------------------------------------------
 
@@ -509,11 +657,48 @@ registerPage({
 	icon: Codicon.keyboard,
 	description: localize('picodePrefKeyboardDesc', "Shortcuts for every command."),
 	keywords: ['shortcut', 'keybinding', 'keys'],
-	build: (page, { commandService }) => {
+	build: (page, { commandService, instantiationService }) => {
 		page.buttonRow(
-			{ name: localize('picodePrefShortcuts', "Keyboard shortcuts"), description: localize('picodeSetShortcutsDesc', "View and change keybindings.") },
-			localize('picodePrefOpen', "Open"),
+			{ name: localize('picodeSetShortcutsChange', "Change a shortcut"), description: localize('picodeSetShortcutsChangeDesc', "Pick any command and give it the keys you like.") },
+			localize('picodeSetShortcutsEdit', "Edit shortcuts"),
 			() => commandService.executeCommand('workbench.action.openGlobalKeybindings'),
 		);
+
+		page.group(localize('picodeSetShortcutsList', "Your shortcuts"));
+		const shortcuts = instantiationService.invokeFunction(accessor => listShortcuts(accessor.get(IKeybindingService)));
+		const box = page.block('picode-set-keys');
+		const search = DOM.append(box, DOM.$<HTMLInputElement>('input.picode-set-input.picode-set-keys-search'));
+		search.type = 'search';
+		search.placeholder = localize('picodeSetShortcutsSearch', "Search by command or keys");
+		search.setAttribute('aria-label', search.placeholder);
+		const list = DOM.append(box, DOM.$('.picode-set-keys-list'));
+		const paint = () => {
+			DOM.clearNode(list);
+			const query = search.value.trim().toLowerCase();
+			const shown = query ? shortcuts.filter(s => s.title.toLowerCase().includes(query) || s.keys.toLowerCase().includes(query)) : shortcuts;
+			if (!shown.length) {
+				DOM.append(list, DOM.$('.picode-set-keys-empty')).textContent = localize('picodeSetShortcutsNone', "No shortcut matches that. Try another word.");
+				return;
+			}
+			for (const shortcut of shown) {
+				const item = DOM.append(list, DOM.$('.picode-set-keys-item'));
+				const name = DOM.append(item, DOM.$('.picode-set-keys-name'));
+				if (shortcut.category) {
+					DOM.append(name, DOM.$('span.picode-set-keys-category')).textContent = shortcut.category;
+				}
+				DOM.append(name, DOM.$('span')).textContent = shortcut.title;
+				const keys = DOM.append(item, DOM.$('.picode-set-keys-chord'));
+				shortcut.keys.split(' ').forEach((chord, i) => {
+					if (i > 0) {
+						DOM.append(keys, DOM.$('span.picode-set-keys-then')).textContent = localize('picodeSetShortcutsThen', "then");
+					}
+					for (const key of chord.split('+').filter(Boolean)) {
+						DOM.append(keys, DOM.$('kbd')).textContent = KEY_SYMBOLS[key] ?? key;
+					}
+				});
+			}
+		};
+		search.addEventListener('input', paint);
+		paint();
 	},
 });

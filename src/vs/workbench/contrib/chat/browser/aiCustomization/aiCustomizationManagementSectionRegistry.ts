@@ -28,6 +28,12 @@ export interface IAICustomizationManagementSectionContribution {
 class AICustomizationManagementSectionRegistry {
 	private readonly contributions = new Map<AICustomizationManagementSection, IAICustomizationManagementSectionContribution[]>();
 
+	/**
+	 * PiCode: the agent profiles panel (which model each agent answers with), shown as the first
+	 * tab of the Agents page, above the list of the user's own agents.
+	 */
+	agentProfilesPanel: ((instantiationService: IInstantiationService, container: HTMLElement) => IAICustomizationManagementSectionWidget) | undefined;
+
 	register(contribution: IAICustomizationManagementSectionContribution): IDisposable {
 		const contributions = this.contributions.get(contribution.id) ?? [];
 		contributions.push(contribution);

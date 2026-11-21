@@ -1831,6 +1831,11 @@ const toolCallArgs = new Map<string, unknown>();
 /** How many chats have a turn in flight (or waiting in their own queue) in this window. */
 let runningTurns = 0;
 
+/** Whether any chat of this window is answering now: an update must not pull pi out from under it. */
+export function chatIsAnswering(): boolean {
+	return runningTurns > 0 || lateTurnsRunning > 0;
+}
+
 /**
  * The turns waiting for their slot, each with the way out: dropping one makes its request
  * return without ever running, at once — not when the running turn ends.

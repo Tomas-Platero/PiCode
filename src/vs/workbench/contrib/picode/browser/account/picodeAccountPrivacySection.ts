@@ -56,7 +56,7 @@ class PicodeAccountPrivacySection extends Disposable {
 		const page = DOM.append(this.container, $('.picode-account-page.picode-sync-page.picode-privacy-page'));
 		const head = DOM.append(page, $('.picode-sync-title'));
 		DOM.append(head, $('h2')).textContent = localize('picodePrivacyTitle', "Privacy");
-		DOM.append(head, $('p.picode-account-lead')).textContent = localize('picodePrivacyLead', "What PiCode sends on its own, with the switch for each. Your chats go only to the AI provider you choose.");
+		DOM.append(head, $('p.picode-account-lead')).textContent = localize('picodePrivacyLead.warm', "Your work is yours. Here you can see exactly what PiCode shares, and switch it off whenever you like.");
 
 		this.renderHero(page);
 		this.renderUsage(page);
@@ -72,38 +72,38 @@ class PicodeAccountPrivacySection extends Disposable {
 		const shield = DOM.append(hero, $('.picode-privacy-shield'));
 		shield.appendChild(renderIcon(Codicon.shield));
 		const text = DOM.append(hero, $('.picode-sync-hero-text'));
-		DOM.append(text, $('strong')).textContent = localize('picodePrivacyHeroTitle', "PiCode does not collect your code or your chats");
+		DOM.append(text, $('strong')).textContent = localize('picodePrivacyHeroTitle.warm', "Your code and your chats stay with you");
 		DOM.append(text, $('span')).textContent = sharing
-			? localize('picodePrivacyHeroSharing', "The only thing PiCode sends on its own is an anonymous count with each update check. Thank you for helping.")
-			: localize('picodePrivacyHeroNothing', "Usage sharing is off: update checks carry nothing that can be counted.");
+			? localize('picodePrivacyHeroSharing.warm', "We only count, anonymously, how many people use PiCode, so we know where to focus. Thank you for helping!")
+			: localize('picodePrivacyHeroNothing.warm', "You're not sharing anything right now. That's completely fine.");
 	}
 
 	private renderUsage(page: HTMLElement): void {
-		this.groupHead(page, localize('picodePrivacyUsageGroup', "Help improve PiCode"));
+		this.groupHead(page, localize('picodePrivacyUsageGroup.warm', "Help make PiCode better"));
 		const card = DOM.append(page, $('.picode-sync-card'));
 		const sharing = this.sharing();
 		this.toggleRow(card, {
 			icon: Codicon.graph, color: 'blue',
-			title: localize('picodeAccountShareUsage', "Help improve PiCode"),
-			description: localize('picodePrivacyUsageWhy', "Anonymous counts that tell us how many people use PiCode, on which systems and versions."),
+			title: localize('picodeAccountShareUsage.warm', "Help make PiCode better"),
+			description: localize('picodePrivacyUsageWhy.warm', "An anonymous count of how many people use PiCode, so we know what to improve."),
 			on: sharing,
 			set: value => this.update(SHARE_USAGE_SETTING, value),
 		});
 
 		const details = DOM.append(card, $('.picode-privacy-details'));
-		this.chips(details, localize('picodePrivacySent', "Sent"), 'sent', sharing ? [
+		this.chips(details, localize('picodePrivacySent.warm', "What helps us"), 'sent', sharing ? [
 			localize('picodePrivacySentVersion', "PiCode {0}", this.productService.picodeVersion ?? this.productService.version),
 			this.systemName(),
-			localize('picodePrivacySentActive', "Used today, this week or this month"),
-			localize('picodePrivacySentPi', "The agent's install and update notices"),
-		] : [localize('picodePrivacySentNothing', "Nothing")], !sharing);
-		this.chips(details, localize('picodePrivacyNever', "Never included"), 'never', [
+			localize('picodePrivacySentActive.warm', "How often you use it"),
+			localize('picodePrivacySentPi.warm', "When the agent installs or updates"),
+		] : [localize('picodePrivacySentNothing.warm', "Nothing at all")], !sharing);
+		this.chips(details, localize('picodePrivacyNever.warm', "Always private"), 'never', [
 			localize('picodePrivacyNeverCode', "Your code"),
-			localize('picodePrivacyNeverChats', "Chats"),
-			localize('picodePrivacyNeverFiles', "File names"),
+			localize('picodePrivacyNeverChats.warm', "Your chats"),
+			localize('picodePrivacyNeverFiles.warm', "Your files"),
 			localize('picodePrivacyNeverAccount', "Your account"),
-			localize('picodePrivacyNeverIp', "Your IP address"),
-			localize('picodePrivacyNeverId', "Any identifier"),
+			localize('picodePrivacyNeverIp.warm', "Where you are"),
+			localize('picodePrivacyNeverId.warm', "Anything that identifies you"),
 		]);
 	}
 
@@ -178,7 +178,7 @@ registerAccountSection({
 	id: 'privacy',
 	label: localize('picodeAccountPrivacy', "Privacy"),
 	icon: Codicon.shield,
-	description: localize('picodeAccountPrivacyDescription', "What PiCode sends, and what it never sends."),
+	description: localize('picodeAccountPrivacyDescription.warm', "What PiCode shares, and what always stays with you."),
 	keywords: ['telemetry', 'usage', 'data', 'privacy'],
 	create: (instantiationService: IInstantiationService, container: HTMLElement) => instantiationService.createInstance(PicodeAccountPrivacySection, container),
 });
