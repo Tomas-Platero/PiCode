@@ -54,6 +54,7 @@ export const AICustomizationManagementSection = {
 	Status: 'status',
 	// PiCode's Settings window: the same window also holds the editor preferences and the account.
 	General: 'general',
+	Themes: 'themes',
 	EditorPreferences: 'editorPreferences',
 	ChatAgent: 'chatAgent',
 	Terminal: 'terminal',
@@ -74,6 +75,7 @@ export type PicodeSettingsGroup = 'preferences' | 'account' | 'agent';
 export function picodeSettingsGroupOf(section: AICustomizationManagementSection): PicodeSettingsGroup {
 	switch (section) {
 		case AICustomizationManagementSection.General:
+		case AICustomizationManagementSection.Themes:
 		case AICustomizationManagementSection.EditorPreferences:
 		case AICustomizationManagementSection.ChatAgent:
 		case AICustomizationManagementSection.Terminal:

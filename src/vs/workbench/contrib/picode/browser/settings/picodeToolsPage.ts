@@ -28,12 +28,12 @@ aiCustomizationManagementSectionRegistry.register({
 	id: AICustomizationManagementSection.Tools,
 	label: localize('picodeToolsLabel', "Tools"),
 	icon: Codicon.tools,
-	description: localize('picodeToolsDescription', "What pi can do on its own. A change applies to the next message."),
+	description: localize('picodeSetToolsPageDesc', "Choose which tools pi can use. Changes apply to the next message."),
 	keywords: PI_TOOLS.map(tool => tool.name),
 	supportsHarness: () => true,
 	create: (instantiationService, container) => instantiationService.invokeFunction(accessor => {
 		const configurationService = accessor.get(IConfigurationService);
-		const page = instantiationService.createInstance(PicodeSettingsPage, container, localize('picodeToolsLabel', "Tools"), localize('picodeToolsDescription', "What pi can do on its own. A change applies to the next message."));
+		const page = instantiationService.createInstance(PicodeSettingsPage, container, localize('picodeToolsLabel', "Tools"), localize('picodeSetToolsPageDesc', "Choose which tools pi can use. Changes apply to the next message."));
 		const disabled = () => configurationService.getValue<string[]>(PICODE_DISABLED_TOOLS_SETTING);
 		for (const tool of PI_TOOLS) {
 			page.customSwitchRow(

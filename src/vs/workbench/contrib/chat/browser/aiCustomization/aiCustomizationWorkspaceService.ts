@@ -55,6 +55,7 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 	readonly managementSections: readonly AICustomizationManagementSection[] = [
 		// Preferences: the editor and chat options people change most, as rows.
 		AICustomizationManagementSection.General,
+		AICustomizationManagementSection.Themes,
 		AICustomizationManagementSection.EditorPreferences,
 		AICustomizationManagementSection.ChatAgent,
 		AICustomizationManagementSection.Terminal,

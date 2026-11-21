@@ -92,7 +92,7 @@ registerPage({
 	id: AICustomizationManagementSection.General,
 	label: localize('picodePrefGeneral', "General"),
 	icon: Codicon.settings,
-	description: localize('picodePrefGeneralDesc', "How PiCode looks and how it starts."),
+	description: localize('picodeSetGeneralDesc', "Appearance, language and startup."),
 	keywords: ['theme', 'dark', 'light', 'layout', 'agent', 'editor', 'language', 'zoom', 'startup', 'windows'],
 	build: (page, { configurationService, themeService, commandService, workbenchThemeService }) => {
 		page.group(localize('picodePrefAppearance', "Appearance"));
@@ -107,7 +107,7 @@ registerPage({
 			return isLight(workbenchThemeService.getColorTheme().type) ? 'light' : 'dark';
 		};
 		const repaintThemeMode = page.customSegmentedRow<ThemeMode>(
-			{ name: localize('picodePrefTheme', "Theme"), description: localize('picodePrefThemeDesc', "Follow your system, or keep one look."), keywords: 'dark light system' },
+			{ name: localize('picodePrefTheme', "Theme"), description: localize('picodeSetThemeDesc', "Match your system, or always use light or dark."), keywords: 'dark light system' },
 			[
 				{ value: 'system', label: localize('picodePrefThemeSystem', "System"), icon: Codicon.deviceDesktop },
 				{ value: 'light', label: localize('picodePrefThemeLight', "Light"), icon: Codicon.lightbulb },
@@ -139,7 +139,7 @@ registerPage({
 
 		const themeName = () => themeService.getColorTheme().label;
 		const themeRow = page.row({ name: localize('picodePrefColorTheme', "Color theme"), description: themeName(), keywords: 'colors' });
-		page.button(themeRow, localize('picodePrefBrowseThemes', "Browse themes"), () => commandService.executeCommand('workbench.action.selectTheme'), { icon: Codicon.symbolColor });
+		page.button(themeRow, localize('picodePrefBrowseThemes', "Browse themes"), () => commandService.executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.Themes), { icon: Codicon.symbolColor });
 		page.onSettingChange('workbench.colorTheme', () => {
 			const desc = themeRow.parentElement?.querySelector('.picode-set-row-desc');
 			if (desc) {
@@ -167,7 +167,7 @@ registerPage({
 		page.selectRow<number>({
 			key: 'window.zoomLevel',
 			name: localize('picodePrefZoom', "Zoom"),
-			description: localize('picodePrefZoomDesc', "How big everything is drawn."),
+			description: localize('picodeSetZoomDesc', "Size of text and controls."),
 			choices: [-2, -1, 0, 1, 2, 3].map(level => ({ value: level, label: `${Math.round(Math.pow(1.2, level) * 100)}%` })),
 			read: stored => typeof stored === 'number' ? Math.round(stored) : 0,
 		});
@@ -175,25 +175,25 @@ registerPage({
 		page.group(localize('picodePrefStartup', "Startup"));
 		page.selectRow<string>({
 			key: 'window.restoreWindows',
-			name: localize('picodePrefRestore', "Reopen windows"),
-			description: localize('picodePrefRestoreDesc', "What PiCode opens when it starts again."),
+			name: localize('picodeSetRestore', "Restore windows"),
+			description: localize('picodeSetRestoreDesc', "What reopens when PiCode starts."),
 			choices: [
-				{ value: 'all', label: localize('picodePrefRestoreAll', "Everything I had open") },
-				{ value: 'preserve', label: localize('picodePrefRestorePreserve', "Everything, even if I open a folder") },
-				{ value: 'folders', label: localize('picodePrefRestoreFolders', "Only folders") },
-				{ value: 'one', label: localize('picodePrefRestoreOne', "The last window") },
-				{ value: 'none', label: localize('picodePrefRestoreNone', "Nothing") },
+				{ value: 'all', label: localize('picodeSetRestoreAll', "All windows") },
+				{ value: 'preserve', label: localize('picodeSetRestorePreserve', "Always all windows") },
+				{ value: 'folders', label: localize('picodeSetRestoreFolders', "Folders only") },
+				{ value: 'one', label: localize('picodeSetRestoreOne', "Last window") },
+				{ value: 'none', label: localize('picodeSetRestoreNone', "None") },
 			],
 		});
 		page.selectRow<string>({
 			key: 'workbench.startupEditor',
-			name: localize('picodePrefStartupEditor', "On an empty window"),
-			description: localize('picodePrefStartupEditorDesc', "What shows when no file is open."),
+			name: localize('picodeSetStartupEditor', "Startup page"),
+			description: localize('picodeSetStartupEditorDesc', "Shown when no file is open."),
 			choices: [
 				{ value: 'welcomePage', label: localize('picodePrefStartupWelcome', "Welcome page") },
-				{ value: 'welcomePageInEmptyWorkbench', label: localize('picodePrefStartupWelcomeEmpty', "Welcome page, only without a folder") },
-				{ value: 'newUntitledFile', label: localize('picodePrefStartupNewFile', "A new file") },
-				{ value: 'none', label: localize('picodePrefStartupNone', "Nothing") },
+				{ value: 'welcomePageInEmptyWorkbench', label: localize('picodeSetStartupWelcomeEmpty', "Welcome page (empty window only)") },
+				{ value: 'newUntitledFile', label: localize('picodeSetStartupNewFile', "New file") },
+				{ value: 'none', label: localize('picodeSetStartupNone', "None") },
 			],
 		});
 	},
@@ -205,45 +205,45 @@ registerPage({
 	id: AICustomizationManagementSection.EditorPreferences,
 	label: localize('picodePrefEditor', "Editor"),
 	icon: Codicon.code,
-	description: localize('picodePrefEditorDesc', "How code looks and saves."),
+	description: localize('picodeSetEditorDesc', "Text, formatting and saving."),
 	keywords: ['font', 'size', 'tab', 'wrap', 'minimap', 'format', 'save', 'line numbers'],
 	build: page => {
 		page.group(localize('picodePrefText', "Text"));
-		page.textRow({ key: 'editor.fontFamily', name: localize('picodePrefFont', "Font"), description: localize('picodePrefFontDesc', "Names separated by commas; the first one installed wins."), keywords: 'font family' });
+		page.textRow({ key: 'editor.fontFamily', name: localize('picodeSetFont', "Font family"), description: localize('picodeSetFontDesc', "Comma-separated; the first installed font is used."), keywords: 'font family' });
 		page.numberRow({ key: 'editor.fontSize', name: localize('picodePrefFontSize', "Font size"), min: 8, max: 40, keywords: 'font size' });
-		page.numberRow({ key: 'editor.tabSize', name: localize('picodePrefTabSize', "Tab width"), description: localize('picodePrefTabSizeDesc', "Spaces a tab takes."), min: 1, max: 16, keywords: 'indent' });
+		page.numberRow({ key: 'editor.tabSize', name: localize('picodeSetTabSize', "Tab size"), description: localize('picodeSetTabSizeDesc', "Number of spaces per tab."), min: 1, max: 16, keywords: 'indent' });
 		page.selectRow<string>({
 			key: 'editor.wordWrap',
-			name: localize('picodePrefWrap', "Wrap long lines"),
+			name: localize('picodeSetWrap', "Word wrap"),
 			choices: [
-				{ value: 'off', label: localize('picodePrefWrapOff', "Never") },
-				{ value: 'on', label: localize('picodePrefWrapOn', "At the window edge") },
-				{ value: 'bounded', label: localize('picodePrefWrapBounded', "At the edge or the column limit") },
+				{ value: 'off', label: localize('picodeSetWrapOff', "Off") },
+				{ value: 'on', label: localize('picodeSetWrapOn', "On") },
+				{ value: 'bounded', label: localize('picodeSetWrapBounded', "At column limit") },
 			],
 		});
 		page.selectRow<string>({
 			key: 'editor.lineNumbers',
 			name: localize('picodePrefLineNumbers', "Line numbers"),
 			choices: [
-				{ value: 'on', label: localize('picodePrefLineNumbersOn', "Shown") },
-				{ value: 'relative', label: localize('picodePrefLineNumbersRelative', "Relative to the cursor") },
-				{ value: 'off', label: localize('picodePrefLineNumbersOff', "Hidden") },
+				{ value: 'on', label: localize('picodeSetLineNumbersOn', "On") },
+				{ value: 'relative', label: localize('picodeSetLineNumbersRelative', "Relative") },
+				{ value: 'off', label: localize('picodeSetLineNumbersOff', "Off") },
 			],
 		});
-		page.switchRow({ key: 'editor.minimap.enabled', name: localize('picodePrefMinimap', "Minimap"), description: localize('picodePrefMinimapDesc', "A small overview of the file on the right.") });
+		page.switchRow({ key: 'editor.minimap.enabled', name: localize('picodePrefMinimap', "Minimap"), description: localize('picodeSetMinimapDesc', "Code overview along the right edge.") });
 
 		page.group(localize('picodePrefSaving', "Saving"));
 		page.selectRow<string>({
 			key: 'files.autoSave',
-			name: localize('picodePrefAutoSave', "Save automatically"),
+			name: localize('picodeSetAutoSave', "Auto save"),
 			choices: [
-				{ value: 'off', label: localize('picodePrefAutoSaveOff', "Never") },
-				{ value: 'afterDelay', label: localize('picodePrefAutoSaveDelay', "After a short pause") },
-				{ value: 'onFocusChange', label: localize('picodePrefAutoSaveFocus', "When I leave the file") },
-				{ value: 'onWindowChange', label: localize('picodePrefAutoSaveWindow', "When I leave PiCode") },
+				{ value: 'off', label: localize('picodeSetAutoSaveOff', "Off") },
+				{ value: 'afterDelay', label: localize('picodeSetAutoSaveDelay', "After delay") },
+				{ value: 'onFocusChange', label: localize('picodeSetAutoSaveFocus', "On focus change") },
+				{ value: 'onWindowChange', label: localize('picodeSetAutoSaveWindow', "On window change") },
 			],
 		});
-		page.switchRow({ key: 'editor.formatOnSave', name: localize('picodePrefFormatOnSave', "Format on save"), description: localize('picodePrefFormatOnSaveDesc', "Tidy the file every time it is saved.") });
+		page.switchRow({ key: 'editor.formatOnSave', name: localize('picodePrefFormatOnSave', "Format on save"), description: localize('picodeSetFormatOnSaveDesc', "Format the file each time it's saved.") });
 	},
 });
 
@@ -253,65 +253,65 @@ registerPage({
 	id: AICustomizationManagementSection.ChatAgent,
 	label: localize('picodePrefChat', "Chat and agent"),
 	icon: Codicon.robot,
-	description: localize('picodePrefChatDesc', "How pi answers in the chat."),
+	description: localize('picodeSetChatDesc', "Model behavior and the context pi receives."),
 	keywords: ['pi', 'thinking', 'reasoning', 'context', 'project', 'tools', 'voice', 'dictation', 'ai'],
 	build: (page, { commandService }) => {
 		page.segmentedRow({
 			key: 'picode.pi.runtime',
-			name: localize('picodePrefRuntime', "Which pi answers"),
-			description: localize('picodePrefRuntimeDesc', "The one inside PiCode, or the one installed on your computer. Applies to new chats."),
+			name: localize('picodeSetRuntime', "pi runtime"),
+			description: localize('picodeSetRuntimeDesc', "Use the version bundled with PiCode or the one installed on your system. Applies to new chats."),
 			choices: [
-				{ value: 'internal', label: localize('picodePrefRuntimeInternal', "Built in") },
-				{ value: 'external', label: localize('picodePrefRuntimeExternal', "On this computer") },
+				{ value: 'internal', label: localize('picodeSetRuntimeInternal', "Bundled") },
+				{ value: 'external', label: localize('picodeSetRuntimeExternal', "System") },
 			],
 		});
 		page.selectRow<string>({
 			key: 'picode.pi.thinkingLevel',
-			name: localize('picodePrefThinking', "Thinking effort"),
-			description: localize('picodePrefThinkingDesc', "How hard pi thinks before answering."),
+			name: localize('picodeSetThinking', "Reasoning effort"),
+			description: localize('picodeSetThinkingDesc', "How much the model thinks before answering."),
 			keywords: 'reasoning effort',
 			choices: [
-				{ value: 'default', label: localize('picodePrefThinkingDefault', "pi's own choice") },
+				{ value: 'default', label: localize('picodeSetThinkingDefault', "Default") },
 				{ value: 'off', label: localize('picodePrefThinkingOff', "Off") },
 				{ value: 'minimal', label: localize('picodePrefThinkingMinimal', "Minimal") },
 				{ value: 'low', label: localize('picodePrefThinkingLow', "Low") },
 				{ value: 'medium', label: localize('picodePrefThinkingMedium', "Medium") },
 				{ value: 'high', label: localize('picodePrefThinkingHigh', "High") },
-				{ value: 'xhigh', label: localize('picodePrefThinkingXhigh', "Very high") },
-				{ value: 'max', label: localize('picodePrefThinkingMax', "Maximum") },
+				{ value: 'xhigh', label: localize('picodeSetThinkingXhigh', "Extra high") },
+				{ value: 'max', label: localize('picodeSetThinkingMax', "Max") },
 			],
 		});
 		page.switchRow({
 			key: 'picode.pi.reasoning',
-			name: localize('picodePrefReasoning', "Show reasoning"),
-			description: localize('picodePrefReasoningDesc', "Write the model's thinking into the chat above the answer."),
+			name: localize('picodeSetReasoning', "Show thinking"),
+			description: localize('picodeSetReasoningDesc', "Show the model's reasoning above its answer."),
 			read: stored => stored !== 'hide',
 			write: on => on ? 'show' : 'hide',
 		});
 
-		page.group(localize('picodePrefContext', "What pi is told"));
+		page.group(localize('picodeSetContext', "Context"));
 		page.switchRow({
 			key: 'picode.context.attach',
-			name: localize('picodePrefAttach', "Send what I'm looking at"),
-			description: localize('picodePrefAttachDesc', "The folder, the open file and the selection go with every message."),
+			name: localize('picodeSetAttach', "Include editor context"),
+			description: localize('picodeSetAttachDesc', "Send the open folder, file and selection with each message."),
 		});
 		page.selectRow<string>({
 			key: 'picode.context.mode',
-			name: localize('picodePrefContextMode', "How much"),
+			name: localize('picodeSetContextMode', "Context scope"),
 			choices: [
-				{ value: 'project', label: localize('picodePrefContextProject', "Folder, file and selection") },
-				{ value: 'file', label: localize('picodePrefContextFile', "File and selection") },
-				{ value: 'selection', label: localize('picodePrefContextSelection', "Only the selection") },
+				{ value: 'project', label: localize('picodeSetContextProject', "Workspace") },
+				{ value: 'file', label: localize('picodeSetContextFile', "Current file") },
+				{ value: 'selection', label: localize('picodeSetContextSelection', "Selection only") },
 			],
 		});
 		page.selectRow<string>({
 			key: 'picode.pi.projectMode',
-			name: localize('picodePrefProjectMode', "Where pi works"),
-			description: localize('picodePrefProjectModeDesc', "With several folders open."),
+			name: localize('picodeSetProjectMode', "Working directory"),
+			description: localize('picodeSetProjectModeDesc', "Used when several folders are open."),
 			choices: [
-				{ value: 'auto', label: localize('picodePrefProjectAuto', "Decide for me") },
-				{ value: 'workspace', label: localize('picodePrefProjectWorkspace', "Across every folder") },
-				{ value: 'folder', label: localize('picodePrefProjectFolder', "Only the first folder") },
+				{ value: 'auto', label: localize('picodeSetProjectAuto', "Automatic") },
+				{ value: 'workspace', label: localize('picodeSetProjectWorkspace', "All folders") },
+				{ value: 'folder', label: localize('picodeSetProjectFolder', "First folder") },
 			],
 		});
 
@@ -322,7 +322,7 @@ registerPage({
 			() => commandService.executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.ProvidersModels),
 		);
 		page.buttonRow(
-			{ name: localize('picodePrefTools', "Tools"), description: localize('picodePrefToolsDesc', "Turn off tools pi should not use."), keywords: 'bash edit write' },
+			{ name: localize('picodePrefTools', "Tools"), description: localize('picodeSetToolsDesc', "Choose which tools pi can use."), keywords: 'bash edit write' },
 			localize('picodePrefManage', "Manage"),
 			() => commandService.executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.Tools),
 		);
@@ -338,22 +338,22 @@ registerPage({
 			if (!voice || voice.state === 'unsupported') {
 				desc.textContent = localize('picodePrefDictationUnsupported', "Not available on this computer.");
 			} else if (voice.state === 'ready') {
-				desc.textContent = localize('picodePrefDictationReady', "Ready. Speak into the chat with the microphone button.");
+				desc.textContent = localize('picodeSetDictationReady', "Ready. Use the microphone button in the chat.");
 				page.button(voiceRow, localize('picodePrefRemove', "Remove"), () => commandService.executeCommand('picode.voice.remove'));
 			} else if (voice.state === 'downloading') {
 				desc.textContent = localize('picodePrefDictationDownloading', "Downloading, {0}%.", Math.round(voice.percent ?? 0));
 				page.button(voiceRow, localize('picodePrefCancel', "Cancel"), () => commandService.executeCommand('picode.voice.cancel'));
 			} else {
-				desc.textContent = localize('picodePrefDictationMissing', "Talk instead of typing. Works on this computer, about {0} MB.", voice.sizeMb ?? 700);
+				desc.textContent = localize('picodeSetDictationMissing', "Speak instead of typing. Runs on this computer (about {0} MB).", voice.sizeMb ?? 700);
 				page.button(voiceRow, localize('picodePrefDownload', "Download"), () => commandService.executeCommand('picode.voice.download'), { icon: Codicon.cloudDownload });
 			}
 		}, () => { /* the agent is not running yet: the line keeps saying it is checking */ });
 
-		page.group(localize('picodePrefDanger', "Turn off"));
+		page.group(localize('picodeSetAdvanced', "Advanced"));
 		page.switchRow({
 			key: 'chat.disableAIFeatures',
-			name: localize('picodePrefAiOn', "AI in PiCode"),
-			description: localize('picodePrefAiOnDesc', "Turning it off hides the chat and the agent everywhere."),
+			name: localize('picodeSetAiOn', "AI features"),
+			description: localize('picodeSetAiOnDesc', "Turn off to hide the chat and agent everywhere."),
 			keywords: 'disable ai',
 			danger: true,
 			read: stored => stored !== true,
@@ -368,25 +368,25 @@ registerPage({
 	id: AICustomizationManagementSection.Terminal,
 	label: localize('picodePrefTerminal', "Terminal"),
 	icon: Codicon.terminal,
-	description: localize('picodePrefTerminalDesc', "The terminal inside PiCode."),
+	description: localize('picodeSetTerminalDesc', "Shell, font and cursor."),
 	keywords: ['shell', 'powershell', 'bash', 'cursor', 'font'],
 	build: (page, { commandService }) => {
 		page.buttonRow(
-			{ name: localize('picodePrefShell', "Default terminal"), description: localize('picodePrefShellDesc', "Which shell a new terminal opens."), keywords: 'shell profile' },
+			{ name: localize('picodeSetShell', "Default profile"), description: localize('picodeSetShellDesc', "Shell used for new terminals."), keywords: 'shell profile' },
 			localize('picodePrefChoose', "Choose"),
 			() => commandService.executeCommand('workbench.action.terminal.selectDefaultShell'),
 		);
 		page.numberRow({ key: 'terminal.integrated.fontSize', name: localize('picodePrefTerminalFont', "Font size"), min: 6, max: 40 });
 		page.segmentedRow({
 			key: 'terminal.integrated.cursorStyle',
-			name: localize('picodePrefCursor', "Cursor"),
+			name: localize('picodeSetCursor', "Cursor style"),
 			choices: [
 				{ value: 'block', label: localize('picodePrefCursorBlock', "Block") },
 				{ value: 'line', label: localize('picodePrefCursorLine', "Line") },
 				{ value: 'underline', label: localize('picodePrefCursorUnderline', "Underline") },
 			],
 		});
-		page.switchRow({ key: 'terminal.integrated.cursorBlinking', name: localize('picodePrefCursorBlink', "Blinking cursor") });
+		page.switchRow({ key: 'terminal.integrated.cursorBlinking', name: localize('picodeSetCursorBlink', "Cursor blinking") });
 	},
 });
 
@@ -396,16 +396,16 @@ registerPage({
 	id: AICustomizationManagementSection.Memory,
 	label: localize('picodePrefMemory', "Memory"),
 	icon: Codicon.database,
-	description: localize('picodePrefMemoryDesc', "What pi remembers between chats."),
+	description: localize('picodeSetMemoryDesc', "What pi remembers across chats."),
 	keywords: ['engram', 'remember'],
 	build: (page, { commandService }) => {
 		page.switchRow({
 			key: 'picode.memory.enabled',
-			name: localize('picodePrefMemoryOn', "Memory"),
-			description: localize('picodePrefMemoryOnDesc', "pi keeps decisions and what it learned, and finds them in later chats."),
+			name: localize('picodeSetMemoryOn', "Enable memory"),
+			description: localize('picodeSetMemoryOnDesc', "Let pi save decisions and learnings and recall them in later chats."),
 		});
 		page.buttonRow(
-			{ name: localize('picodePrefMemoryCheck', "Check memory"), description: localize('picodePrefMemoryCheckDesc', "Look for problems in what is stored and fix them.") },
+			{ name: localize('picodePrefMemoryCheck', "Check memory"), description: localize('picodeSetMemoryCheckDesc', "Find and fix problems in stored memories.") },
 			localize('picodePrefCheck', "Check"),
 			() => commandService.executeCommand('picode.memory.check'),
 		);
@@ -418,23 +418,23 @@ registerPage({
 	id: AICustomizationManagementSection.Updates,
 	label: localize('picodePrefUpdates', "Updates"),
 	icon: Codicon.cloudDownload,
-	description: localize('picodePrefUpdatesDesc', "New versions of PiCode and of the agent."),
+	description: localize('picodeSetUpdatesDesc', "Versions of PiCode and the agent."),
 	keywords: ['version', 'update', 'pi', 'packages', 'gentle', 'engram', 'extensions', "what's new"],
 	build: (page, { commandService, productService }) => {
 		page.buttonRow(
-			{ name: `PiCode ${productService.picodeVersion ?? productService.version}`, description: localize('picodePrefUpdatesChannel', "Checks for a newer PiCode."), icon: Codicon.versions },
+			{ name: `PiCode ${productService.picodeVersion ?? productService.version}`, description: localize('picodeSetUpdatesChannel', "Check for a newer version of PiCode."), icon: Codicon.versions },
 			localize('picodePrefCheckNow', "Check now"),
 			() => commandService.executeCommand('update.checkForUpdate'),
 		);
 
-		const agentRow = page.row({ name: localize('picodePrefAgentParts', "Agent"), description: localize('picodePrefDictationChecking', "Checking…"), keywords: 'pi packages gentle engram memory engine', icon: Codicon.package });
+		const agentRow = page.row({ name: localize('picodeSetAgentParts', "Agent components"), description: localize('picodePrefDictationChecking', "Checking…"), keywords: 'pi packages gentle engram memory engine', icon: Codicon.package });
 		const agentDesc = agentRow.parentElement?.querySelector<HTMLElement>('.picode-set-row-desc');
 		const paintAgent = (status: IAgentStatus | undefined) => {
 			DOM.clearNode(agentRow);
 			const targets = status?.updates?.targets ?? [];
 			if (agentDesc) {
 				agentDesc.textContent = targets.length === 0
-					? localize('picodePrefAgentCurrent', "pi {0}, its packages and memory are up to date.", status?.piVersion ?? '')
+					? localize('picodeSetAgentCurrent', "pi {0}, packages and memory are up to date.", status?.piVersion ?? '')
 					: targets.map(t => `${t.name} ${t.installed} → ${t.latest}`).join(' · ');
 			}
 			if (targets.length > 0) {
@@ -447,21 +447,21 @@ registerPage({
 		};
 		void commandService.executeCommand<IAgentStatus>(STATUS_DATA_COMMAND).then(paintAgent, () => paintAgent(undefined));
 
-		page.group(localize('picodePrefUpdatesWhen', "When"));
+		page.group(localize('picodeSetUpdatesWhen', "Automatic updates"));
 		page.segmentedRow({
 			key: 'update.mode',
-			name: localize('picodePrefUpdateMode', "PiCode updates"),
+			name: localize('picodeSetUpdateMode', "Update mode"),
 			choices: [
 				{ value: 'default', label: localize('picodePrefUpdateAuto', "Automatic") },
-				{ value: 'start', label: localize('picodePrefUpdateStart', "At startup") },
-				{ value: 'manual', label: localize('picodePrefUpdateManual', "When I ask") },
+				{ value: 'start', label: localize('picodeSetUpdateStart', "On startup") },
+				{ value: 'manual', label: localize('picodeSetUpdateManual', "Manual") },
 				{ value: 'none', label: localize('picodePrefUpdateNone', "Off") },
 			],
 		});
-		page.switchRow({ key: 'picode.updates.check', name: localize('picodePrefAgentUpdates', "Look for agent updates"), description: localize('picodePrefAgentUpdatesDesc', "pi, its packages and memory, in the background.") });
-		page.switchRow({ key: 'extensions.autoCheckUpdates', name: localize('picodePrefExtensionUpdates', "Look for extension updates") });
+		page.switchRow({ key: 'picode.updates.check', name: localize('picodeSetAgentUpdates', "Check for agent updates"), description: localize('picodeSetAgentUpdatesDesc', "pi, its packages and memory, in the background.") });
+		page.switchRow({ key: 'extensions.autoCheckUpdates', name: localize('picodeSetExtensionUpdates', "Check for extension updates") });
 		page.buttonRow(
-			{ name: localize('picodePrefWhatsNew', "What's new"), description: localize('picodePrefWhatsNewDesc', "What this version brings.") },
+			{ name: localize('picodePrefWhatsNew', "What's new"), description: localize('picodeSetWhatsNewDesc', "See what's new in this version.") },
 			localize('picodePrefOpen', "Open"),
 			() => commandService.executeCommand('picode.showWhatsNew'),
 		);
@@ -479,16 +479,16 @@ registerPage({
 	build: page => {
 		page.segmentedRow({
 			key: 'workbench.reduceMotion',
-			name: localize('picodePrefMotion', "Motion"),
-			description: localize('picodePrefMotionDesc', "Turn animations off, or follow your system."),
+			name: localize('picodeSetMotion', "Reduce motion"),
+			description: localize('picodeSetMotionDesc', "Turn off animations, or follow your system."),
 			keywords: 'animation',
 			choices: [
 				{ value: 'auto', label: localize('picodePrefSystem', "System") },
-				{ value: 'off', label: localize('picodePrefMotionOn', "On") },
-				{ value: 'on', label: localize('picodePrefMotionReduced', "Reduced") },
+				{ value: 'off', label: localize('picodeSetMotionOff', "Off") },
+				{ value: 'on', label: localize('picodeSetMotionOn', "On") },
 			],
 		});
-		page.switchRow({ key: 'window.autoDetectHighContrast', name: localize('picodePrefContrast', "High contrast with the system"), description: localize('picodePrefContrastDesc', "Switch to a high-contrast theme when your system does.") });
+		page.switchRow({ key: 'window.autoDetectHighContrast', name: localize('picodeSetContrast', "Auto-detect high contrast"), description: localize('picodeSetContrastDesc', "Use a high-contrast theme when your system does.") });
 		page.segmentedRow({
 			key: 'editor.accessibilitySupport',
 			name: localize('picodePrefScreenReader', "Screen reader support"),
@@ -511,7 +511,7 @@ registerPage({
 	keywords: ['shortcut', 'keybinding', 'keys'],
 	build: (page, { commandService }) => {
 		page.buttonRow(
-			{ name: localize('picodePrefShortcuts', "Keyboard shortcuts"), description: localize('picodePrefShortcutsDesc', "See and change the keys for any command.") },
+			{ name: localize('picodePrefShortcuts', "Keyboard shortcuts"), description: localize('picodeSetShortcutsDesc', "View and change keybindings.") },
 			localize('picodePrefOpen', "Open"),
 			() => commandService.executeCommand('workbench.action.openGlobalKeybindings'),
 		);

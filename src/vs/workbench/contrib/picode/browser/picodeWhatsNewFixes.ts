@@ -24,6 +24,14 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.4.3',
+			text: localize('picodeWhatsNew.fix.settingsLabels', "**Settings speak like the apps you know.** Options read the way other editors name them: Auto save after delay, Word wrap, Reasoning effort, Include editor context."),
+		},
+		{
+			since: '2.4.3',
+			text: localize('picodeWhatsNew.fix.editorStatus', "**The Editor layout gets the Status panel.** PiCode's panel in the Editor layout now shows the same Status as the Agent layout: environment, MCPs, changes, tasks, issues and memory."),
+		},
+		{
 			since: '2.4.2',
 			text: localize('picodeWhatsNew.fix.piProblems', "**pi tells you what went wrong.** An extension that could not load, or a model a saved chat could not get back, now shows once in the chat instead of silently missing. pi itself moves to version 1.6."),
 		},
