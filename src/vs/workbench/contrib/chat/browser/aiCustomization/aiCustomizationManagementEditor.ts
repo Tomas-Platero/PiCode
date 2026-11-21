@@ -244,6 +244,12 @@ export class AICustomizationManagementEditor extends EditorPane {
 	private modelsWidget: ChatModelsWidget | undefined;
 	private toolsListWidget: ToolsListWidget | undefined;
 	private promptsContentContainer!: HTMLElement;
+	/** PiCode: the Agents page's two tabs, its profiles panel and which tab is open. */
+	private agentsTabs: HTMLElement | undefined;
+	private agentsHead: HTMLElement | undefined;
+	private agentProfilesContainer: HTMLElement | undefined;
+	private agentProfilesWidget: IAICustomizationManagementSectionWidget | undefined;
+	private agentsTab: 'profiles' | 'agents' = 'profiles';
 	private mcpContentContainer: HTMLElement | undefined;
 	private pluginContentContainer: HTMLElement | undefined;
 	private modelsContentContainer: HTMLElement | undefined;
@@ -476,7 +482,11 @@ export class AICustomizationManagementEditor extends EditorPane {
 			layout: (width, _, height) => {
 				this.contentContainer.style.width = `${width}px`;
 				if (height !== undefined) {
-					this.listWidget.layout(height - 16, width - 24);
+					const agentsTabs = this.selectedSection === AICustomizationManagementSection.Agents ? (this.agentsTabs?.offsetHeight ?? 0) + (this.agentsHead?.offsetHeight ?? 0) + 12 : 0;
+					this.listWidget.layout(height - 16 - agentsTabs, width - 24);
+					if (this.agentProfilesContainer) {
+						this.agentProfilesContainer.style.height = `${Math.max(0, height - 16 - agentsTabs)}px`;
+					}
 					this.mcpListWidget?.layout(height - 16, width - 24);
 					this.pluginListWidget?.layout(height - 16, width - 24);
 					this.toolsListWidget?.layout(height - 16, width - 24);
@@ -854,6 +864,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 
 		// Container for prompts-based content (Agents, Skills, Instructions, Prompts)
 		this.promptsContentContainer = DOM.append(contentInner, $('.prompts-content-container'));
+		this.createPicodeAgentsTabs();
 		this.listWidget = this.editorDisposables.add(this.instantiationService.createInstance(AICustomizationListWidget));
 		this.promptsContentContainer.appendChild(this.listWidget.element);
 		this.createCustomizationMigrationContent(contentInner);
@@ -1828,6 +1839,10 @@ export class AICustomizationManagementEditor extends EditorPane {
 			this.goBackFromToolDetail();
 		}
 
+		// PiCode: arriving at Agents from another page opens its profiles; coming back from an agent keeps the tab.
+		if (section === AICustomizationManagementSection.Agents && this.selectedSection !== section) {
+			this.agentsTab = 'profiles';
+		}
 		this.selectedSection = section;
 		this.sectionContextKey.set(section);
 
@@ -1906,6 +1921,69 @@ export class AICustomizationManagementEditor extends EditorPane {
 	}
 
 
+	/** PiCode: the Agents page's tabs, Profiles (which model each agent uses) and Your agents. */
+	private createPicodeAgentsTabs(): void {
+		if (!aiCustomizationManagementSectionRegistry.agentProfilesPanel) {
+			return;
+		}
+		// One heading for both tabs: the list's own title would only show on one of them.
+		const head = this.agentsHead = DOM.append(this.promptsContentContainer, $('.picode-agents-head'));
+		DOM.append(head, $('h2.picode-set-title')).textContent = localize('picodeAgentsTitle', "Agents");
+		DOM.append(head, $('p.picode-set-lead')).textContent = localize('picodeAgentsLead', "Pick the model each agent works with, and keep your own agents close at hand.");
+		const tabs = this.agentsTabs = DOM.append(this.promptsContentContainer, $('.picode-agents-tabs'));
+		tabs.setAttribute('role', 'tablist');
+		for (const [key, label, icon] of [
+			['profiles', localize('picodeAgentsTabProfiles', "Profiles"), Codicon.layers],
+			['agents', localize('picodeAgentsTabAgents', "Your agents"), Codicon.person],
+		] as const) {
+			const button = DOM.append(tabs, $('button.picode-agents-tab'));
+			button.setAttribute('type', 'button');
+			button.dataset.tab = key;
+			button.setAttribute('role', 'tab');
+			DOM.append(button, $(ThemeIcon.asCSSSelector(icon)));
+			DOM.append(button, $('span')).textContent = label;
+			this.editorDisposables.add(DOM.addDisposableListener(button, 'click', () => {
+				if (this.agentsTab !== key) {
+					this.agentsTab = key;
+					this.applyPicodeAgentsTab();
+				}
+			}));
+		}
+		this.agentProfilesContainer = DOM.append(this.promptsContentContainer, $('.picode-agents-profiles'));
+	}
+
+	private applyPicodeAgentsTab(): void {
+		if (!this.agentsTabs || !this.agentProfilesContainer) {
+			return;
+		}
+		const onAgents = this.selectedSection === AICustomizationManagementSection.Agents;
+		const showProfiles = onAgents && this.agentsTab === 'profiles';
+		this.agentsTabs.style.display = onAgents ? '' : 'none';
+		if (this.agentsHead) {
+			this.agentsHead.style.display = onAgents ? '' : 'none';
+		}
+		this.promptsContentContainer.classList.toggle('picode-agents-page', onAgents);
+		this.agentProfilesContainer.style.display = showProfiles ? '' : 'none';
+		this.listWidget.element.style.display = showProfiles ? 'none' : '';
+		for (const button of this.agentsTabs.querySelectorAll<HTMLElement>('.picode-agents-tab')) {
+			const active = button.dataset.tab === this.agentsTab;
+			button.classList.toggle('active', active);
+			button.setAttribute('aria-selected', String(active));
+		}
+		if (showProfiles && !this.agentProfilesWidget && aiCustomizationManagementSectionRegistry.agentProfilesPanel) {
+			this.agentProfilesWidget = this.editorDisposables.add(aiCustomizationManagementSectionRegistry.agentProfilesPanel(this.instantiationService, this.agentProfilesContainer));
+		}
+		if (this.dimension) {
+			this.layout(this.dimension);
+		}
+	}
+
+	/** PiCode: opens the Agents page on one of its tabs (`picode.providersModels.open 'agents'` lands on Profiles). */
+	showPicodeAgentsTab(tab: 'profiles' | 'agents'): void {
+		this.agentsTab = tab;
+		this.applyPicodeAgentsTab();
+	}
+
 	private updateContentVisibility(): void {
 		const isEditorMode = this.viewMode === 'editor';
 		const isMigrationMode = this.viewMode === 'migration';
@@ -1947,6 +2025,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 		if (this.toolsContentContainer) {
 			this.toolsContentContainer.style.display = !isEditorMode && !isMigrationMode && !isDetailMode && isToolsSection ? '' : 'none';
 		}
+		this.applyPicodeAgentsTab();
 		if (this.toolsDetailContainer) {
 			this.toolsDetailContainer.style.display = isToolsDetailMode ? '' : 'none';
 		}

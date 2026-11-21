@@ -118,7 +118,7 @@ Choose which model answers, give each agent its own, add tools and skills, and k
 
 ### 🎛️ One Settings window
 
-Your preferences, your account and your AI live in one window, grouped on the left with a search box on top. Each row says what it does and changes at once; your avatar, Sync and the usage ring open their own page, and every editor setting is still one click away under *All settings*. Themes get a gallery of their own: every theme as a small window in its own colours, previewed on hover and installed from Open VSX in one click.
+Your preferences, your account and your AI live in one window, grouped on the left with a search box on top. Each row says what it does and changes at once; your avatar, Sync and the usage ring open their own page, and every editor setting is still one click away under *All settings*. Themes get a gallery of their own: every theme as a small window in its own colours, previewed on hover and installed from Open VSX in one click. *Agents* keeps two tabs side by side: *Profiles*, where you pick the model each agent works with, and *Your agents*. *Keyboard* lists every shortcut with a search box, and *Automatic* updates keep PiCode, pi, its packages and your extensions current on their own, quietly and never mid-answer.
 
 <img src="./resources/picode/screenshots/settings.png" alt="The Settings window" width="100%" />
 

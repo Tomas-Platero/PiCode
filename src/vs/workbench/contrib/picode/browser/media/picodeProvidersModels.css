@@ -1324,3 +1324,8 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 	overflow: hidden;
 	scrollbar-gutter: stable;
 }
+
+/* On the Agents page the profiles come alone: no header, no tab row of their own. */
+.picode-pm.profiles-only .picode-pm-tabs {
+	display: none;
+}

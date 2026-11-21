@@ -24,36 +24,60 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
-			since: '2.4.3',
-			text: localize('picodeWhatsNew.fix.settingsLabels', "**Settings speak like the apps you know.** Options read the way other editors name them: Auto save after delay, Word wrap, Reasoning effort, Include editor context."),
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.autoEverything', "**Automatic really means everything.** PiCode, pi, its packages and your extensions now update on their own, quietly, without a single console window popping up. And never in the middle of an answer."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.memoryInPlace', "**Check your memory right where you are.** The check now answers on the same page, with a clear verdict and only what needs a look."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.profilesInAgents', "**Profiles live with your agents.** Choosing the model each agent works with is now the first tab of Agents, right next to your own agents."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.shortcutList', "**All your shortcuts at a glance.** The Keyboard page lists every shortcut, with a search box to find one fast."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.moreAccessibility', "**More ways to make PiCode comfortable.** Underlined links, a thicker cursor, dimmed panels, smooth scrolling and more, in Accessibility."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.noDeadEnds', "**No dead ends.** Using your own pi is greyed out until there's one on your computer, and it tells you why."),
 		},
 		{
 			since: '2.4.3',
-			text: localize('picodeWhatsNew.fix.editorStatus', "**The Editor layout gets the Status panel.** PiCode's panel in the Editor layout now shows the same Status as the Agent layout: environment, MCPs, changes, tasks, issues and memory."),
+			text: localize('picodeWhatsNew.fix.settingsLabels.warm', "**Settings that speak your language.** Options are named the way you already know them from other editors, so there's nothing new to learn."),
+		},
+		{
+			since: '2.4.3',
+			text: localize('picodeWhatsNew.fix.editorStatus.warm', "**Status in the Editor layout too.** Everything at a glance, the same panel whichever layout you prefer."),
 		},
 		{
 			since: '2.4.2',
-			text: localize('picodeWhatsNew.fix.piProblems', "**pi tells you what went wrong.** An extension that could not load, or a model a saved chat could not get back, now shows once in the chat instead of silently missing. pi itself moves to version 1.6."),
+			text: localize('picodeWhatsNew.fix.piProblems.warm', "**pi lets you know when something's off.** If an extension can't load or a saved chat can't get its model back, you'll see a short note in the chat instead of wondering what happened."),
 		},
 		{
 			since: '2.4.2',
-			text: localize('picodeWhatsNew.fix.thinkingLevels', "**The thinking picker only offers what your model can do.** Levels a model refuses (GPT-6.2 has no Off or Minimal) are greyed out and say so, instead of being quietly swapped for another."),
+			text: localize('picodeWhatsNew.fix.thinkingLevels.warm', "**Only the options your model really has.** If a model can't think at a certain level, that choice is greyed out, so what you pick is what you get."),
 		},
 		{
 			since: '2.4.2',
-			text: localize('picodeWhatsNew.fix.toolsReal', "**Tools lists pi's own tools.** It used to show tools pi does not have; now each of pi's tools has a switch that really turns it off."),
+			text: localize('picodeWhatsNew.fix.toolsReal.warm', "**Tools shows pi's real tools.** Each one has its own switch, and turning it off really turns it off."),
 		},
 		{
 			since: '2.4.2',
-			text: localize('picodeWhatsNew.fix.packageInstalls', "**Package installs never hang.** Installing a pi package that asked for a password could wait forever; it now fails with a clear message."),
+			text: localize('picodeWhatsNew.fix.packageInstalls.warm', "**No more endless waiting.** Installing a package that needs a password now tells you clearly instead of hanging."),
 		},
 		{
 			since: '2.4.1',
-			text: localize('picodeWhatsNew.fix.shareUsage', "**You choose whether to help improve PiCode.** The anonymous counts sent with each update check (version, system and whether you used PiCode today) now have their own switch: in the setup, in Settings and in Account › Privacy. Never your code, chats, files or account."),
+			text: localize('picodeWhatsNew.fix.shareUsage.warm', "**You decide whether to help.** Sharing anonymous counts to improve PiCode is your choice, and you can change it anytime in your account. Your code and chats always stay yours."),
 		},
 		{
 			since: '2.4.0',
-			text: localize('picodeWhatsNew.fix.keysStayHome', "**Your provider keys no longer travel to the cloud.** Keys written in full in your providers or MCP servers stay on each computer; the rest of those settings still syncs."),
+			text: localize('picodeWhatsNew.fix.keysStayHome.warm', "**Your keys stay with you.** Your provider and server keys never travel to the cloud; everything else still syncs."),
 		},
 		{
 			since: '2.3.2',
