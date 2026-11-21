@@ -24,6 +24,30 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.autoEverything', "**Automatic really means everything.** PiCode, pi, its packages and your extensions now update on their own, quietly, without a single console window popping up. And never in the middle of an answer."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.memoryInPlace', "**Check your memory right where you are.** The check now answers on the same page, with a clear verdict and only what needs a look."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.profilesInAgents', "**Profiles live with your agents.** Choosing the model each agent works with is now the first tab of Agents, right next to your own agents."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.shortcutList', "**All your shortcuts at a glance.** The Keyboard page lists every shortcut, with a search box to find one fast."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.moreAccessibility', "**More ways to make PiCode comfortable.** Underlined links, a thicker cursor, dimmed panels, smooth scrolling and more, in Accessibility."),
+		},
+		{
+			since: '2.4.4',
+			text: localize('picodeWhatsNew.fix.noDeadEnds', "**No dead ends.** Using your own pi is greyed out until there's one on your computer, and it tells you why."),
+		},
+		{
 			since: '2.4.3',
 			text: localize('picodeWhatsNew.fix.settingsLabels.warm', "**Settings that speak your language.** Options are named the way you already know them from other editors, so there's nothing new to learn."),
 		},
