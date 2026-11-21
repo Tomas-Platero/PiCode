@@ -23,7 +23,7 @@ Objetivo: una ventana **Settings** al estilo de Claude Code que junta los ajuste
 | T4 | S4 (Tools) | inline | hecho | 6f78deef |
 | T5 | S6 (árbol) | inline | hecho (parcial, ver L4) | 1d06299e |
 | T6 | idiomas, docs, What's New | inline | idiomas y docs hechos; What's New a la release | 692b53a7 |
-| T7 | S7 S8 | inline | hecho (ver L5) | pendiente |
+| T7 | S7 S8 | inline | hecho (ver L5) | 00afc973, 748b853b, 03211a70 |
 
 ## Log
 
