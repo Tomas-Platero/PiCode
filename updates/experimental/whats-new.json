@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.5-experimental",
+			"notes": "### 🐛 Fixed\n\n- **pi gets going much sooner.** Opening a window used to get pi ready up to three times over, and the editor froze while it did. Now it gets ready once, and your model list and slash commands show up right away.\n- **Updates no longer stop at \"Access denied\".** When an update installs as you close PiCode, the memory helper now closes first, so the installer can finish."
+		},
+		{
 			"version": "2.4.4-experimental",
 			"notes": "### ✨ New\n\n- **Automatic really means everything.** PiCode, pi, its packages, the memory engine and your extensions now update on their own, quietly, without a single console window popping up. And never in the middle of an answer.\n- **Profiles live with your agents.** Choosing the model each agent works with is now the first tab of *Agents*, right next to your own agents.\n- **All your shortcuts at a glance.** The *Keyboard* page lists every shortcut, with a search box to find one fast.\n- **More ways to make PiCode comfortable.** *Accessibility* gains underlined links, a thicker cursor, dimmed panels you're not using, smooth scrolling, zoom with the mouse wheel and more.\n\n### 🛠️ Improved\n\n- **Check your memory right where you are.** The check answers on the same page, with a clear verdict and only what needs a look.\n- **No dead ends.** Using your own pi is greyed out until there's one on your computer, and it tells you why.\n- **Friendlier words.** The usage notice, *Privacy* and *What's New* speak in a warmer tone, in all 13 languages."
 		},
@@ -115,10 +119,6 @@
 		{
 			"version": "1.0.3-experimental",
 			"notes": "### ✨ New\n\n- **A cleaner Agent layout.** The chat no longer has a \"Chat / Ports\" row above it, the sessions column reaches the bottom of the window, and the \"Pi\" picker under the message box is gone.\n- **Thinking level as a dropdown.** Pick how hard the AI thinks from a small list under its button, like the model picker.\n- **Reasoning and command cards, tidied.** The AI's reasoning reads calmer, and an opened command card now shows the command that ran and what it printed.\n- **White logos on dark themes.** GitHub and similar dark logos are readable again.\n\n### 🐛 Fixed\n\n- The command box of a finished tool call no longer comes up empty.\n- On the MCP servers page, \"Needs sign-in\" no longer hides behind the sign-in button."
-		},
-		{
-			"version": "1.0.2-experimental",
-			"notes": "### ✨ New\n\n- **Show What's New in the Help menu.** Open the window with what changed whenever you want. If this version has no notes of its own, it shows the latest ones.\n\n### 🐛 Fixed\n\n- After an update, PiCode no longer sends you to the repository's release list in your browser; you only see its own What's New window."
 		}
 	]
 }
