@@ -294,3 +294,14 @@ test("with npm's CLI script, the runtime update runs node over it: no shell, the
 	assert.strictEqual(npm.options.env.ELECTRON_RUN_AS_NODE, '1');
 	assert.strictEqual(npm.options.env.PI_CODING_AGENT_DIR, '/profile');
 });
+
+test("with the package list known, the update leaves the packages to the editor's own hidden runs", async () => {
+	const spawn = spawnAnswering({ ok: true, stderr: '' });
+	const result = await runPiUpdate({ cliEntry: '/runtime/cli.js', runtimeDir: '/runtime', profileDir: '/profile', spawn, skipPackages: true });
+
+	assert.deepStrictEqual(result, { ok: true, message: 'PiCode updated.' });
+	// Only the runtime's npm run: `pi update --extensions` would open a console window per package.
+	assert.strictEqual(spawn.calls.length, 1);
+	assert.strictEqual(spawn.calls[0].file, 'npm');
+	assert.strictEqual(spawn.calls[0].options.windowsHide, true);
+});
