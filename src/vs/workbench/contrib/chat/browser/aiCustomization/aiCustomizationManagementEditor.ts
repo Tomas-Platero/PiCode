@@ -31,8 +31,6 @@ import { IEditorOpenContext } from '../../../../common/editor.js';
 import { IEditorGroup } from '../../../../services/editor/common/editorGroupsService.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IContextKey, IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
-import { WorkbenchList } from '../../../../../platform/list/browser/listService.js';
-import { IListVirtualDelegate, IListRenderer } from '../../../../../base/browser/ui/list/list.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
@@ -40,6 +38,9 @@ import { basename, dirname, isEqual } from '../../../../../base/common/resources
 import { URI } from '../../../../../base/common/uri.js';
 import { AICustomizationManagementEditorInput } from './aiCustomizationManagementEditorInput.js';
 import { aiCustomizationManagementSectionRegistry, IAICustomizationManagementSectionWidget } from './aiCustomizationManagementSectionRegistry.js';
+import { PicodeSettingsNav } from './picodeSettingsNav.js';
+import { normalizeSettingsQuery } from '../../../picode/browser/settings/picodeSettingsData.js';
+import { IPreferencesService } from '../../../../services/preferences/common/preferences.js';
 import { AICustomizationListWidget } from './aiCustomizationListWidget.js';
 import type { IAICustomizationItemSource } from './aiCustomizationItemSource.js';
 import { IAICustomizationItemsModel, ITEMS_MODEL_SECTIONS, filterVisibleSectionItems } from './aiCustomizationItemsModel.js';
@@ -220,58 +221,6 @@ interface IExistingCustomizationSaveRequest {
 	readonly projectRoot?: URI;
 }
 
-class SectionItemDelegate implements IListVirtualDelegate<ISectionItem> {
-	getHeight(): number {
-		return 26;
-	}
-
-	getTemplateId(): string {
-		return 'sectionItem';
-	}
-}
-
-interface ISectionItemTemplateData {
-	readonly container: HTMLElement;
-	readonly icon: HTMLElement;
-	readonly label: HTMLElement;
-	readonly count: HTMLElement;
-	readonly templateDisposables: DisposableStore;
-}
-
-class SectionItemRenderer implements IListRenderer<ISectionItem, ISectionItemTemplateData> {
-	readonly templateId = 'sectionItem';
-
-	constructor(private readonly hoverService: IHoverService) { }
-
-	renderTemplate(container: HTMLElement): ISectionItemTemplateData {
-		container.classList.add('section-list-item');
-		const icon = DOM.append(container, $('.section-icon'));
-		const label = DOM.append(container, $('.section-label'));
-		const count = DOM.append(container, $('.section-count'));
-		const templateDisposables = new DisposableStore();
-		return { container, icon, label, count, templateDisposables };
-	}
-
-	renderElement(element: ISectionItem, index: number, templateData: ISectionItemTemplateData): void {
-		templateData.templateDisposables.clear();
-		templateData.icon.className = 'section-icon';
-		templateData.icon.classList.add(...ThemeIcon.asClassNameArray(element.icon));
-		templateData.label.textContent = element.label;
-		if (element.count > 0) {
-			templateData.count.textContent = String(element.count);
-			templateData.count.style.display = '';
-		} else {
-			templateData.count.textContent = '';
-			templateData.count.style.display = 'none';
-		}
-		templateData.templateDisposables.add(this.hoverService.setupManagedHover(getDefaultHoverDelegate('element'), templateData.container, element.description));
-	}
-
-	disposeTemplate(templateData: ISectionItemTemplateData): void {
-		templateData.templateDisposables.dispose();
-	}
-}
-
 //#endregion
 
 /**
@@ -287,8 +236,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 	private splitViewContainer!: HTMLElement;
 	private splitView!: SplitView<number>;
 	private sidebarContainer!: HTMLElement;
-	private sectionsListContainer: HTMLElement | undefined;
-	private sectionsList!: WorkbenchList<ISectionItem>;
+	private sectionsNav: PicodeSettingsNav | undefined;
 	private contentContainer!: HTMLElement;
 	private listWidget!: AICustomizationListWidget;
 	private mcpListWidget: McpListWidget | undefined;
@@ -384,7 +332,6 @@ export class AICustomizationManagementEditor extends EditorPane {
 	private _editorContentChanged = false;
 	private _previousActiveHarnessId: string | undefined;
 
-	private sidebarHeaderContainer: HTMLElement | undefined;
 	private homeButton: HTMLElement | undefined;
 	private homeButtonIcon: HTMLElement | undefined;
 	private homeButtonLabel: HTMLElement | undefined;
@@ -416,6 +363,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 		@IMarkdownRendererService private readonly markdownRendererService: IMarkdownRendererService,
 		@IModelService private readonly modelService: IModelService,
 		@IQuickInputService private readonly quickInputService: IQuickInputService,
+		@IPreferencesService private readonly preferencesService: IPreferencesService,
 		@IFileService private readonly fileService: IFileService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IDialogService private readonly dialogService: IDialogService,
@@ -472,8 +420,8 @@ export class AICustomizationManagementEditor extends EditorPane {
 		const savedSection = this.storageService.get(AI_CUSTOMIZATION_MANAGEMENT_SELECTED_SECTION_KEY, StorageScope.PROFILE);
 		if (savedSection && this.sections.some(s => s.id === savedSection)) {
 			this.selectedSection = savedSection as AICustomizationManagementSection;
-		} else if (this.sections.some(s => s.id === AICustomizationManagementSection.Status)) {
-			this.selectedSection = AICustomizationManagementSection.Status; // Status is the home page
+		} else if (this.sections.some(s => s.id === AICustomizationManagementSection.General)) {
+			this.selectedSection = AICustomizationManagementSection.General; // PiCode: Settings opens on General
 		} else {
 			this.selectedSection = undefined; // Show welcome page
 		}
@@ -605,10 +553,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 		}
 
 		// Update the list widget if it exists
-		if (this.sectionsList) {
-			this.sectionsList.splice(0, this.sectionsList.length, this.sections);
-			this.layoutSidebar(this.sidebarWidth, this.sidebarHeight);
-		}
+		this.sectionsNav?.setItems(this.sections);
 
 		// Rebuild welcome cards to reflect new visible sections
 		this.welcomePage?.rebuildCards(new Set(this.sections.map(s => s.id)));
@@ -627,42 +572,19 @@ export class AICustomizationManagementEditor extends EditorPane {
 		this.createSidebarHeader(sidebarContent);
 
 		// Main sections list container (takes remaining space)
-		const sectionsListContainer = this.sectionsListContainer = DOM.append(sidebarContent, $('.sidebar-sections-list'));
-
-		this.sectionsList = this.editorDisposables.add(this.instantiationService.createInstance(
-			WorkbenchList<ISectionItem>,
-			'AICustomizationManagementSections',
-			sectionsListContainer,
-			new SectionItemDelegate(),
-			[new SectionItemRenderer(this.hoverService)],
-			{
-				multipleSelectionSupport: false,
-				setRowLineHeight: false,
-				horizontalScrolling: false,
-				accessibilityProvider: {
-					getAriaLabel: (item: ISectionItem) => item.count > 0
-						? localize('sectionAriaLabelWithCount', "{0}, {1} items", item.label, item.count)
-						: item.label,
-					getWidgetAriaLabel: () => localize('sectionsAriaLabel', "Agent Customization Sections"),
-				},
-				openOnSingleClick: true,
-				identityProvider: {
-					getId: (item: ISectionItem) => item.id,
-				},
-			}
-		));
-
-		this.sectionsList.splice(0, this.sectionsList.length, this.sections);
+		// PiCode: the side list is the Settings window's own: grouped pages, a search box and a
+		// sliding marker, instead of the editor's flat virtual list.
+		const nav = this.sectionsNav = this.editorDisposables.add(new PicodeSettingsNav(sidebarContent, {
+			getKeywords: id => aiCustomizationManagementSectionRegistry.get(id, this.harnessService.activeHarness.get())?.keywords ?? [],
+			openAllSettings: query => void this.preferencesService.openUserSettings({ query, jsonEditor: false }),
+		}));
+		nav.setItems(this.sections);
 		this.ensureSectionsListReflectsActiveSection();
-
-		this.editorDisposables.add(this.sectionsList.onDidChangeSelection(e => {
-			if (e.elements.length === 0) {
-				if (this.selectedSection !== undefined) {
-					this.showWelcomePage();
-				}
-				return;
+		this.editorDisposables.add(nav.onDidSelect(({ id, query }) => {
+			this.selectSection(id);
+			if (query) {
+				this.highlightMatchingRow(query);
 			}
-			this.selectSection(e.elements[0].id);
 		}));
 
 		// React to harness changes — rebuild visible sections and refresh counts.
@@ -706,25 +628,12 @@ export class AICustomizationManagementEditor extends EditorPane {
 	private layoutSidebar(width: number, height: number): void {
 		this.sidebarWidth = width;
 		this.sidebarHeight = height;
-		if (!this.sectionsListContainer) {
-			return;
-		}
-
-		// Subtract sidebar-content padding (4px each side = 8px), the fixed header,
-		// and the optional migration row so the sections list only occupies the
-		// space it needs and the migration entry can sit directly beneath it.
-		const headerHeight = this.sidebarHeaderContainer?.offsetHeight ?? 0;
-		const migrationHeight = this.migrationShortcutContainer?.style.display !== 'none'
-			? (this.migrationShortcutContainer?.offsetHeight ?? 0)
-			: 0;
-		const availableListHeight = Math.max(0, height - 8 - headerHeight - migrationHeight);
-		const listHeight = Math.min(availableListHeight, this.sections.length * 26);
-		this.sectionsListContainer.style.height = `${listHeight}px`;
-		this.sectionsList.layout(listHeight, width);
+		this.sectionsNav?.layout();
 	}
 
+
 	private createSidebarHeader(sidebarContent: HTMLElement): void {
-		const headerRow = this.sidebarHeaderContainer = DOM.append(sidebarContent, $('.sidebar-header-row'));
+		const headerRow = DOM.append(sidebarContent, $('.sidebar-header-row'));
 
 		// Home/overview button
 		const homeButton = this.homeButton = DOM.append(headerRow, $('button.sidebar-home-button'));
@@ -1037,7 +946,8 @@ export class AICustomizationManagementEditor extends EditorPane {
 		}
 
 		// Container for Tools content.
-		if (hasSections.has(AICustomizationManagementSection.Tools)) {
+		// PiCode: a contributed Tools page (pi's own tools) replaces the built-in one, as with MCP.
+		if (hasSections.has(AICustomizationManagementSection.Tools) && !aiCustomizationManagementSectionRegistry.has(AICustomizationManagementSection.Tools)) {
 			this.toolsContentContainer = DOM.append(contentInner, $('.tools-content-container'));
 			// Tools customizations only target the agent host (Copilot CLI), in both windows.
 			this.toolsListWidget = this.editorDisposables.add(this.instantiationService.createInstance(ToolsListWidget, AGENT_HOST_COPILOT_CLI_SESSION_TYPE));
@@ -1850,9 +1760,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 			return;
 		}
 		section.count = count;
-		// Re-splice the sections list to trigger re-render
-		this.sectionsList.splice(0, this.sectionsList.length, this.sections);
-		this.ensureSectionsListReflectsActiveSection();
+		this.sectionsNav?.setItems(this.sections);
 	}
 
 	//#endregion
@@ -1972,32 +1880,31 @@ export class AICustomizationManagementEditor extends EditorPane {
 	}
 
 	private ensureSectionsListReflectsActiveSection(section: AICustomizationManagementSection | undefined = this.selectedSection): void {
-		if (!this.sectionsList) {
-			return;
-		}
-
-		if (section === undefined) {
-			// Welcome page — deselect all
-			this.sectionsList.setSelection([]);
-			this.sectionsList.setFocus([]);
-			return;
-		}
-
-		const index = this.sections.findIndex(s => s.id === section);
-		if (index < 0) {
-			return;
-		}
-
-		const selection = this.sectionsList.getSelection();
-		if (selection.length !== 1 || selection[0] !== index) {
-			this.sectionsList.setSelection([index]);
-		}
-
-		const focus = this.sectionsList.getFocus();
-		if (focus.length !== 1 || focus[0] !== index) {
-			this.sectionsList.setFocus([index]);
-		}
+		this.sectionsNav?.setSelected(section);
 	}
+
+	/**
+	 * PiCode: lights up the first row of the visible page whose text matches the search, and
+	 * scrolls it into view. Used when a page is reached from the search box or from a button
+	 * elsewhere in the editor that points at one setting.
+	 */
+	public highlightMatchingRow(query: string): void {
+		const container = this.selectedSection ? this.contributedSectionContainers.get(this.selectedSection) : undefined;
+		const needle = normalizeSettingsQuery(query);
+		if (!container || !needle) {
+			return;
+		}
+		const rows = container.querySelectorAll<HTMLElement>('[data-picode-setting-row]');
+		const row = [...rows].find(r => normalizeSettingsQuery(`${r.textContent ?? ''} ${r.dataset.picodeSettingRow ?? ''}`).includes(needle));
+		if (!row) {
+			return;
+		}
+		row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		row.classList.remove('picode-row-flash');
+		void row.offsetWidth; // restart the animation when the same row is asked for twice
+		row.classList.add('picode-row-flash');
+	}
+
 
 	private updateContentVisibility(): void {
 		const isEditorMode = this.viewMode === 'editor';

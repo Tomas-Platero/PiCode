@@ -282,6 +282,10 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.openAgentProfiles', "Open agent profiles");
 		case 'openCloudSync':
 			return localize('picodeWhatsNew.openCloudSync', "Open Cloud sync");
+		case 'openSettings':
+			return localize('picodeWhatsNew.openSettings', "Open Settings");
+		case 'openThemes':
+			return localize('picodeWhatsNew.openThemes', "Browse themes");
 	}
 }
 
@@ -343,6 +347,14 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 			close();
 			void services.commandService.executeCommand(OPEN_ACCOUNT_COMMAND, 'sync');
 			return;
+		case 'openSettings':
+			close();
+			void services.commandService.executeCommand(OPEN_SETTINGS_COMMAND);
+			return;
+		case 'openThemes':
+			close();
+			void services.commandService.executeCommand('aiCustomization.openManagementEditor', 'themes');
+			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
 			void services.configurationService.updateValue(FILE_LIST_SETTING, !services.configurationService.getValue<boolean>(FILE_LIST_SETTING)).then(rerender);
@@ -401,6 +413,8 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	setup: setupPreview,
 	agentProfiles: agentProfilesPreview,
 	syncParts: syncPartsPreview,
+	settings: settingsPreview,
+	themes: themesPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -582,6 +596,98 @@ function syncPartsPreview(parent: HTMLElement, store: DisposableStore): void {
 	append(keys, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.lock)}`));
 	append(keys, $('span.picode-whatsnew-row-detail')).textContent = localize('picodeSyncKeysStay', "Keys and sign-ins stay on each computer: MCP servers and providers travel without them.");
 	count();
+}
+
+function themesPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.themes.demo', "Click a theme to pick it. Nothing really changes here."), store);
+	const themes = [
+		{ name: 'Midnight', bg: '#0d1117', side: '#161b22', fg: '#c9d1d9', k: '#ff7b72', s: '#a5d6ff', f: '#d2a8ff' },
+		{ name: 'Paper', bg: '#ffffff', side: '#f3f3f3', fg: '#24292f', k: '#cf222e', s: '#0a3069', f: '#8250df' },
+		{ name: 'Forest', bg: '#1e2a22', side: '#18221b', fg: '#d8e4d0', k: '#e6b673', s: '#9ccf8a', f: '#7fc8c2' },
+		{ name: 'Rose', bg: '#2a1f2b', side: '#221923', fg: '#ecdce6', k: '#f28fad', s: '#f8bd96', f: '#c6a0f6' },
+	];
+	const grid = append(parent, $('.picode-whatsnew-themes'));
+	const result = append(parent, $('.picode-whatsnew-sync-result'));
+	const cards: HTMLElement[] = [];
+	const choose = (index: number) => {
+		cards.forEach((card, i) => card.classList.toggle('active', i === index));
+		result.textContent = localize('picodeWhatsNew.themes.result', "{0} is your theme now.", themes[index].name);
+	};
+	themes.forEach((theme, index) => {
+		const card = append(grid, $('button.picode-whatsnew-theme', { type: 'button' }));
+		const win = append(card, $('.picode-whatsnew-theme-window'));
+		win.style.background = theme.bg;
+		const side = append(win, $('.picode-whatsnew-theme-side'));
+		side.style.background = theme.side;
+		const code = append(win, $('.picode-whatsnew-theme-code'));
+		for (const [text, color] of [['const', theme.k], [' "pi"', theme.s], [' run()', theme.f]]) {
+			const span = append(code, $('span'));
+			span.textContent = text;
+			span.style.color = color;
+		}
+		code.style.color = theme.fg;
+		append(card, $('span.picode-whatsnew-theme-name')).textContent = theme.name;
+		store.add(addDisposableListener(card, EventType.CLICK, () => choose(index)));
+		cards.push(card);
+	});
+	choose(0);
+}
+
+function settingsPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.settings.demo', "Pick a group, then a page. Nothing really changes here."), store);
+	const groups = [
+		{
+			id: 'preferences', label: localize('picodeSettingsGroupPreferences', "Preferences"), pages: [
+				{ icon: Codicon.settings, label: localize('picodePrefGeneral', "General"), detail: localize('picodeWhatsNew.settings.general', "Theme, layout, language and zoom") },
+				{ icon: Codicon.robot, label: localize('picodePrefChat', "Chat and agent"), detail: localize('picodeWhatsNew.settings.chat', "How hard pi thinks and what it is told") },
+				{ icon: Codicon.cloudDownload, label: localize('picodePrefUpdates', "Updates"), detail: localize('picodeWhatsNew.settings.updates', "PiCode, pi and its packages, in one place") },
+			]
+		},
+		{
+			id: 'account', label: localize('picodeSettingsGroupAccount', "Account"), pages: [
+				{ icon: Codicon.account, label: localize('picodeAccountOverviewLabel', "Overview"), detail: localize('picodeWhatsNew.settings.overview', "Your plan and what Pro brings") },
+				{ icon: Codicon.cloud, label: localize('picodeSyncLabel', "Cloud sync"), detail: localize('picodeWhatsNew.settings.sync', "What travels with you, part by part") },
+				{ icon: Codicon.shield, label: localize('picodeAccountPrivacy', "Privacy"), detail: localize('picodeWhatsNew.settings.privacy', "What PiCode sends, and what it never sends") },
+			]
+		},
+		{
+			id: 'agent', label: localize('picodeSettingsGroupAgent', "Agent"), pages: [
+				{ icon: Codicon.vm, label: localize('picodeWhatsNew.settings.providersLabel', "Providers and models"), detail: localize('picodeWhatsNew.settings.providers', "Your providers, models and agent profiles") },
+				{ icon: Codicon.tools, label: localize('picodeToolsLabel', "Tools"), detail: localize('picodeWhatsNew.settings.tools', "Turn off what pi should not use") },
+				{ icon: Codicon.graph, label: localize('picodeUsageLimitsSectionLabel', "Usage limits"), detail: localize('picodeWhatsNew.settings.limits', "How much of each plan is left") },
+			]
+		},
+	];
+	const tabs = append(parent, $('.picode-whatsnew-tabs', { role: 'tablist' }));
+	const list = append(parent, $('.picode-whatsnew-list'));
+	const result = append(parent, $('.picode-whatsnew-sync-result'));
+	const draw = (groupId: string) => {
+		for (const tab of Array.from(tabs.children)) {
+			tab.classList.toggle('active', (tab as HTMLElement).dataset.group === groupId);
+		}
+		const group = groups.find(candidate => candidate.id === groupId)!;
+		clearNode(list);
+		const rows: HTMLElement[] = [];
+		const choose = (index: number) => {
+			rows.forEach((row, i) => row.classList.toggle('active', i === index));
+			result.textContent = group.pages[index].detail;
+		};
+		group.pages.forEach((page, index) => {
+			const row = append(list, $('button.picode-whatsnew-row', { type: 'button' }));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(page.icon)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = page.label;
+			store.add(addDisposableListener(row, EventType.CLICK, () => choose(index)));
+			rows.push(row);
+		});
+		choose(0);
+	};
+	for (const group of groups) {
+		const tab = append(tabs, $('button.picode-whatsnew-tab', { type: 'button', role: 'tab' }));
+		tab.dataset.group = group.id;
+		tab.textContent = group.label;
+		store.add(addDisposableListener(tab, EventType.CLICK, () => draw(group.id)));
+	}
+	draw('preferences');
 }
 
 function importPreview(parent: HTMLElement, store: DisposableStore): void {

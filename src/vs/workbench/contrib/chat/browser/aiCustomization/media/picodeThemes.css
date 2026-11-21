@@ -1,0 +1,288 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The theme gallery of the Settings window: each theme as a small window in its own colours. */
+
+.picode-set-page-inner.wide {
+	max-width: 1040px;
+}
+
+.picode-themes-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin: 14px 0 6px;
+}
+
+.picode-themes-search {
+	flex: 1 1 220px;
+	max-width: 320px;
+	margin: 0;
+}
+
+.picode-themes-filters {
+	display: flex;
+	gap: 6px;
+}
+
+.picode-themes-chip {
+	height: 26px;
+	padding: 0 12px;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 18%, transparent);
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.picode-themes-chip:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-themes-chip[aria-pressed="true"] {
+	border-color: transparent;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-themes-note {
+	min-height: 18px;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-themes-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+	gap: 14px;
+}
+
+.picode-theme-card {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px;
+	border-radius: 12px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	color: var(--vscode-foreground);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.monaco-enable-motion .picode-theme-card {
+	transition: transform 160ms var(--picode-settings-ease), border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.picode-theme-card:hover,
+.picode-theme-card:focus-visible {
+	border-color: color-mix(in srgb, var(--vscode-focusBorder) 70%, transparent);
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+	outline: none;
+}
+
+.monaco-enable-motion .picode-theme-card:hover {
+	transform: translateY(-2px);
+}
+
+.picode-theme-card.current {
+	border-color: var(--vscode-button-background);
+	box-shadow: 0 0 0 1px var(--vscode-button-background);
+}
+
+.picode-theme-card.busy {
+	opacity: 0.6;
+	cursor: progress;
+}
+
+/* The small window. */
+.picode-theme-preview {
+	position: relative;
+	aspect-ratio: 16 / 10;
+	overflow: hidden;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+	display: flex;
+	flex-direction: column;
+	--tp-bg: transparent;
+}
+
+.picode-theme-preview.painted {
+	background: var(--tp-bg);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tp-fg) 12%, transparent);
+}
+
+.tp-title {
+	flex: 0 0 14%;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 0 7px;
+	background: var(--tp-title);
+}
+
+.tp-dot {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--tp-fg) 45%, transparent);
+}
+
+.tp-dot:first-child {
+	background: var(--tp-accent);
+}
+
+.tp-body {
+	flex: 1;
+	display: flex;
+	min-height: 0;
+}
+
+.tp-side {
+	flex: 0 0 26%;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 7px;
+	background: var(--tp-side);
+}
+
+.tp-file {
+	height: 4px;
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--tp-fg) 35%, transparent);
+}
+
+.tp-file:first-child {
+	background: var(--tp-accent);
+}
+
+.tp-code {
+	flex: 1;
+	padding: 7px 8px;
+	font-family: var(--monaco-monospace-font, monospace);
+	font-size: 9px;
+	line-height: 1.6;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.tp-ln {
+	display: inline-block;
+	width: 12px;
+	color: var(--tp-ln);
+}
+
+.picode-theme-check {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	z-index: 1;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-theme-check .codicon {
+	font-size: 13px;
+}
+
+.picode-theme-card.current .picode-theme-check {
+	display: flex;
+}
+
+.picode-theme-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 0 2px 2px;
+}
+
+.picode-theme-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.picode-theme-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.picode-theme-detail {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-theme-action {
+	flex: 0 0 auto;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-theme-action.done {
+	background: color-mix(in srgb, var(--vscode-charts-green) 20%, transparent);
+	color: var(--vscode-charts-green);
+}
+
+/* While the gallery answers. */
+.picode-theme-card.skeleton {
+	height: 170px;
+	cursor: default;
+	background: linear-gradient(90deg,
+		color-mix(in srgb, var(--vscode-foreground) 5%, transparent) 25%,
+		color-mix(in srgb, var(--vscode-foreground) 10%, transparent) 50%,
+		color-mix(in srgb, var(--vscode-foreground) 5%, transparent) 75%);
+	background-size: 200% 100%;
+}
+
+.monaco-enable-motion .picode-theme-card.skeleton {
+	animation: picode-themes-shimmer 1.2s linear infinite;
+}
+
+@keyframes picode-themes-shimmer {
+	from { background-position: 200% 0; }
+	to { background-position: -200% 0; }
+}
+
+.picode-themes-empty {
+	grid-column: 1 / -1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	padding: 40px 0;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-themes-more {
+	display: flex;
+	justify-content: center;
+	padding: 18px 0 6px;
+}
+
+.picode-themes-more:empty {
+	display: none;
+}

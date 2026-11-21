@@ -91,7 +91,7 @@ class PicodeAgentSessionsView extends ViewPane {
 		// Whether a new session works in a worktree is chosen under the chat, with its "Worktree" box.
 		row(Codicon.add, localize('picode.sessions.new', "New session"), createNewChat);
 		row(PICODE_AGENT_SEARCH_ICON, localize('picode.sessions.search', "Search"), () => this.commandService.executeCommand(PICODE_AGENT_SEARCH_COMMAND_ID));
-		row(PICODE_CUSTOMIZATION_ICON, localize('picode.sessions.customization', "Customization"), () => this.commandService.executeCommand(PICODE_CUSTOMIZATION_COMMAND_ID));
+		row(PICODE_CUSTOMIZATION_ICON, localize('picode.sessions.customization', "Customization"), () => this.commandService.executeCommand(PICODE_CUSTOMIZATION_COMMAND_ID, 'status'));
 
 		// The workspace's projects, then the conversations: the column says what the chat works on.
 		const projects = this._register(this.instantiationService.createInstance(PicodeAgentProjects, actions));

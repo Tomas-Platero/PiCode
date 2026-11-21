@@ -418,6 +418,7 @@
 	"The download failed. Nothing was changed.": "The download failed. Nothing was changed.",
 	"The downloaded engine did not report the expected version. Nothing was changed.": "The downloaded engine did not report the expected version. Nothing was changed.",
 	"The engine could not be installed: {0}. Nothing was changed.": "The engine could not be installed: {0}. Nothing was changed.",
+	"The extension “{0}” could not load, so it is off in this chat.": "The extension “{0}” could not load, so it is off in this chat.",
 	"The first {0} steps are not shown.": "The first {0} steps are not shown.",
 	"The folder of this conversation is no longer there.": "The folder of this conversation is no longer there.",
 	"The installed engine did not answer. The previous one was restored.": "The installed engine did not answer. The previous one was restored.",

@@ -202,6 +202,7 @@ registerAccountSection({
 	id: 'connections',
 	label: localize('picodeConnectionsLabel', "Connections"),
 	icon: Codicon.plug,
-	order: 15,
+	description: localize('picodeConnectionsDescription', "GitHub and Jira issues in PiCode."),
+	keywords: ['github', 'jira', 'issues', 'connect'],
 	create: (instantiationService: IInstantiationService, container: HTMLElement) => instantiationService.createInstance(PicodeConnectionsSection, container),
 });

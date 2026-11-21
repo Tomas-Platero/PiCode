@@ -79,7 +79,15 @@ mkdir -p "${TARGET}"
 # longer ships `npm-shrinkwrap.json`, so its transitive dependencies resolve at install time
 # and a lockfile of our own is the only thing that could hold them - the direct version is
 # therefore the only pin left to keep exact.
-npm install --prefix "${TARGET}" --no-audit --no-fund --loglevel=error --save-exact "${PACKAGE}@${VERSION}"
+#
+# A dependency published a moment ago can be listed before its download exists (a 404 on the
+# tarball: it broke the 2.4.3 release on 2026-11-21). One retry then takes only what was
+# published until an hour ago, which leaves out that half-published version and nothing else.
+if ! npm install --prefix "${TARGET}" --no-audit --no-fund --loglevel=error --save-exact "${PACKAGE}@${VERSION}"; then
+	BEFORE="$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)"
+	echo "pi: the install failed; trying again with what was published before ${BEFORE}." >&2
+	npm install --prefix "${TARGET}" --no-audit --no-fund --loglevel=error --save-exact --before="${BEFORE}" "${PACKAGE}@${VERSION}"
+fi
 
 # The check that matters: the connector looks for this exact file, and a runtime that
 # installed "successfully" without it would leave the editor saying it cannot find pi.
