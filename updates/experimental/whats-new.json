@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.6-experimental",
+			"notes": "### ✨ New\n\n- **Gentle AI has a page of its own.** In Settings, right under Agents: how your agents talk to you, what they may do without asking, and a new switch that lets them keep long jobs running while you keep chatting. You will find those jobs in Tasks.\n\n### 🐛 Fixed\n\n- **Finished background jobs look right again.** When a job ends, the chat shows its card with how it went and its last lines of output, instead of raw text full of odd boxes left by terminal colours."
+		},
+		{
 			"version": "2.4.5-experimental",
 			"notes": "### 🐛 Fixed\n\n- **pi gets going much sooner.** Opening a window used to get pi ready up to three times over, and the editor froze while it did. Now it gets ready once, and your model list and slash commands show up right away.\n- **Updates no longer stop at \"Access denied\".** When an update installs as you close PiCode, the memory helper now closes first, so the installer can finish."
 		},
@@ -115,10 +119,6 @@
 		{
 			"version": "1.0.4-experimental",
 			"notes": "### 🐛 Fixed\n\n- chat, Status and memory polish, pasted images reach pi; release v1.0.4-experimental (#151)"
-		},
-		{
-			"version": "1.0.3-experimental",
-			"notes": "### ✨ New\n\n- **A cleaner Agent layout.** The chat no longer has a \"Chat / Ports\" row above it, the sessions column reaches the bottom of the window, and the \"Pi\" picker under the message box is gone.\n- **Thinking level as a dropdown.** Pick how hard the AI thinks from a small list under its button, like the model picker.\n- **Reasoning and command cards, tidied.** The AI's reasoning reads calmer, and an opened command card now shows the command that ran and what it printed.\n- **White logos on dark themes.** GitHub and similar dark logos are readable again.\n\n### 🐛 Fixed\n\n- The command box of a finished tool call no longer comes up empty.\n- On the MCP servers page, \"Needs sign-in\" no longer hides behind the sign-in button."
 		}
 	]
 }
