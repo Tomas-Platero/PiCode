@@ -34,6 +34,8 @@ import type { EngramProject } from './engram';
 import {
 	memoryDetailMarkdown,
 	memoryDoctorMarkdown,
+	memoryDoctorSummary,
+	type MemoryDoctorSummary,
 	memoryWhen,
 	parseMemoryConflicts,
 	parseMemoryDetail,
@@ -808,6 +810,12 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		await vscode.window.showTextDocument(document, { preview: true });
 	}
 
+	/** The engine's own check, summed up for the Settings page (`undefined` when the engine does not answer). */
+	async doctorSummary(): Promise<MemoryDoctorSummary | undefined> {
+		const report = parseMemoryDoctor(await this.getJson('/doctor'));
+		return report === undefined ? undefined : memoryDoctorSummary(report);
+	}
+
 	/** The engine's own check, in a tab: what it looked at and what it found. */
 	async openDoctor(): Promise<void> {
 		const report = parseMemoryDoctor(await this.getJson('/doctor'));
@@ -955,6 +963,8 @@ export function registerMemoryView(): vscode.Disposable {
 			}
 		}),
 		vscode.commands.registerCommand(MEMORY_CHECK_COMMAND, () => provider.openDoctor()),
+		// The same check, as data: Settings shows it in place instead of opening a document.
+		vscode.commands.registerCommand('picode.memory.checkSummary', () => provider.doctorSummary()),
 		vscode.commands.registerCommand(MEMORY_UPDATE_COMMAND, () => provider.updateEngine()),
 		vscode.commands.registerCommand(MEMORY_COPY_COMMAND, (row: MemoryRow | undefined) => {
 			if (row !== undefined && typeof row.id === 'number') {

@@ -104,6 +104,11 @@ export class PicodeSettingsPage extends Disposable {
 		this.body = DOM.append(this.inner, $('.picode-set-group'));
 	}
 
+	/** A free block in the current group, for content that is not a row (a list, a result). */
+	block(className: string): HTMLElement {
+		return DOM.append(this.body, $(`.${className}`));
+	}
+
 	/** A row with a control the caller builds; returns the control cell. */
 	row(row: IPicodeSettingRow): HTMLElement {
 		const el = DOM.append(this.body, $('.picode-set-row'));
@@ -169,8 +174,20 @@ export class PicodeSettingsPage extends Disposable {
 		this._register(DOM.addDisposableListener(input, DOM.EventType.CHANGE, () => set(input.checked, saved)));
 	}
 
-	segmentedRow<T extends string | number>(row: IPicodeChoiceRow<T>): void {
+	/** Returns the control, so a page can lock an option it finds unavailable (`lockChoice`). */
+	segmentedRow<T extends string | number>(row: IPicodeChoiceRow<T>): HTMLElement {
 		this.customSegmentedRow(row, row.choices, () => this.read(row), (value, saved) => this.save(row, value, saved), [row.key]);
+		return this.body.lastElementChild?.querySelector<HTMLElement>('.picode-set-segmented') ?? this.body;
+	}
+
+	/** Greys out one option of a segmented control and says why on hover. */
+	lockChoice(control: HTMLElement, value: string | number, reason: string): void {
+		const button = control.querySelector<HTMLButtonElement>(`.picode-set-segment[data-value="${String(value)}"]`);
+		if (button) {
+			button.disabled = true;
+			button.title = reason;
+			button.setAttribute('aria-disabled', 'true');
+		}
 	}
 
 	/**
@@ -189,6 +206,7 @@ export class PicodeSettingsPage extends Disposable {
 			const button = DOM.append(group, $('button.picode-set-segment')) as HTMLButtonElement;
 			button.type = 'button';
 			button.setAttribute('role', 'radio');
+			button.dataset.value = String(choice.value);
 			if (choice.icon) {
 				button.appendChild(renderIcon(choice.icon));
 			}
