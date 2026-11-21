@@ -654,5 +654,6 @@
 	"🤖 Answers": "🤖 回答",
 	"🧠 Model": "🧠 モデル",
 	"🧠 Thinking set to **{0}**.": "🧠 思考レベルを**{0}**に設定しました。",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 思考: **{0}**。`/thinking <level>`で選べます: {1}。"
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 思考: **{0}**。`/thinking <level>`で選べます: {1}。",
+	"The extension “{0}” could not load, so it is off in this chat.": "拡張機能「{0}」を読み込めなかったため、このチャットではオフになっています。"
 }

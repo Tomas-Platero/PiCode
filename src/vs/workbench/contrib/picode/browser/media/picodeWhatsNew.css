@@ -909,3 +909,63 @@ button.picode-whatsnew-row {
 	text-align: left;
 	cursor: pointer;
 }
+
+/* The Settings demo: the page picked in its list is lit, like the window's own side list. */
+button.picode-whatsnew-row.active {
+	border-radius: 6px;
+	background: var(--vscode-list-inactiveSelectionBackground, var(--vscode-list-hoverBackground));
+	font-weight: 600;
+}
+
+button.picode-whatsnew-row:hover:not(.active) {
+	background: var(--vscode-list-hoverBackground);
+}
+
+/* The theme gallery demo: four small windows in their own colours, the picked one lit. */
+.picode-whatsnew-themes {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 10px;
+}
+
+button.picode-whatsnew-theme {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 6px;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+button.picode-whatsnew-theme.active {
+	border-color: var(--vscode-button-background);
+	box-shadow: 0 0 0 1px var(--vscode-button-background);
+}
+
+.picode-whatsnew-theme-window {
+	display: flex;
+	height: 54px;
+	overflow: hidden;
+	border-radius: 6px;
+}
+
+.picode-whatsnew-theme-side {
+	flex: 0 0 24%;
+}
+
+.picode-whatsnew-theme-code {
+	padding: 8px;
+	font-family: var(--monaco-monospace-font, monospace);
+	font-size: 10px;
+	white-space: nowrap;
+}
+
+.picode-whatsnew-theme-name {
+	font-size: 12px;
+	font-weight: 600;
+}

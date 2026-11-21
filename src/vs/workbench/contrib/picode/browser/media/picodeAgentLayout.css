@@ -882,22 +882,39 @@
 }
 
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-agent) {
+	display: flex;
+	align-items: center;
 	border-right: none;
 	border-radius: 999px 0 0 999px;
 	padding: 2px 0 2px 2px;
 }
 
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-editor) {
+	display: flex;
+	align-items: center;
 	border-left: none;
 	border-radius: 0 999px 999px 0;
+	/* The title bar spaces its buttons 4px apart (`gap`); the two halves of the track must touch. */
+	margin-left: -4px;
 	margin-right: 4px;
 	padding: 2px 2px 2px 0;
 }
 
 .part.titlebar .action-label.codicon-picode-layout-agent,
 .part.titlebar .action-label.codicon-picode-layout-editor {
-	width: 26px;
+	/* A round thumb of a fixed size, centred in the track. */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 30px;
+	height: 20px;
+	padding: 0;
+	margin: 0;
 	border-radius: 999px;
+	/* The toolbar's own "toggled" look (a light outline and background) is not this switch's. */
+	outline: none !important;
+	border: none !important;
 	color: var(--vscode-descriptionForeground);
 	opacity: 0.75;
 	transition: background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
@@ -908,6 +925,12 @@
 	color: var(--vscode-foreground);
 	opacity: 1;
 	background: transparent !important;
+}
+
+.part.titlebar .action-label.codicon-picode-layout-agent:focus-visible,
+.part.titlebar .action-label.codicon-picode-layout-editor:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder) !important;
+	outline-offset: 1px;
 }
 
 .part.titlebar .action-label.codicon-picode-layout-agent.checked,

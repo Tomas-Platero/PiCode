@@ -11,6 +11,7 @@ import { IDisposable } from '../../../../../../base/common/lifecycle.js';
 import { autorun } from '../../../../../../base/common/observable.js';
 import { localize, localize2 } from '../../../../../../nls.js';
 import { Action2, MenuId, MenuItemAction } from '../../../../../../platform/actions/common/actions.js';
+import { ICommandService } from '../../../../../../platform/commands/common/commands.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../../../platform/instantiation/common/instantiation.js';
@@ -125,6 +126,9 @@ function capitalize(level: string): string {
  */
 export class ThinkingPickerActionItem extends ChatInputPickerActionViewItem {
 
+	/** Reads again which levels the chat's model accepts (PiCode). */
+	private refreshAvailable: () => void = () => { };
+
 	constructor(
 		action: MenuItemAction,
 		pickerOptions: IChatInputPickerOptions,
@@ -133,9 +137,21 @@ export class ThinkingPickerActionItem extends ChatInputPickerActionViewItem {
 		@IContextKeyService contextKeyService: IContextKeyService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@ICommandService commandService: ICommandService,
 	) {
+		// PiCode: the levels the chat's model accepts, read from the connector and kept here, because
+		// the list is built synchronously when it opens. Some models refuse a level (GPT-6.2: `off`,
+		// `minimal`) and pi quietly uses the nearest one; the list says so instead.
+		let available: { readonly levels: readonly string[]; readonly model?: string } | undefined;
+		const refreshAvailable = () => {
+			void commandService.executeCommand<{ readonly levels: readonly string[]; readonly model?: string }>('picode.pi.availableThinkingLevels').then(
+				result => { available = result && Array.isArray(result.levels) && result.levels.length > 0 ? result : undefined; },
+				() => { available = undefined; },
+			);
+		};
 		const actionProvider: IActionWidgetDropdownActionProvider = {
 			getActions: () => {
+				refreshAvailable();
 				const current = toThinkingLevel(_configurationService.getValue<string | undefined>(PICODE_THINKING_LEVEL_SETTING));
 				const choose = (level: string | undefined) => async () => {
 					// Writing `undefined` clears the user setting so pi's own default applies.
@@ -145,16 +161,22 @@ export class ThinkingPickerActionItem extends ChatInputPickerActionViewItem {
 					{ level: undefined, label: localize('thinkingLevel.default', "Default"), detail: localize('thinkingLevel.defaultDescription', "pi's own level") },
 					...THINKING_LEVELS.map(level => ({ level, label: capitalize(level) })),
 				];
-				return entries.map(entry => ({
+				return entries.map(entry => {
+					const refused = entry.level !== undefined && available !== undefined && !available.levels.includes(entry.level);
+					const detail = refused
+						? (available?.model ? localize('picodeThinkingNotForModel', "Not with {0}", available.model) : localize('picodeThinkingNotForThisModel', "Not with this model"))
+						: entry.detail;
+					return {
 					...action,
 					id: `chat.thinking.${entry.level ?? 'default'}`,
 					label: entry.label,
-					...(entry.detail === undefined ? {} : { description: entry.detail }),
+					...(detail === undefined ? {} : { description: detail }),
 					checked: entry.level === current,
-					enabled: true,
+					enabled: !refused,
 					tooltip: '',
 					run: choose(entry.level),
-				} satisfies IActionWidgetDropdownAction));
+				} satisfies IActionWidgetDropdownAction;
+				});
 			}
 		};
 
@@ -163,6 +185,8 @@ export class ThinkingPickerActionItem extends ChatInputPickerActionViewItem {
 			reporter: { id: 'ChatThinkingPicker', name: 'ChatThinkingPicker', includeOptions: true },
 			listOptions: { minWidth: 240, ...pickerOptions.listOptions },
 		}, pickerOptions, actionWidgetService, keybindingService, contextKeyService, telemetryService);
+		this.refreshAvailable = refreshAvailable;
+		refreshAvailable();
 
 		// Repaint when the setting changes (including from the Settings editor).
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
@@ -181,6 +205,9 @@ export class ThinkingPickerActionItem extends ChatInputPickerActionViewItem {
 
 	override render(container: HTMLElement): void {
 		super.render(container);
+		// Read the model's levels before the list opens: on hover and on keyboard focus.
+		this._register(dom.addDisposableListener(container, dom.EventType.MOUSE_ENTER, () => this.refreshAvailable()));
+		this._register(dom.addDisposableListener(container, dom.EventType.FOCUS_IN, () => this.refreshAvailable()));
 		container.classList.add('chat-input-picker-item', 'chat-thinking-picker-item');
 	}
 

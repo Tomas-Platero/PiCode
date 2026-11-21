@@ -249,6 +249,12 @@ class PreferencesActionsContribution extends Disposable implements IWorkbenchCon
 				});
 			}
 			run(accessor: ServicesAccessor, args: string | IOpenSettingsActionOptions) {
+				// PiCode: Ctrl+, and the gear open PiCode's Settings window on General. A caller that
+				// asks for something specific (a search, the JSON file, a target) still gets the full
+				// list of editor settings, which the window also offers as "All settings".
+				if (args === undefined || args === null || (typeof args === 'object' && Object.keys(args).length === 0)) {
+					return accessor.get(ICommandService).executeCommand('aiCustomization.openManagementEditor', 'general');
+				}
 				// args takes a string for backcompat
 				const opts = typeof args === 'string' ? { query: args } : sanitizeOpenSettingsArgs(args);
 				return accessor.get(IPreferencesService).openSettings({ ...opts });
