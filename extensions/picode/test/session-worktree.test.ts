@@ -55,7 +55,7 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 function scratchRepo(): { readonly repo: string; readonly root: string } {
-	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'picode-wt-')));
+	const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'picode-wt-')));
 	const repo = path.join(root, 'app');
 	fs.mkdirSync(repo);
 	git(repo, 'init', '-q', '-b', 'master');
