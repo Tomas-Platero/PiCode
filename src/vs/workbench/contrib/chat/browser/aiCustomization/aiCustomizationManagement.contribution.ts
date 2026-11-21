@@ -727,7 +727,8 @@ class AICustomizationManagementActionsContribution extends Disposable implements
 					title: localize2('openAICustomizations', "Open Customizations"),
 					shortTitle: localize2('aiCustomizations', "Customizations"),
 					category: CHAT_CATEGORY,
-					precondition: ChatContextKeys.enabled,
+					// PiCode: no precondition. This is the Settings window, which must open even with
+					// the AI turned off (that is where it is turned back on).
 					f1: true,
 				});
 			}

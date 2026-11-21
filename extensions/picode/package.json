@@ -456,14 +456,14 @@
 					"id": "picode.status.tasks",
 					"name": "%view.tasks%",
 					"icon": "$(tasklist)",
-					"when": "!config.chat.disableAIFeatures && config.picode.appearance.layout != agent"
+					"when": "false"
 				},
 				{
 					"type": "tree",
 					"id": "picode.status.memory",
 					"name": "%view.memory%",
 					"icon": "$(database)",
-					"when": "picode.memory.enabled && !config.chat.disableAIFeatures && config.picode.appearance.layout != agent"
+					"when": "false"
 				}
 			]
 		}

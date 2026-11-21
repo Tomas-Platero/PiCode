@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions' | 'setup' | 'agentProfiles' | 'syncParts';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions' | 'setup' | 'agentProfiles' | 'syncParts' | 'settings' | 'themes';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser' | 'newIsolatedSession' | 'openSetup' | 'openAgentProfiles' | 'openCloudSync';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser' | 'newIsolatedSession' | 'openSetup' | 'openAgentProfiles' | 'openCloudSync' | 'openSettings' | 'openThemes';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,36 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'themeGallery',
+			since: '2.4.3',
+			plan: 'free',
+			icon: Codicon.symbolColor,
+			title: localize('picodeWhatsNew.themes.title', "A theme gallery you can browse"),
+			summary: localize('picodeWhatsNew.themes.summary', "Themes now have their own page in Settings: every theme as a small window in its own colours, the ones you have and the ones on Open VSX."),
+			points: [
+				localize('picodeWhatsNew.themes.point1', "Hover a theme to see it on the whole editor; click to keep it."),
+				localize('picodeWhatsNew.themes.point2', "Search, or show only dark, light or high-contrast themes."),
+				localize('picodeWhatsNew.themes.point3', "A theme from the gallery installs and applies in one click."),
+			],
+			preview: 'themes',
+			action: 'openThemes',
+		},
+		{
+			id: 'settingsWindow',
+			since: '2.4.2',
+			plan: 'free',
+			icon: Codicon.settingsGear,
+			title: localize('picodeWhatsNew.settings.title', "One Settings window, like a modern app"),
+			summary: localize('picodeWhatsNew.settings.summary', "Your preferences, your account and your agent now live in one window, grouped on the left with a search box on top. Each row says what it does and changes at once."),
+			points: [
+				localize('picodeWhatsNew.settings.point1', "Ctrl+, and the gear open it; your avatar, Sync and the usage ring take you straight to their page."),
+				localize('picodeWhatsNew.settings.point2', "Each thing is changed in one place: updates in Updates, your plan in Account, pi's tools in Tools."),
+				localize('picodeWhatsNew.settings.point3', "Every editor setting is still one click away, under All settings."),
+			],
+			preview: 'settings',
+			action: 'openSettings',
+		},
 		{
 			id: 'agentProfiles',
 			since: '2.4.0',

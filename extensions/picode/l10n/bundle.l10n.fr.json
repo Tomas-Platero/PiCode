@@ -654,5 +654,6 @@
 	"🤖 Answers": "🤖 Réponses",
 	"🧠 Model": "🧠 Modèle",
 	"🧠 Thinking set to **{0}**.": "🧠 Réflexion réglée sur **{0}**.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Réflexion : **{0}**. Choisissez-en une avec `/thinking <level>` : {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Réflexion : **{0}**. Choisissez-en une avec `/thinking <level>` : {1}.",
+	"The extension “{0}” could not load, so it is off in this chat.": "L’extension « {0} » n’a pas pu se charger : elle est désactivée dans ce chat."
 }

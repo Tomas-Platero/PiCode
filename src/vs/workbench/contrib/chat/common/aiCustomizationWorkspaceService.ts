@@ -52,7 +52,47 @@ export const AICustomizationManagementSection = {
 	Tools: 'tools',
 	HarnessSettings: 'harnessSettings',
 	Status: 'status',
+	// PiCode's Settings window: the same window also holds the editor preferences and the account.
+	General: 'general',
+	Themes: 'themes',
+	EditorPreferences: 'editorPreferences',
+	ChatAgent: 'chatAgent',
+	Terminal: 'terminal',
+	Memory: 'memory',
+	Updates: 'updates',
+	Accessibility: 'accessibility',
+	Keyboard: 'keyboard',
+	Account: 'account',
+	CloudSync: 'cloudSync',
+	Connections: 'connections',
+	Privacy: 'privacy',
 } as const;
+
+/** The groups of the Settings side list, in order. */
+export type PicodeSettingsGroup = 'preferences' | 'account' | 'agent';
+
+/** Which group a section sits in. Everything that is not a preference or the account is about the agent. */
+export function picodeSettingsGroupOf(section: AICustomizationManagementSection): PicodeSettingsGroup {
+	switch (section) {
+		case AICustomizationManagementSection.General:
+		case AICustomizationManagementSection.Themes:
+		case AICustomizationManagementSection.EditorPreferences:
+		case AICustomizationManagementSection.ChatAgent:
+		case AICustomizationManagementSection.Terminal:
+		case AICustomizationManagementSection.Memory:
+		case AICustomizationManagementSection.Updates:
+		case AICustomizationManagementSection.Accessibility:
+		case AICustomizationManagementSection.Keyboard:
+			return 'preferences';
+		case AICustomizationManagementSection.Account:
+		case AICustomizationManagementSection.CloudSync:
+		case AICustomizationManagementSection.Connections:
+		case AICustomizationManagementSection.Privacy:
+			return 'account';
+		default:
+			return 'agent';
+	}
+}
 
 export type AICustomizationManagementSection = typeof AICustomizationManagementSection[keyof typeof AICustomizationManagementSection];
 

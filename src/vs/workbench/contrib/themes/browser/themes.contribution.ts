@@ -38,6 +38,7 @@ import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 
 import { mainWindow } from '../../../../base/browser/window.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
 import { DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
@@ -431,6 +432,13 @@ registerAction2(class extends Action2 {
 	}
 
 	override async run(accessor: ServicesAccessor) {
+		// PiCode: Color Theme (the gear's Themes menu, Ctrl+K Ctrl+T) opens the theme gallery of the
+		// Settings window instead of this quick pick.
+		await accessor.get(ICommandService).executeCommand('aiCustomization.openManagementEditor', 'themes');
+	}
+
+	/** The original quick pick, kept for reference by the upstream merges; PiCode does not call it. */
+	async runQuickPick(accessor: ServicesAccessor) {
 		const themeService = accessor.get(IWorkbenchThemeService);
 		const preferencesService = accessor.get(IPreferencesService);
 

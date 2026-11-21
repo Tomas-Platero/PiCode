@@ -43,6 +43,7 @@ import {
 	shouldAsk,
 } from './permissions';
 import { modelRefOf } from './providerIds';
+import { sessionProblems, unseenProblems, type SessionProblem } from './session-problems';
 import { VENDOR } from './providers';
 
 /**
@@ -75,7 +76,12 @@ interface ResumedSession {
 	readonly toolToken: ToolTokenHolder;
 	/** One turn at a time on this transcript, for the same reason the live chat queues. */
 	chain: Promise<void>;
+	/** What pi found wrong while building it (a model it could not restore…), said on the first turn. */
+	problems: SessionProblem[];
 }
+
+/** Problems already said in this window for resumed conversations. */
+const shownResumeProblems = new Set<string>();
 
 /** The sessions this window holds open, by transcript path. */
 const resumed = new Map<string, ResumedSession>();
@@ -162,6 +168,8 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 		resourceLoaderOptions: {
 			extensionFactories: [...loaded.builtins, resumePermissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
 			additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
+			// No terminal for git or npm here: output kept, no password prompts (see agent.ts).
+			packageCommandOutput: 'capture',
 		},
 	});
 	// The transcript carries its own model and thinking level in its header; pi restores them
@@ -189,7 +197,15 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 		cwd,
 		toolToken,
 		chain: Promise.resolve(),
+		problems: sessionProblems({
+			diagnostics: services.diagnostics,
+			extensionErrors: services.resourceLoader.getExtensions().errors,
+			modelFallbackMessage: created.modelFallbackMessage,
+		}),
 	};
+	for (const problem of entry.problems) {
+		deps.log(`pi resumed session (${problem.kind}): ${problem.text}`);
+	}
 	resumed.set(file, entry);
 	return entry;
 }
@@ -211,6 +227,10 @@ export function piResumeRequestHandler(file: string, deps: AgentDeps): vscode.Ch
 				stream: response,
 				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
 			};
+			for (const problem of unseenProblems(resumedSession.problems, shownResumeProblems)) {
+				response.warning(problem.text);
+			}
+			resumedSession.problems = [];
 			const scope = resolveProjectScope();
 			const picked = resolveSessionCwd(scope.folders, os.homedir());
 			const settings = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key));

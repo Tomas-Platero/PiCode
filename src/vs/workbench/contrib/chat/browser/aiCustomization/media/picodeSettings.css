@@ -1,0 +1,624 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
+ * PiCode's Settings window: the grouped side list and the rows every page is built from.
+ * Motion only runs under `.monaco-enable-motion`, which the workbench drops when the person
+ * asks for reduced motion.
+ */
+
+:root {
+	--picode-settings-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--picode-settings-row-gap: 16px;
+}
+
+/* ---- Side list ------------------------------------------------------------------------- */
+
+.picode-settings-nav {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	padding: 8px 0 4px 4px;
+	font-size: 13px;
+}
+
+.picode-settings-search {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0 0 6px;
+	padding: 0 8px;
+	height: 28px;
+	border-radius: 6px;
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+	background: var(--vscode-input-background);
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-settings-search:focus-within {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-settings-search input {
+	flex: 1;
+	min-width: 0;
+	border: none;
+	outline: none;
+	background: transparent;
+	color: var(--vscode-input-foreground);
+	font: inherit;
+}
+
+.picode-settings-search input::-webkit-search-cancel-button {
+	display: none;
+}
+
+.picode-settings-nav-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.picode-settings-nav-list {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.picode-settings-nav-group {
+	padding: 12px 8px 4px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	user-select: none;
+}
+
+.picode-settings-nav-group:first-child,
+.picode-settings-nav-marker + .picode-settings-nav-group {
+	padding-top: 4px;
+}
+
+.picode-settings-nav-item {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	width: 100%;
+	height: 28px;
+	padding: 0 8px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-settings-nav-item .codicon {
+	flex: 0 0 auto;
+	font-size: 15px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-settings-nav-item:hover:not(.selected) {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-settings-nav-item.selected {
+	font-weight: 600;
+}
+
+.picode-settings-nav-item.selected .codicon {
+	color: var(--vscode-foreground);
+}
+
+.picode-settings-nav-item:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+.picode-settings-nav-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-settings-nav-count {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* The highlight behind the selected page; it slides between rows instead of jumping. */
+.picode-settings-nav-marker {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 0;
+	border-radius: 6px;
+	background: var(--vscode-list-inactiveSelectionBackground, var(--vscode-list-hoverBackground));
+	opacity: 0;
+	pointer-events: none;
+}
+
+.picode-settings-nav-marker.visible {
+	opacity: 1;
+}
+
+.monaco-enable-motion .picode-settings-nav-marker {
+	transition: transform 200ms var(--picode-settings-ease), height 200ms var(--picode-settings-ease), opacity 150ms ease;
+}
+
+.picode-settings-nav-empty {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-settings-nav-empty:empty {
+	display: none;
+}
+
+.picode-settings-nav-footer {
+	flex: 0 0 auto;
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--vscode-panel-border);
+}
+
+.picode-settings-link {
+	align-self: flex-start;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--vscode-textLink-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-settings-link:hover {
+	text-decoration: underline;
+}
+
+/* ---- Page in view ---------------------------------------------------------------------- */
+
+.monaco-enable-motion .ai-customization-management-editor .contributed-section-container:not([style*="display: none"]) {
+	animation: picode-settings-page-in 220ms var(--picode-settings-ease);
+}
+
+@keyframes picode-settings-page-in {
+	from { opacity: 0; transform: translateY(6px); }
+	to { opacity: 1; transform: none; }
+}
+
+/* A row reached from the search box or from a button elsewhere lights up for a moment. */
+.picode-row-flash {
+	animation: picode-settings-row-flash 1200ms ease-out;
+}
+
+@keyframes picode-settings-row-flash {
+	0%, 35% { background: color-mix(in srgb, var(--vscode-focusBorder) 22%, transparent); }
+	100% { background: transparent; }
+}
+
+/* ---- Pages built from rows ------------------------------------------------------------- */
+
+.picode-set-page {
+	box-sizing: border-box;
+	height: 100%;
+	overflow-y: auto;
+	padding: 18px 28px 28px;
+}
+
+.picode-set-page-inner {
+	max-width: 720px;
+}
+
+.picode-set-title {
+	margin: 0 0 4px;
+	font-size: 20px;
+	font-weight: 600;
+}
+
+.picode-set-lead {
+	margin: 0 0 8px;
+	font-size: 13px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-set-group-title {
+	margin: 22px 0 2px;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.picode-set-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--picode-settings-row-gap);
+	min-height: 48px;
+	padding: 10px 8px;
+	margin: 0 -8px;
+	border-radius: 6px;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
+}
+
+.picode-set-row:last-child {
+	border-bottom: none;
+}
+
+.picode-set-row-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.picode-set-row-name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+}
+
+.picode-set-row-desc {
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-set-row-control {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.picode-set-row.danger .picode-set-row-name {
+	color: var(--vscode-errorForeground);
+}
+
+/* A short check beside a control after its value was saved. */
+.picode-set-saved {
+	color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+	opacity: 0;
+}
+
+.picode-set-saved.show {
+	opacity: 1;
+}
+
+.monaco-enable-motion .picode-set-saved {
+	transition: opacity 200ms ease;
+}
+
+/* Switch */
+input.picode-set-switch {
+	appearance: none;
+	position: relative;
+	flex: 0 0 auto;
+	width: 34px;
+	height: 20px;
+	margin: 0;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--vscode-descriptionForeground) 25%, transparent);
+	border: 1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 40%, transparent);
+	cursor: pointer;
+}
+
+input.picode-set-switch::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: var(--vscode-descriptionForeground);
+}
+
+input.picode-set-switch:checked {
+	background: var(--vscode-button-background);
+	border-color: var(--vscode-button-background);
+}
+
+input.picode-set-switch:checked::after {
+	transform: translateX(14px);
+	background: var(--vscode-button-foreground);
+}
+
+.monaco-enable-motion input.picode-set-switch,
+.monaco-enable-motion input.picode-set-switch::after {
+	transition: background 180ms ease, border-color 180ms ease, transform 180ms var(--picode-settings-ease);
+}
+
+input.picode-set-switch:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+/* Segmented choice: a pill slides under the chosen option. */
+/* The same look as the Agent / Editor switch in the title bar: a sunken track, a lit thumb. */
+.picode-set-segmented {
+	position: relative;
+	display: inline-flex;
+	padding: 2px;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 22%, transparent);
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, var(--vscode-editor-background));
+	box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.picode-set-segmented-pill {
+	position: absolute;
+	top: 2px;
+	bottom: 2px;
+	left: 0;
+	border-radius: 999px;
+	background: var(--vscode-button-background);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+	pointer-events: none;
+}
+
+.monaco-enable-motion .picode-set-segmented.ready .picode-set-segmented-pill {
+	transition: transform 200ms var(--picode-settings-ease), width 200ms var(--picode-settings-ease);
+}
+
+.picode-set-segment {
+	position: relative;
+	z-index: 1;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	min-height: 24px;
+	padding: 0 10px;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.picode-set-segment[aria-checked="true"] {
+	color: var(--vscode-button-foreground);
+}
+
+/* Icons take the option's colour: a themed icon colour would sink into the lit thumb. */
+.picode-set-segment .codicon {
+	color: inherit;
+}
+
+.picode-set-segment[aria-checked="false"] {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-set-segment[aria-checked="false"]:hover {
+	color: var(--vscode-foreground);
+}
+
+.monaco-enable-motion .picode-set-segment {
+	transition: color 180ms ease;
+}
+
+.picode-set-segment:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+}
+
+/* Drop-down */
+.picode-set-select-wrap {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+}
+
+select.picode-set-select {
+	appearance: none;
+	min-width: 140px;
+	max-width: 260px;
+	height: 28px;
+	padding: 0 28px 0 10px;
+	border-radius: 6px;
+	border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+	background: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+select.picode-set-select:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+}
+
+.picode-set-select-wrap .codicon {
+	position: absolute;
+	right: 8px;
+	pointer-events: none;
+	font-size: 14px;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Number and text */
+input.picode-set-input {
+	width: 180px;
+	height: 28px;
+	box-sizing: border-box;
+	padding: 0 8px;
+	border-radius: 6px;
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font: inherit;
+	font-size: 12px;
+}
+
+input.picode-set-input[type="number"] {
+	width: 80px;
+}
+
+input.picode-set-input:focus {
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+}
+
+/* Button */
+.picode-set-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 12px;
+	border-radius: 6px;
+	border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.picode-set-button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.picode-set-button.primary {
+	border-color: transparent;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-set-button.primary:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.picode-set-button:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+/* Status tag on the right of a row */
+.picode-set-tag {
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+}
+
+.picode-set-tag.ok {
+	background: color-mix(in srgb, var(--vscode-charts-green) 20%, transparent);
+	color: var(--vscode-charts-green);
+}
+
+.picode-set-tag.warn {
+	background: color-mix(in srgb, var(--vscode-charts-yellow) 20%, transparent);
+	color: var(--vscode-charts-yellow);
+}
+
+/* A change that needs a restart: a bar slides in at the bottom of the page. */
+.picode-set-restart {
+	position: sticky;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 16px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	border: 1px solid var(--vscode-panel-border);
+	background: var(--vscode-editorWidget-background);
+	font-size: 12px;
+}
+
+.monaco-enable-motion .picode-set-restart {
+	animation: picode-settings-page-in 220ms var(--picode-settings-ease);
+}
+
+@media (max-width: 620px) {
+	.picode-set-page {
+		padding: 14px 16px 20px;
+	}
+	.picode-set-row {
+		flex-wrap: wrap;
+	}
+}
+
+/* ---- The window opening ---------------------------------------------------------------- */
+
+/* The backdrop fades in and the window grows from 96% as it appears. */
+.monaco-enable-motion .monaco-modal-editor-block:has(.ai-customization-management-editor) {
+	animation: picode-settings-backdrop-in 180ms ease-out;
+}
+
+.monaco-enable-motion .monaco-modal-editor-block:has(.ai-customization-management-editor) .modal-editor-part {
+	animation: picode-settings-window-in 220ms var(--picode-settings-ease);
+}
+
+@keyframes picode-settings-backdrop-in {
+	from { background-color: transparent; }
+}
+
+@keyframes picode-settings-window-in {
+	from { opacity: 0; transform: scale(0.96); }
+	to { opacity: 1; transform: none; }
+}
+
+/* ---- Scrollbars: thin and in the theme's colours, like the rest of the editor ---------------
+ * Styled with the WebKit pseudo-elements only: setting `scrollbar-color` makes Chromium draw
+ * its standard bar, arrows included. */
+
+.picode-settings-nav-scroll::-webkit-scrollbar,
+.picode-set-page::-webkit-scrollbar,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.picode-settings-nav-scroll::-webkit-scrollbar-track,
+.picode-set-page::-webkit-scrollbar-track,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar-track,
+.picode-settings-nav-scroll::-webkit-scrollbar-corner,
+.picode-set-page::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+.picode-settings-nav-scroll::-webkit-scrollbar-button,
+.picode-set-page::-webkit-scrollbar-button,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar-button {
+	display: none;
+}
+
+.picode-settings-nav-scroll::-webkit-scrollbar-thumb,
+.picode-set-page::-webkit-scrollbar-thumb,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar-thumb {
+	border: 2px solid transparent;
+	border-radius: 999px;
+	background-clip: padding-box;
+	background-color: var(--vscode-scrollbarSlider-background);
+}
+
+.picode-settings-nav-scroll::-webkit-scrollbar-thumb:hover,
+.picode-set-page::-webkit-scrollbar-thumb:hover,
+.ai-customization-management-editor .picode-account-content::-webkit-scrollbar-thumb:hover {
+	background-color: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+/* The side list only shows its bar while the pointer is over it. */
+.picode-settings-nav-scroll:not(:hover)::-webkit-scrollbar-thumb {
+	background-color: transparent;
+}
