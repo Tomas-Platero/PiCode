@@ -8,7 +8,8 @@
  *
  * PiCode is pi plus Gentle AI (ADR-030): gentle-pi brings the method, the roles and the review
  * tools; gentle-engram brings pi its memory; pi-intercom lets pi sessions talk to each other
- * (`intercom-config.ts` starts its broker on the editor's binary). They are declared at **exact
+ * (`intercom-config.ts` starts its broker on the editor's binary); pi-web-access gives gentle-pi's
+ * explorer the web tools it asks for (ADR-031, addendum 6). They are declared at **exact
  * versions**, so a profile never floats on its own, and every run of the package installer puts
  * the declaration back the way the product wants it — an import, an old profile or a hand edit
  * cannot leave it ranged, unpinned or filtered differently.
@@ -106,6 +107,9 @@ export const DISPLACED_PACKAGE_NAMES: readonly string[] = [
  */
 export const REMOVED_PACKAGE_NAMES: readonly string[] = [
 	'@earendil-works/pi-durable',
+	// Registers `web_search`, the name pi-web-access (a product package) uses: pi reports the clash
+	// in every chat. pi-web-access already searches through DeepSeek (ADR-031, addendum 7).
+	'pi-deepseek-search',
 ];
 
 /** What the product pins, in the order it declares them. */
@@ -113,6 +117,9 @@ export const PRODUCT_PACKAGES: readonly ProductPackage[] = [
 	{ name: 'gentle-pi', version: '4.9.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
 	{ name: 'gentle-engram', version: '0.8.0' },
 	{ name: 'pi-intercom', version: '0.18.1' },
+	// Gentle AI installs it next to gentle-pi: gentle-pi's explorer asks for its web tools
+	// (`web_search`, `fetch_content`...) and silently goes without them when it is missing.
+	{ name: 'pi-web-access', version: '0.48.0' },
 ];
 
 /** The `packages` entry for one pinned package: a plain spec, or the filtered object form. */

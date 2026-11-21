@@ -1,6 +1,6 @@
 # 📌 Las piezas fijadas de Gentle AI: cómo se mantienen al día
 
-Cómo llega una versión nueva de gentle-pi, gentle-engram, pi-intercom o del motor de engram
+Cómo llega una versión nueva de gentle-pi, gentle-engram, pi-intercom, pi-web-access o del motor de engram
 desde que su autor la publica hasta el perfil de cada persona. La decisión está en
 [ADR-035](DECISIONS.md); la frase del dueño y su traducción, en [`AGENTS.md`](../AGENTS.md).
 
@@ -8,7 +8,7 @@ desde que su autor la publica hasta el perfil de cada persona. La decisión est�
 
 ## 🧭 La idea
 
-Las cuatro piezas van **fijadas a versión exacta**: quien instala PiCode recibe justo las versiones
+Las cinco piezas van **fijadas a versión exacta**: quien instala PiCode recibe justo las versiones
 con las que se probó, y su perfil nunca se mueve solo a una que nadie miró. Fijado no quiere decir
 congelado: un bot propone cada versión nueva, y la mayoría entra sin que nadie tenga que hacer nada.
 Y la versión fijada es un **mínimo**: desde la app se puede ir por delante cuando se quiera (abajo).
@@ -18,6 +18,7 @@ Y la versión fijada es un **mínimo**: desde la app se puede ir por delante cua
 | 🧠 `gentle-pi` | `extensions/picode/src/product-packages.ts` | el método, los agentes, las skills y la revisión |
 | 🗂️ `gentle-engram` | `extensions/picode/src/product-packages.ts` | el lado de pi de la memoria |
 | 💬 `pi-intercom` | `extensions/picode/src/product-packages.ts` | que las sesiones de pi se hablen |
+| 🌐 `pi-web-access` | `extensions/picode/src/product-packages.ts` | que los agentes busquen y lean en internet |
 | 🗄️ motor de engram | `build/distribution/engram.json` | el programa de la memoria (`engram.exe`) |
 
 Pi en sí (`build/distribution/runtime.json`) **no** entra en este sistema: sus subidas llevan una
@@ -87,7 +88,7 @@ delante sin esperar a una release:
 
 | Dónde | Qué |
 | --- | --- |
-| **Status → Updates** y el aviso de la barra de estado | pi, sus paquetes, gentle-pi, gentle-engram, pi-intercom y el motor de memoria, cada uno con su versión actual → la nueva. Un solo **Update** lo hace todo |
+| **Status → Updates** y el aviso de la barra de estado | pi, sus paquetes, gentle-pi, gentle-engram, pi-intercom, pi-web-access y el motor de memoria, cada uno con su versión actual → la nueva. Un solo **Update** lo hace todo |
 | **Página de paquetes** | **Update** en la fila de cada paquete, también los de Gentle |
 | **Vista Memory** | *Update memory engine*, como siempre |
 

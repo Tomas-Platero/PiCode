@@ -1,4 +1,4 @@
-# Keeps the Gentle AI pins current: gentle-pi, gentle-engram, pi-intercom and the
+# Keeps the Gentle AI pins current: gentle-pi, gentle-engram, pi-intercom, pi-web-access and the
 # memory engine (ADR-035).
 #
 # Once a day, for each pin, `build/pins.mjs bump` looks for a newer stable release
@@ -38,7 +38,7 @@ jobs:
       # One at a time: two pins merging into experimental at once would race.
       max-parallel: 1
       matrix:
-        pin: [gentle-pi, gentle-engram, pi-intercom, engram]
+        pin: [gentle-pi, gentle-engram, pi-intercom, pi-web-access, engram]
     steps:
       - uses: actions/checkout@v7
         with:
