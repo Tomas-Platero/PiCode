@@ -27,6 +27,8 @@ export const LEFT_BEHIND_PACKAGE_NAMES: readonly string[] = [
 	'@tintinweb/pi-subagents',
 	'github.com/HazAT/pi-interactive-subagents',
 	'pi-memory',
+	// Its `web_search` clashes with pi-web-access's (ADR-031, addendum 7).
+	'pi-deepseek-search',
 ];
 
 /**
