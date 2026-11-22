@@ -2453,5 +2453,9 @@
 	"picodeChatConfirmCloseSetting": "關閉進行中的聊天前確認",
 	"picodeChatConfirmCloseDescription": "聊天正在回覆時關閉視窗前要求確認。",
 	"picodeSessionAutoNameSetting": "自動命名工作階段",
-	"picodeSessionAutoNameDescription": "根據第一則訊息命名新工作階段。關閉後可自行選擇名稱。"
+	"picodeSessionAutoNameDescription": "根據第一則訊息命名新工作階段。關閉後可自行選擇名稱。",
+	"picodeWhatsNew.chatPreferences.title": "讓 PiCode 更符合你的習慣",
+	"picodeWhatsNew.chatPreferences.summary": "透過設定中的新選項，自訂聊天、記憶和工作區。",
+	"picodeWhatsNew.chatPreferences.point1": "選擇傳送訊息的方式，以及傳送或儲存記憶前是否確認。",
+	"picodeWhatsNew.chatPreferences.point2": "選擇 Agent 的初始分頁，並探索編輯器、檔案和終端機的更多選項。"
 }

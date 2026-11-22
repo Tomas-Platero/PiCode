@@ -2453,5 +2453,9 @@
 	"picodeChatConfirmCloseSetting": "Potvrdit před zavřením aktivního chatu",
 	"picodeChatConfirmCloseDescription": "Zeptat se před zavřením okna, když chat odpovídá.",
 	"picodeSessionAutoNameSetting": "Automaticky pojmenovat relace",
-	"picodeSessionAutoNameDescription": "Nové relace pojmenovat podle první zprávy. Vypnutím zvolíte vlastní název."
+	"picodeSessionAutoNameDescription": "Nové relace pojmenovat podle první zprávy. Vypnutím zvolíte vlastní název.",
+	"picodeWhatsNew.chatPreferences.title": "Přizpůsobte si PiCode",
+	"picodeWhatsNew.chatPreferences.summary": "Upravte si chat, paměť a pracovní prostor pomocí nových možností v nastavení.",
+	"picodeWhatsNew.chatPreferences.point1": "Zvolte způsob odesílání zpráv a potvrzování odeslání nebo ukládání vzpomínek.",
+	"picodeWhatsNew.chatPreferences.point2": "Vyberte úvodní kartu Agent a další možnosti editoru, souborů a terminálu."
 }
