@@ -415,6 +415,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	syncParts: syncPartsPreview,
 	settings: settingsPreview,
 	themes: themesPreview,
+	chatPreferences: chatPreferencesPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -503,6 +504,21 @@ function plansPreview(parent: HTMLElement, store: DisposableStore, services: IWh
 		store.add(addDisposableListener(tab, EventType.CLICK, () => draw(plan)));
 	}
 	draw(services.entitlement.plan === 'pro' ? 'pro' : 'free');
+}
+
+function chatPreferencesPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.sync.demo', "Flip a few switches. Nothing really changes here."), store);
+	const list = append(parent, $('.picode-whatsnew-list'));
+	for (const [text, checked] of [
+		[localize('picodeChatConfirmSetting', "Confirm before sending"), false],
+		[localize('picodeChatEnterSetting', "Send with Enter"), true],
+		[localize('picodeMemoryConfirmSetting', "Confirm before saving memories"), false],
+	] as const) {
+		const label = append(list, $('label.picode-whatsnew-row.toggle'));
+		const input = append(label, $('input', { type: 'checkbox' })) as HTMLInputElement;
+		input.checked = checked;
+		append(label, $('span.picode-whatsnew-row-label')).textContent = text;
+	}
 }
 
 function syncPreview(parent: HTMLElement, store: DisposableStore): void {
