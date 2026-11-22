@@ -57,6 +57,7 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 		AICustomizationManagementSection.General,
 		AICustomizationManagementSection.Themes,
 		AICustomizationManagementSection.EditorPreferences,
+		AICustomizationManagementSection.Files,
 		AICustomizationManagementSection.ChatAgent,
 		AICustomizationManagementSection.Terminal,
 		AICustomizationManagementSection.Memory,

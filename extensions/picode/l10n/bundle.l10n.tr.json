@@ -662,5 +662,7 @@
 	"🤖 Answers": "🤖 Yanıtlar",
 	"🧠 Model": "🧠 Model",
 	"🧠 Thinking set to **{0}**.": "🧠 Düşünme **{0}** olarak ayarlandı.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Düşünme: **{0}**. `/thinking <düzey>` ile birini seçin: {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Düşünme: **{0}**. `/thinking <düzey>` ile birini seçin: {1}.",
+	"Save this memory?": "Bu anı kaydedilsin mi?",
+	"Name this session": "Bu oturumu adlandırın"
 }

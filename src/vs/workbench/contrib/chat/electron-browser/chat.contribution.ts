@@ -14,6 +14,7 @@ import { ipcRenderer } from '../../../../base/parts/sandbox/electron-browser/glo
 import { localize } from '../../../../nls.js';
 import { registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { ILocalGitService } from '../../../../platform/git/common/localGitService.js';
@@ -166,6 +167,7 @@ class ChatLifecycleHandler extends Disposable {
 		@IChatEntitlementService private readonly chatEntitlementService: IChatEntitlementService,
 		@INativeHostService private readonly nativeHostService: INativeHostService,
 		@IChatService private readonly chatService: IChatService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -197,7 +199,8 @@ class ChatLifecycleHandler extends Disposable {
 
 		const windowCount = reason === ShutdownReason.CLOSE ? await this.nativeHostService.getWindowCount() : 0;
 		const effectiveReason = getEffectiveSessionShutdownReason(reason, windowCount, isMacintosh);
-		if (!this.hasSessionThatWillStop(effectiveReason)) {
+		const activeChatNeedsConfirmation = this.configurationService.getValue<boolean>('picode.chat.confirmClose') && this.chatService.requestInProgressObs.get();
+		if (!activeChatNeedsConfirmation && !this.hasSessionThatWillStop(effectiveReason)) {
 			return false;
 		}
 
