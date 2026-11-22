@@ -2,8 +2,8 @@
 /*
  * pins -- keeps the Gentle AI pieces the product pins up to date, without letting them float.
  *
- * PiCode pins four pieces at exact versions (ADR-031, ADR-033): the pi packages gentle-pi,
- * gentle-engram and pi-intercom (`extensions/picode/src/product-packages.ts`) and the memory
+ * PiCode pins five pieces at exact versions (ADR-031, ADR-033): the pi packages gentle-pi,
+ * gentle-engram, pi-intercom and pi-web-access (`extensions/picode/src/product-packages.ts`) and the memory
  * engine itself (`build/distribution/engram.json`). A pin means nobody gets a release nobody
  * tried; it also means that, without help, every new upstream release waits for someone to
  * notice it. This file is that help: it finds the newer release, reads what changed between the
@@ -50,6 +50,7 @@ const PINS = [
 	{ name: 'gentle-pi', kind: 'npm' },
 	{ name: 'gentle-engram', kind: 'npm' },
 	{ name: 'pi-intercom', kind: 'npm' },
+	{ name: 'pi-web-access', kind: 'npm' },
 	{ name: 'engram', kind: 'github' },
 ];
 

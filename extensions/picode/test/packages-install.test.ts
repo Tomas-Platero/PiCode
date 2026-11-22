@@ -336,6 +336,8 @@ function familyProfileFixture(directory: string, installed: Map<string, string>,
 	const files = new Map<string, string>([
 		[join([directory, 'settings.json']), JSON.stringify({ packages: [] })],
 		[join([directory, 'npm', 'package.json']), JSON.stringify(manifest, null, '\t')],
+		// The product's MCP servers were already offered: these tests are about the family.
+		[join([directory, 'product-seeds.json']), JSON.stringify({ mcpServers: ['context7'] })],
 	]);
 	return {
 		written,
@@ -430,6 +432,26 @@ test('a profile whole and already declaring the family costs nothing: no write, 
 	assert.equal(calls.length, 0);
 	assert.deepEqual(fixture.written, []);
 	assert.deepEqual(outcome.lines, []);
+});
+
+test('a profile that never met the product servers gets Context7 once, and keeps it removed after', async () => {
+	const profile = 'C:\profiles\mcp-offer';
+	const { spawn } = fakeSpawn();
+	const files = new Map<string, string>([[join([profile, 'settings.json']), JSON.stringify({ packages: [] })]]);
+	const io = {
+		readSettingsText: (file: string): string | undefined => files.get(file),
+		writeText: (file: string, text: string): void => { files.set(file, text); },
+		directoryExists: (): boolean => false,
+		manifestVersion: (): string | undefined => undefined,
+		listDirectory: (): readonly string[] => [],
+	};
+	const outcome = await ensureProfilePackages({ profileDir: profile, productPackages: [], spawn, io });
+	assert.deepEqual(Object.keys(JSON.parse(files.get(join([profile, 'mcp.json']))!).mcpServers), ['context7']);
+	assert.ok(outcome.lines.some(line => line.includes('context7')));
+	// The owner removes it; the next start leaves it removed.
+	files.set(join([profile, 'mcp.json']), JSON.stringify({ mcpServers: {} }));
+	await ensureProfilePackages({ profileDir: profile, productPackages: [], spawn, io });
+	assert.deepEqual(JSON.parse(files.get(join([profile, 'mcp.json']))!), { mcpServers: {} });
 });
 
 test('without a runtime root the run is exactly what it was: declarations only', async () => {

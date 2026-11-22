@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ResourceSource } from './customizations';
+import { worksWithoutSignIn } from './product-mcp.ts';
 
 /**
  * pi's MCP servers, as the editor's own MCP screen needs to see them.
@@ -389,6 +390,10 @@ function httpSignInState(name: string, entry: PiHttpEntry, authFile: McpAuthFile
 	}
 	if (ownHeaders) {
 		// No stored sign-in, but the entry authenticates itself.
+		return 'ok';
+	}
+	if (worksWithoutSignIn(name, entry.url)) {
+		// A server the product brings that answers with no account (Context7): nothing to sign in to.
 		return 'ok';
 	}
 	// `authFile` itself `undefined` means the profile's sign-ins were not looked at — the

@@ -47,7 +47,7 @@ const { filteredSettingsText } = await import('../src/profile-import.ts');
 const NAMES = ['gentle-pi', 'gentle-engram'];
 
 test('the product carries gentle-pi and gentle-engram, and leaves the durable agent\'s package behind', () => {
-	assert.deepStrictEqual([...LEFT_BEHIND_PACKAGE_NAMES], ['@earendil-works/pi-durable', '@tintinweb/pi-subagents', 'github.com/HazAT/pi-interactive-subagents', 'pi-memory']);
+	assert.deepStrictEqual([...LEFT_BEHIND_PACKAGE_NAMES], ['@earendil-works/pi-durable', '@tintinweb/pi-subagents', 'github.com/HazAT/pi-interactive-subagents', 'pi-memory', 'pi-deepseek-search']);
 	assert.strictEqual(isLeftBehindPackage('npm:@tintinweb/pi-subagents'), true);
 	assert.strictEqual(isLeftBehindPackage('git:github.com/HazAT/pi-interactive-subagents'), true);
 	assert.strictEqual(isLeftBehindPackage('npm:pi-memory'), true);
