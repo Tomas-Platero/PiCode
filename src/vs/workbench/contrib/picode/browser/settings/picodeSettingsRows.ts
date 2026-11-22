@@ -224,12 +224,13 @@ export class PicodeSettingsPage extends Disposable {
 			return button;
 		});
 		const paint = (value: T = get()) => {
-			const index = Math.max(0, choices.findIndex(c => c.value === value));
+			const index = choices.findIndex(c => c.value === value);
 			buttons.forEach((b, i) => {
 				b.setAttribute('aria-checked', String(i === index));
-				b.tabIndex = i === index ? 0 : -1;
+				b.tabIndex = i === (index < 0 ? 0 : index) ? 0 : -1;
 			});
 			chosenIndex = index;
+			pill.style.visibility = index < 0 ? 'hidden' : '';
 			place();
 		};
 		let chosenIndex = 0;
@@ -277,7 +278,20 @@ export class PicodeSettingsPage extends Disposable {
 		const paint = () => {
 			const value = this.read(row);
 			const index = row.choices.findIndex(c => c.value === value);
-			select.value = String(Math.max(0, index));
+			let other = select.querySelector<HTMLOptionElement>('option[data-other]');
+			if (index < 0) {
+				if (!other) {
+					other = DOM.append(select, $('option')) as HTMLOptionElement;
+					other.dataset.other = 'true';
+					other.value = 'other';
+					other.disabled = true;
+					other.textContent = localize('picodeUsageAlertsOther', "Other");
+				}
+				select.value = 'other';
+			} else {
+				other?.remove();
+				select.value = String(index);
+			}
 		};
 		paint();
 		this.watch(row.key, paint);
