@@ -84,6 +84,26 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 	id: 'picode',
 	title: 'PiCode',
 	properties: {
+		'picode.chat.confirmSend': {
+			type: 'boolean',
+			default: false,
+			description: localize('picode.chat.confirmSend', "Confirm before sending a chat message."),
+		},
+		'picode.chat.enterToSend': {
+			type: 'boolean',
+			default: true,
+			description: localize('picode.chat.enterToSend', "Send chat messages with Enter. When off, use Ctrl+Enter or Cmd+Enter."),
+		},
+		'picode.sessions.autoName': {
+			type: 'boolean',
+			default: true,
+			description: localize('picodeSessionAutoNameDescription', "Name new sessions from their first message. Turn off to choose a name."),
+		},
+		'picode.chat.confirmClose': {
+			type: 'boolean',
+			default: true,
+			description: localize('picodeChatConfirmCloseDescription', "Ask before closing a window while a chat is responding."),
+		},
 		// Declared here, not by the connector: settings an extension declares land under
 		// `Extensions › PiCode` for ever (`settingsEditor2.ts` builds the tree from core groups only),
 		// so a row the owner needs to find has to be born in the core.
@@ -96,6 +116,11 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'boolean',
 			default: true,
 			description: localize('picode.memory.enabled', "Keep memory on: remember decisions, conventions and traps across conversations."),
+		},
+		'picode.memory.confirmSave': {
+			type: 'boolean',
+			default: false,
+			description: localize('picodeMemoryConfirmDescription', "Ask before memory tools save or change a memory in chat."),
 		},
 
 		[PICODE_PROVIDERS_SETTING]: {

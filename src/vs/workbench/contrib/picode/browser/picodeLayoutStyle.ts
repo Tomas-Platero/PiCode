@@ -115,6 +115,12 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 	id: 'picode',
 	title: 'PiCode',
 	properties: {
+		'picode.appearance.agentStartView': {
+			type: 'string',
+			enum: ['status', 'files', 'search', 'changes', 'terminal'],
+			default: 'status',
+			description: localize('picodeAgentStartViewDescription', "Choose the first review tab when Agent layout opens."),
+		},
 		[PICODE_LAYOUT_SETTING]: {
 			type: 'string',
 			enum: ['agent', 'editor'],
@@ -218,6 +224,8 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 	}
 
 	private async enterAgent(): Promise<void> {
+		const startViews: Record<string, string> = { status: STATUS_CONTAINER_ID, files: EXPLORER_CONTAINER_ID, search: 'workbench.view.search', changes: 'workbench.view.scm', terminal: 'terminal' };
+		const startView = startViews[this.configurationService.getValue<string>('picode.appearance.agentStartView')] ?? STATUS_CONTAINER_ID;
 		// Keep what the Editor layout had, once: a second window or a restart must not overwrite it
 		// with the Agent values.
 		if (this.storageService.get(SAVED_SETTINGS_KEY, StorageScope.APPLICATION) === undefined) {
@@ -267,8 +275,8 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			// Every start opens on Status, not on whichever tab the bar was left on (the workbench
 			// restores that one, usually the file explorer). A wide bar already shows Status as its column.
 			await timeout(0);
-			if (!sidebarSideColumn.visible) {
-				void this.paneCompositeService.openPaneComposite(STATUS_CONTAINER_ID, ViewContainerLocation.Sidebar);
+			if (startView !== STATUS_CONTAINER_ID || !sidebarSideColumn.visible) {
+				void this.paneCompositeService.openPaneComposite(startView, ViewContainerLocation.Sidebar);
 			}
 			return;
 		}
@@ -279,7 +287,7 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 		this.storageService.store(AGENT_ARRANGED_KEY, true, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		// The bar starts with Status alone; once it is laid out narrow, Status is a tab to open.
 		await timeout(0);
-		const status = await this.paneCompositeService.openPaneComposite(STATUS_CONTAINER_ID, ViewContainerLocation.Sidebar);
+		const status = await this.paneCompositeService.openPaneComposite(startView, ViewContainerLocation.Sidebar);
 		if (!status) {
 			void this.paneCompositeService.openPaneComposite(EXPLORER_CONTAINER_ID, ViewContainerLocation.Sidebar);
 		}
