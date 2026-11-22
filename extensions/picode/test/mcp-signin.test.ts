@@ -78,6 +78,21 @@ test('a url server with no stored sign-in and no headers needs a sign-in', () =>
 	assert.strictEqual(stateOf(rows, 'vercel'), 'needed');
 });
 
+test('a product server that works without an account is usable with no sign-in', () => {
+	const rows = mcpServerStates(
+		servers({
+			context7: { type: 'http', url: 'https://mcp.context7.com/mcp' },
+			// Same name, another address: it is not the product's server, so the rule still applies.
+			other: { type: 'http', url: 'https://example.test/mcp' },
+		}),
+		{ text: '{}' },
+		1000,
+	);
+
+	assert.strictEqual(stateOf(rows, 'context7'), 'ok');
+	assert.strictEqual(stateOf(rows, 'other'), 'needed');
+});
+
 test('a url server with no stored sign-in but its own header authenticates itself', () => {
 	// `github`, as this profile holds it: an `Authorization` header with pi's interpolation in
 	// it, which pi fills in at use time. The header being there is the fact the row shows.

@@ -1331,6 +1331,45 @@ play. Unverified in a running editor.
 - **Probado:** el pi del editor arrancado como subagente sobre NaN agotado: el primer intento da 402,
   cambia a Omni y responde en el mismo trabajo.
 
+### Adenda 6 (2026-11-21) · Lo que Gentle AI instala para pi y gentle-pi no trae
+
+> *"Revisa gentle-ai y su instalación a ver si el instala otro plugin o algo y falta"* · *"Añade lo necesario"*
+
+- **Qué se miró:** gentle-ai 4.5.0 (`docs/pi.md`, `internal/agents/pi/adapter.go`). Para pi no escribe
+  agentes ni skills (su adaptador deja vacías esas carpetas: son de gentle-pi). Instala cuatro paquetes
+  (`gentle-pi`, `gentle-engram`, `pi-web-access`, `pi-btw`), el MCP de Context7 y, opcional, CodeGraph.
+  Sus agentes para Claude Code y OpenCode son los mismos diez de gentle-pi más `review-refuter`, que en pi
+  pone la revisión nativa.
+- **pi-web-access entra fijado** (`product-packages.ts`, 0.48.0, y en el bot de pins). El explorador de
+  gentle-pi pide sus cinco herramientas (`web_enable`, `web_search`, `source_check`, `fetch_content`,
+  `get_search_content`) y, sin el paquete, gentle-pi no se las da y no avisa: el explorador no podía mirar en
+  internet. Funciona sin claves (Exa sin cuenta) y guarda su configuración en el perfil
+  (`PI_CODING_AGENT_DIR`), no en `~/.pi`. Sus comandos `/websearch` y `/curator` son de terminal y el chat ya
+  los aprende y oculta (ADR-037).
+- **Context7 se ofrece una vez** (`product-mcp.ts`): al preparar el perfil se añade `context7` a su
+  `mcp.json` (`https://mcp.context7.com/mcp`, responde sin iniciar sesión) y se apunta en
+  `product-seeds.json`. Si el dueño lo borra, no vuelve; si ya tenía uno con ese nombre, se queda el suyo.
+  Se escribe **sin bloque `oauth`** (la 2.4.7 lo traía y la fila pedía «Iniciar sesión» sin hacer falta: Context7
+  responde sin cuenta, y su sesión solo sube límites); la regla de la fila (`mcp-provider.ts`) lo da por usable
+  con `worksWithoutSignIn`.
+- **Dos skills de gentle-ai que gentle-pi no trae** (`go-testing`, `systemic-issue-triage`) viajan con el
+  conector en `extensions/picode/skills/`, copiadas tal cual.
+- **Fuera:** `pi-btw` (su `/btw` es un panel del terminal de pi, sin uso en el editor), `gentle-ai-bench` y
+  `hermes-ephemeral-delegation` (de uso interno de gentle-ai).
+- **Choque conocido:** `pi-deepseek-search` también registra `web_search`. pi carga los dos y avisa del
+  conflicto en cada chat. Resuelto en la adenda 7.
+
+### Adenda 7 (2026-11-21) · pi-deepseek-search sale del perfil
+
+> *"Quita el de deepseek"* · *"Y al updatear que se quite eh"*
+
+- `pi-deepseek-search` pasa a `REMOVED_PACKAGE_NAMES` (`product-packages.ts`): cada vez que PiCode prepara
+  el perfil (al arrancar y al actualizar) su declaración se borra, como la de durable. También entra en
+  `LEFT_BEHIND_PACKAGE_NAMES`, así que *Import* no lo ofrece y *Updates* no avisa de él.
+- **Por qué quitarlo y no solo apagarlo:** hace lo mismo que pi-web-access, que ya busca con DeepSeek
+  (`provider: deepseek`), y su `web_search` choca con la del paquete del producto.
+- `@rohaquinlop/pi-deepseek-cache` es otro paquete (caché de DeepSeek) y se queda.
+
 ## ADR-033 — pi-intercom viene de serie: las sesiones de pi hablan entre sí
 
 **Estado:** aceptada (2026-10-26).
