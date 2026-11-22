@@ -2453,5 +2453,9 @@
 	"picodeChatConfirmCloseSetting": "Confirmar antes de fechar um chat ativo",
 	"picodeChatConfirmCloseDescription": "Pergunte antes de fechar uma janela enquanto um chat responde.",
 	"picodeSessionAutoNameSetting": "Nomear sessões automaticamente",
-	"picodeSessionAutoNameDescription": "Use a primeira mensagem para nomear novas sessões. Desative para escolher um nome."
+	"picodeSessionAutoNameDescription": "Use a primeira mensagem para nomear novas sessões. Desative para escolher um nome.",
+	"picodeWhatsNew.chatPreferences.title": "Deixe o PiCode do seu jeito",
+	"picodeWhatsNew.chatPreferences.summary": "Personalize o chat, a memória e seu espaço de trabalho com novas opções em Configurações.",
+	"picodeWhatsNew.chatPreferences.point1": "Escolha como enviar mensagens e se quer confirmar o envio ou o salvamento de memórias.",
+	"picodeWhatsNew.chatPreferences.point2": "Escolha a primeira aba do Agent e veja mais opções para o editor, arquivos e terminal."
 }

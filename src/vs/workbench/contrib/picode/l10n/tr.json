@@ -2453,5 +2453,9 @@
 	"picodeChatConfirmCloseSetting": "Etkin sohbeti kapatmadan önce onayla",
 	"picodeChatConfirmCloseDescription": "Bir sohbet yanıt verirken pencereyi kapatmadan önce sor.",
 	"picodeSessionAutoNameSetting": "Oturumları otomatik adlandır",
-	"picodeSessionAutoNameDescription": "Yeni oturumları ilk mesaja göre adlandırın. Ad seçmek için kapatın."
+	"picodeSessionAutoNameDescription": "Yeni oturumları ilk mesaja göre adlandırın. Ad seçmek için kapatın.",
+	"picodeWhatsNew.chatPreferences.title": "PiCode’u kendinize göre ayarlayın",
+	"picodeWhatsNew.chatPreferences.summary": "Ayarlar’daki yeni seçeneklerle sohbeti, belleği ve çalışma alanınızı kişiselleştirin.",
+	"picodeWhatsNew.chatPreferences.point1": "Mesajları nasıl göndereceğinizi ve göndermeden veya anıları kaydetmeden önce onay isteyip istemeyeceğinizi seçin.",
+	"picodeWhatsNew.chatPreferences.point2": "İlk Agent sekmesini seçin; düzenleyici, dosyalar ve terminal için diğer seçenekleri keşfedin."
 }

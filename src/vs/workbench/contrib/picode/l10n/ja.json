@@ -2453,5 +2453,9 @@
 	"picodeChatConfirmCloseSetting": "応答中のチャットを閉じる前に確認",
 	"picodeChatConfirmCloseDescription": "チャットの応答中にウィンドウを閉じる前に確認します。",
 	"picodeSessionAutoNameSetting": "セッションに自動で名前を付ける",
-	"picodeSessionAutoNameDescription": "最初のメッセージから名前を付けます。オフにすると名前を選べます。"
+	"picodeSessionAutoNameDescription": "最初のメッセージから名前を付けます。オフにすると名前を選べます。",
+	"picodeWhatsNew.chatPreferences.title": "PiCodeを自分好みに",
+	"picodeWhatsNew.chatPreferences.summary": "設定の新しいオプションで、チャット、メモリ、作業環境を自分好みにできます。",
+	"picodeWhatsNew.chatPreferences.point1": "メッセージの送信方法と、送信やメモリ保存の前に確認するかを選べます。",
+	"picodeWhatsNew.chatPreferences.point2": "Agentで最初に開くタブを選び、エディター、ファイル、ターミナルの設定も変更できます。"
 }
