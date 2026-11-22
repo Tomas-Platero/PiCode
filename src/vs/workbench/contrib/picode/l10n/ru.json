@@ -2453,5 +2453,9 @@
 	"picodeChatConfirmCloseSetting": "Подтверждать закрытие активного чата",
 	"picodeChatConfirmCloseDescription": "Спрашивать перед закрытием окна во время ответа чата.",
 	"picodeSessionAutoNameSetting": "Автоматически называть сеансы",
-	"picodeSessionAutoNameDescription": "Называть новые сеансы по первому сообщению. Отключите, чтобы выбрать название."
+	"picodeSessionAutoNameDescription": "Называть новые сеансы по первому сообщению. Отключите, чтобы выбрать название.",
+	"picodeWhatsNew.chatPreferences.title": "Настройте PiCode под себя",
+	"picodeWhatsNew.chatPreferences.summary": "Настройте чат, память и рабочее пространство с помощью новых параметров.",
+	"picodeWhatsNew.chatPreferences.point1": "Выберите способ отправки сообщений и подтверждение отправки или сохранения воспоминаний.",
+	"picodeWhatsNew.chatPreferences.point2": "Выберите первую вкладку Agent и дополнительные параметры редактора, файлов и терминала."
 }

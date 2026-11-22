@@ -8,7 +8,7 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions' | 'setup' | 'agentProfiles' | 'syncParts' | 'settings' | 'themes';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser' | 'usageAlerts' | 'sessionBranches' | 'parallelSessions' | 'setup' | 'agentProfiles' | 'syncParts' | 'settings' | 'themes' | 'chatPreferences';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
 export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser' | 'newIsolatedSession' | 'openSetup' | 'openAgentProfiles' | 'openCloudSync' | 'openSettings' | 'openThemes';
@@ -36,6 +36,20 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'chatPreferences',
+			since: '2.4.10',
+			plan: 'free',
+			icon: Codicon.settingsGear,
+			title: localize('picodeWhatsNew.chatPreferences.title', "Make PiCode work your way"),
+			summary: localize('picodeWhatsNew.chatPreferences.summary', "Make chat, memory and your workspace feel more like yours with new choices in Settings."),
+			points: [
+				localize('picodeWhatsNew.chatPreferences.point1', "Choose how to send messages and whether to confirm before sending or saving memories."),
+				localize('picodeWhatsNew.chatPreferences.point2', "Choose your first Agent tab and find more options for the editor, files and terminal."),
+			],
+			preview: 'chatPreferences',
+			action: 'openSettings',
+		},
 		{
 			id: 'themeGallery',
 			since: '2.4.3',
