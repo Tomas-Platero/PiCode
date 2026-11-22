@@ -197,7 +197,12 @@ the Engram program under `resources/memory`. Their licence text ships next to wh
 (`gentle-pi` carries its own `LICENSE`; the `gentle-engram` package declares MIT but ships no licence
 file, so the Engram licence travels as `LICENSE-engram.txt` beside the program), and they are
 credited by name and link in the README, the wiki and the release pages. Their names and logos are theirs: PiCode
-says it *uses* their software and never presents any surface as their product.
+says it *uses* their software and never presents any surface as their product. Two of Gentle AI's
+skills, `go-testing` and `systemic-issue-triage` (Apache-2.0, as their headers state), travel unchanged
+under `extensions/picode/skills/`.
+
+**pi-web-access** (MIT, by Nico Bailon, [repository](https://github.com/nicobailon/pi-web-access)) is
+pinned in the profile next to them, because Gentle AI installs it for pi; it carries its own `LICENSE`.
 
 ### 🖼️ The icon in the executable
 
