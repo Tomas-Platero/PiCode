@@ -6,7 +6,7 @@
 import { agentProfilesExtension } from './agent-profiles-live';
 import * as vscode from 'vscode';
 import { withContext } from './context';
-import { currentBranch, noteTurnBranch, renameRecordedBranch, updateSessionGitStore } from './session-git';
+import { currentBranch, noteTurnBranch, renameRecordedBranch, updateSessionGitStore, withTitle } from './session-git';
 import { writeNamedTranscript } from './session-transcript';
 import { branchSlugOf, isPlaceholderBranch, openWorktree, placeholderBranch, renameBranch, repoRootOf, setActiveChatFolder } from './session-worktree';
 import { contextBlockFor } from './editor-context';
@@ -985,19 +985,24 @@ function permissionExtension(log: (line: string) => void, turn: TurnHolder): PiI
 		hidden: true,
 		factory: pi => {
 			void pi.on('tool_call', async event => {
-				if (!shouldAsk(turn.current?.level, event.toolName) || isReadOnlyShellCommand(event.toolName, event.input)) {
+				const confirmMemory = vscode.workspace.getConfiguration('picode.memory').get<boolean>('confirmSave', false) && isMemoryWriteCall(event.toolName, event.input);
+				if (!confirmMemory && (!shouldAsk(turn.current?.level, event.toolName) || isReadOnlyShellCommand(event.toolName, event.input))) {
 					return undefined;
 				}
 				const stream = turn.current?.stream;
 				if (stream === undefined || typeof stream.questionCarousel !== 'function') {
-					return undefined;
+					return confirmMemory ? { block: true, reason: 'Memory approval is unavailable' } : undefined;
 				}
 				try {
-					const answer = await stream.questionCarousel([permissionQuestion(event.toolName, event.input)]);
+					const question = confirmMemory ? new vscode.ChatQuestion(PERMISSION_QUESTION_ID, vscode.ChatQuestionType.SingleSelect, vscode.l10n.t('Save this memory?'), { message: memoryCard(event.toolName, event.input)?.running, options: [
+						{ id: 'allow', label: ALLOW_ANSWER, value: PERMISSION_ALLOW },
+						{ id: 'deny', label: DENY_ANSWER, value: 'deny' },
+					] }) : permissionQuestion(event.toolName, event.input);
+					const answer = await stream.questionCarousel([question]);
 					return decisionFromAnswer(answer, event.toolName);
 				} catch (error) {
 					log(`permission question failed: ${error instanceof Error ? error.message : String(error)}`);
-					return undefined;
+					return confirmMemory ? { block: true, reason: 'Memory approval failed' } : undefined;
 				}
 			});
 		},
@@ -2369,6 +2374,12 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					chat.sessionManager = reopen
 						? loaded.sdk.SessionManager.open(known, sessionDir, cwd)
 						: loaded.sdk.SessionManager.create(cwd, sessionDir);
+					if (!reopen && !vscode.workspace.getConfiguration('picode.sessions').get<boolean>('autoName', true)) {
+						const name = await vscode.window.showInputBox({ title: vscode.l10n.t('Name this session'), prompt: vscode.l10n.t('Leave it empty to name it after its first message again.') });
+						if (name?.trim()) {
+							await updateSessionGitStore(store => withTitle(store, chat.sessionManager!.getSessionId(), name));
+						}
+					}
 				}
 				const model = selected === undefined ? undefined : chat.services.modelRuntime.getModel(selected.providerId, selected.modelId);
 				// The tools the owner turned off, read at session build: a change rebuilds the session

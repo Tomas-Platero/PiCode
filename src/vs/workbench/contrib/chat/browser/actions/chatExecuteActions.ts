@@ -209,14 +209,19 @@ export class ChatSubmitAction extends SubmitAction {
 				icon: Codicon.arrowUpCompact,
 				tooltip: localize('sendToAgent', "Send to Agent"),
 			},
-			keybinding: {
+			keybinding: [{
 				when: ContextKeyExpr.and(
 					ChatContextKeys.inChatInput,
 					ChatContextKeys.withinEditSessionDiff.negate(),
+					ContextKeyExpr.notEquals('config.picode.chat.enterToSend', false),
 				),
 				primary: KeyCode.Enter,
 				weight: KeybindingWeight.EditorContrib
-			},
+			}, {
+				when: ContextKeyExpr.and(ChatContextKeys.inChatInput, ChatContextKeys.withinEditSessionDiff.negate(), ContextKeyExpr.equals('config.picode.chat.enterToSend', false)),
+				primary: KeyMod.CtrlCmd | KeyCode.Enter,
+				weight: KeybindingWeight.EditorContrib + 1,
+			}],
 			menu: [
 				{
 					id: MenuId.ChatExecute,

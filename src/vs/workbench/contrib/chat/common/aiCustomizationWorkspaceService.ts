@@ -56,6 +56,7 @@ export const AICustomizationManagementSection = {
 	General: 'general',
 	Themes: 'themes',
 	EditorPreferences: 'editorPreferences',
+	Files: 'files',
 	ChatAgent: 'chatAgent',
 	Terminal: 'terminal',
 	Memory: 'memory',
@@ -79,6 +80,7 @@ export function picodeSettingsGroupOf(section: AICustomizationManagementSection)
 		case AICustomizationManagementSection.General:
 		case AICustomizationManagementSection.Themes:
 		case AICustomizationManagementSection.EditorPreferences:
+		case AICustomizationManagementSection.Files:
 		case AICustomizationManagementSection.ChatAgent:
 		case AICustomizationManagementSection.Terminal:
 		case AICustomizationManagementSection.Memory:
