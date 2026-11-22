@@ -45,6 +45,7 @@ import {
 import { modelRefOf } from './providerIds';
 import { sessionProblems, unseenProblems, type SessionProblem } from './session-problems';
 import { VENDOR } from './providers';
+import { isMemoryWriteCall, memoryCard } from './memory-cards';
 
 /**
  * Continuing a conversation the panel lists.
@@ -100,19 +101,21 @@ function resumePermissionExtension(log: (line: string) => void): PiInlineExtensi
 		hidden: true,
 		factory: pi => {
 			void pi.on('tool_call', async event => {
-				if (!shouldAsk(resumeTurnContext.current?.level, event.toolName) || isReadOnlyShellCommand(event.toolName, event.input)) {
+				const confirmMemory = vscode.workspace.getConfiguration('picode.memory').get<boolean>('confirmSave', false) && isMemoryWriteCall(event.toolName, event.input);
+				if (!confirmMemory && (!shouldAsk(resumeTurnContext.current?.level, event.toolName) || isReadOnlyShellCommand(event.toolName, event.input))) {
 					return undefined;
 				}
 				const stream = resumeTurnContext.current?.stream;
 				if (stream === undefined || typeof stream.questionCarousel !== 'function') {
-					return undefined;
+					return confirmMemory ? { block: true, reason: 'Memory approval is unavailable' } : undefined;
 				}
 				try {
 					const answer = await stream.questionCarousel([new vscode.ChatQuestion(
 						PERMISSION_QUESTION_ID,
 						vscode.ChatQuestionType.SingleSelect,
-						vscode.l10n.t('pi wants to run {0}', event.toolName),
+						confirmMemory ? vscode.l10n.t('Save this memory?') : vscode.l10n.t('pi wants to run {0}', event.toolName),
 						{
+							message: confirmMemory ? memoryCard(event.toolName, event.input)?.running : undefined,
 							options: [
 								{ id: 'allow', label: vscode.l10n.t('Allow'), value: PERMISSION_ALLOW },
 								{ id: 'deny', label: vscode.l10n.t('Deny'), value: 'deny' },
@@ -122,7 +125,7 @@ function resumePermissionExtension(log: (line: string) => void): PiInlineExtensi
 					return decisionFromAnswer(answer, event.toolName);
 				} catch (error) {
 					log(`resumed-session permission question failed: ${error instanceof Error ? error.message : String(error)}`);
-					return undefined;
+					return confirmMemory ? { block: true, reason: 'Memory approval failed' } : undefined;
 				}
 			});
 		},

@@ -2978,6 +2978,17 @@ export class ChatWidget extends Disposable implements IChatWidget {
 			return;
 		}
 
+		if (!query && !options.isVoiceModeInput && (this.getInput().trim() || this.input.getAttachedContext().asArray().length > 0) && this.configurationService.getValue<boolean>('picode.chat.confirmSend')) {
+			const result = await this.dialogService.confirm({
+				message: localize('picodeChatConfirmSend', "Send this message?"),
+				detail: localize('picodeChatConfirmSendDetail', "Your message and attachments are ready to send."),
+				primaryButton: localize('picodeChatSendNow', "Send"),
+			});
+			if (!result.confirmed) {
+				return;
+			}
+		}
+
 		let savedBeforeSend = false;
 		// Check if a custom submit handler wants to handle this submission
 		if (this.viewOptions.submitHandler) {

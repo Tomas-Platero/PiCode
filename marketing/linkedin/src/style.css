@@ -1,0 +1,40 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1080px; height: 1350px; overflow: hidden; }
+body {
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  color: #F2F4F8;
+  background:
+    radial-gradient(1100px 700px at 0% 0%, #1E3A66 0%, transparent 60%),
+    radial-gradient(900px 700px at 100% 100%, #1B3157 0%, transparent 60%),
+    #0B0F17;
+  padding: 72px 72px 0;
+  position: relative;
+}
+.brand { display: flex; align-items: center; gap: 18px; }
+.brand svg { width: 64px; height: 64px; }
+.brand .name { font-size: 44px; font-weight: 700; letter-spacing: -0.5px; }
+.brand .name b { color: #3B9BFF; font-weight: 700; }
+h1 {
+  font-size: 76px; line-height: 1.04; font-weight: 700; letter-spacing: -1.5px;
+  margin-top: 56px;
+}
+h1 em { font-style: normal; color: #3B9BFF; }
+.sub { font-size: 30px; line-height: 1.4; color: #AEB8C8; margin-top: 24px; max-width: 900px; }
+.bar { width: 120px; height: 6px; border-radius: 3px; background: #3B9BFF; margin-top: 36px; }
+.pills { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+.pill {
+  font-size: 24px; font-weight: 600; color: #CFE3FF;
+  border: 2px solid #2D5A99; background: rgba(59,155,255,0.08);
+  padding: 10px 22px; border-radius: 999px;
+}
+.shot {
+  position: absolute; left: 72px; right: -120px; bottom: -40px;
+  border-radius: 22px; overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 2px rgba(120,160,220,0.18);
+}
+.shot img { display: block; width: 100%; }
+.footer {
+  position: absolute; left: 72px; right: 72px; bottom: 48px;
+  display: flex; justify-content: space-between; font-size: 24px; color: #8A96AA;
+}
+.footer b { color: #F2F4F8; font-weight: 600; }
