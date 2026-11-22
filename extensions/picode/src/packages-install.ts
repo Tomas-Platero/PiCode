@@ -48,6 +48,7 @@ import { npmRunEnv, planNpmRun } from './npm-run';
 import { withProductEnv } from './product-env';
 import { isLeftBehindPackage } from './left-behind-packages';
 import { PRODUCT_PACKAGES, withProductPackages, type ProductPackage } from './product-packages';
+import { PRODUCT_SEEDS_FILE, withProductMcpServers } from './product-mcp';
 import { parsePackageSource, parseSettings, type SettingsDocument } from './packages-data';
 import { l10n } from './l10n.ts';
 
@@ -464,6 +465,32 @@ function reasonOf(stderr: string): string {
  * nothing. The batch is one process for the whole spec list; only a failed batch is retried
  * one spec at a time, so a single unresolvable package does not take the rest with it.
  */
+/**
+ * The MCP servers the product brings, written into the profile the first time it meets them
+ * (`product-mcp.ts`). Only through an io that can write: a read-only io (tests) skips it.
+ */
+function offerProductMcpServers(profileDir: string, io: PackagesFileIo, log: (line: string) => void): void {
+	if (io.writeText === undefined) {
+		return;
+	}
+	const mcpFile = path.join(profileDir, 'mcp.json');
+	const seedsFile = path.join(profileDir, PRODUCT_SEEDS_FILE);
+	const result = withProductMcpServers(io.readSettingsText(mcpFile), io.readSettingsText(seedsFile));
+	try {
+		if (result.mcpText !== undefined) {
+			io.writeText(mcpFile, result.mcpText);
+		}
+		if (result.seedsText !== undefined) {
+			io.writeText(seedsFile, result.seedsText);
+		}
+		for (const name of result.added) {
+			log(l10n.t('Added the {0} server that PiCode ships.', name));
+		}
+	} catch (error) {
+		log(l10n.t('The servers PiCode ships could not be added to this profile ({0}).', error instanceof Error ? error.message : String(error)));
+	}
+}
+
 async function runEnsure(options: EnsureProfilePackagesOptions): Promise<PackagesInstallOutcome> {
 	const io = options.io ?? realIo;
 	const spawn = options.spawn ?? defaultSpawn;
@@ -490,6 +517,7 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 			log(l10n.t('The packages PiCode ships could not be declared in this profile ({0}).', error instanceof Error ? error.message : String(error)));
 		}
 	}
+	offerProductMcpServers(profileDir, io, log);
 	const settings = parseSettings(settingsText);
 	const scan = scanDeclaredPackages(settings, npmRoot, gitRoot, io);
 	let installed = 0;
