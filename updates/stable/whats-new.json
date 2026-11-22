@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.6",
+			"notes": "### ✨ New\n\n- **Gentle AI has a page of its own.** In Settings, right under Agents: how your agents talk to you, what they may do without asking, and a new switch that lets them keep long jobs running while you keep chatting. You will find those jobs in Tasks.\n\n### ⚡ Faster\n\n- **pi is ready sooner.** Opening a window no longer freezes the editor for a while: pi gets ready once, and the model list and the `/` menu show up right away.\n\n### 🐛 Fixed\n\n- **Updates finish cleanly when you close PiCode.** The memory engine is closed first, so the update no longer stops halfway with an \"access denied\" error.\n- **Finished background jobs look right again.** When a job ends, the chat shows its card with how it went and its last lines of output, instead of raw text full of odd boxes left by terminal colours."
+		},
+		{
 			"version": "2.4.4",
 			"notes": "### ✨ New\n\n- **Automatic really means everything.** PiCode, pi, its packages, the memory engine and your extensions now update on their own, quietly, without a single console window popping up. And never in the middle of an answer.\n- **Profiles live with your agents.** Choosing the model each agent works with is now the first tab of *Agents*, right next to your own agents.\n- **All your shortcuts at a glance.** The *Keyboard* page lists every shortcut, with a search box to find one fast.\n- **More ways to make PiCode comfortable.** *Accessibility* gains underlined links, a thicker cursor, dimmed panels you're not using, smooth scrolling, zoom with the mouse wheel and more.\n\n### 🛠️ Improved\n\n- **Check your memory right where you are.** The check answers on the same page, with a clear verdict and only what needs a look.\n- **No dead ends.** Using your own pi is greyed out until there's one on your computer, and it tells you why.\n- **Friendlier words.** The usage notice, *Privacy* and *What's New* speak in a warmer tone, in all 13 languages."
 		},
