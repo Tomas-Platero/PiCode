@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.8-beta",
+			"notes": "### ✨ New\n\n- 🌐 **Your agents can look things up online again.** The explorer agent searches the web and reads pages for you, with nothing to set up and no keys to add.\n- 📚 **Up-to-date library docs, built in.** Context7 joins your MCP servers, so answers about a framework or library use its current documentation. It works without an account, and if you remove it, it stays removed.\n- 🧪 **Two new skills:** help with Go tests, and a calmer way to sort a pile of bug reports by their real cause.\n\n### 🧹 Tidied up\n\n- The separate DeepSeek web search package is removed when PiCode updates. It clashed with the new web search, which already searches through DeepSeek, and showed a warning in every chat."
+		},
+		{
 			"version": "2.4.6-beta",
 			"notes": "### ✨ New\n\n- **Gentle AI has a page of its own.** In Settings, right under Agents: how your agents talk to you, what they may do without asking, and a new switch that lets them keep long jobs running while you keep chatting. You will find those jobs in Tasks.\n\n### ⚡ Faster\n\n- **pi is ready sooner.** Opening a window no longer freezes the editor for a while: pi gets ready once, and the model list and the `/` menu show up right away.\n\n### 🐛 Fixed\n\n- **Updates finish cleanly when you close PiCode.** The memory engine is closed first, so the update no longer stops halfway with an \"access denied\" error.\n- **Finished background jobs look right again.** When a job ends, the chat shows its card with how it went and its last lines of output, instead of raw text full of odd boxes left by terminal colours."
 		},
