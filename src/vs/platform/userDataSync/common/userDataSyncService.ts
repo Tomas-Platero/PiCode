@@ -140,11 +140,13 @@ export class UserDataSyncService extends Disposable implements IUserDataSyncServ
 		let cancellablePromise: CancelablePromise<void> | undefined;
 		return {
 			manifest,
-			async run(): Promise<void> {
+			get canSelectResources() { return that.userDataProfilesService.profiles.length === 1; },
+			async run(resources?: ReadonlySet<SyncResource>): Promise<void> {
 				if (executed) {
 					throw new Error('Can run a task only once');
 				}
-				cancellablePromise = createCancelablePromise(token => that.sync(manifest, false, executionId, token));
+				const selected = that.userDataProfilesService.profiles.length === 1 ? resources : undefined;
+				cancellablePromise = createCancelablePromise(token => that.sync(manifest, false, executionId, token, selected));
 				await cancellablePromise.finally(() => cancellablePromise = undefined);
 				that.logService.info(`Sync done. Took ${new Date().getTime() - startTime}ms`);
 				that.updateLastSyncTime();
@@ -219,20 +221,23 @@ export class UserDataSyncService extends Disposable implements IUserDataSyncServ
 		};
 	}
 
-	private async sync(manifestOrLatestData: IUserDataManifest | IUserDataSyncLatestData | null, preview: boolean, executionId: string, token: CancellationToken): Promise<void> {
+	private async sync(manifestOrLatestData: IUserDataManifest | IUserDataSyncLatestData | null, preview: boolean, executionId: string, token: CancellationToken, resources?: ReadonlySet<SyncResource>): Promise<void> {
 		this._syncErrors = [];
 		try {
+			if (resources?.size === 0) {
+				return;
+			}
 			if (this.status !== SyncStatus.HasConflicts) {
 				this.setStatus(SyncStatus.Syncing);
 			}
 
 			// Sync Default Profile First
 			const defaultProfileSynchronizer = this.getOrCreateActiveProfileSynchronizer(this.userDataProfilesService.defaultProfile, undefined);
-			this._syncErrors.push(...await this.syncProfile(defaultProfileSynchronizer, manifestOrLatestData, preview, executionId, token));
+			this._syncErrors.push(...await this.syncProfile(defaultProfileSynchronizer, manifestOrLatestData, preview, executionId, token, resources));
 
 			// Sync other profiles
 			const userDataProfileManifestSynchronizer = defaultProfileSynchronizer.enabled.find(s => s.resource === SyncResource.Profiles);
-			if (userDataProfileManifestSynchronizer) {
+			if (userDataProfileManifestSynchronizer && !resources) {
 				const syncProfiles = (await (userDataProfileManifestSynchronizer as UserDataProfilesManifestSynchroniser).getLastSyncedProfiles()) || [];
 				if (token.isCancellationRequested) {
 					return;
@@ -304,8 +309,8 @@ export class UserDataSyncService extends Disposable implements IUserDataSyncServ
 		}
 	}
 
-	private async syncProfile(profileSynchronizer: ProfileSynchronizer, manifestOrLatestData: IUserDataManifest | IUserDataSyncLatestData | null, preview: boolean, executionId: string, token: CancellationToken): Promise<IUserDataSyncResourceError[]> {
-		const errors = await profileSynchronizer.sync(manifestOrLatestData, preview, executionId, token);
+	private async syncProfile(profileSynchronizer: ProfileSynchronizer, manifestOrLatestData: IUserDataManifest | IUserDataSyncLatestData | null, preview: boolean, executionId: string, token: CancellationToken, resources?: ReadonlySet<SyncResource>): Promise<IUserDataSyncResourceError[]> {
+		const errors = await profileSynchronizer.sync(manifestOrLatestData, preview, executionId, token, resources);
 		return errors.map(([syncResource, error]) => ({ profile: profileSynchronizer.profile, syncResource, error }));
 	}
 
@@ -397,13 +402,16 @@ export class UserDataSyncService extends Disposable implements IUserDataSyncServ
 		await this.resetLocal();
 	}
 
-	async resetRemote(): Promise<void> {
+	async resetRemote(requireConfirmation = false): Promise<void> {
 		this.checkEnablement();
 		try {
 			await this.userDataSyncStoreService.clear();
 			this.logService.info('Cleared data on server');
 		} catch (e) {
 			this.logService.error(e);
+			if (requireConfirmation) {
+				throw e;
+			}
 		}
 		this._onDidResetRemote.fire();
 	}
@@ -592,7 +600,7 @@ export class UserDataSyncService extends Disposable implements IUserDataSyncServ
 	}
 
 	private updateLastSyncTime(): void {
-		if (this.status === SyncStatus.Idle) {
+		if (this.status === SyncStatus.Idle && this._syncErrors.length === 0) {
 			this._lastSyncTime = new Date().getTime();
 			this.storageService.store(LAST_SYNC_TIME_KEY, this._lastSyncTime, StorageScope.APPLICATION, StorageTarget.MACHINE);
 			this._onDidChangeLastSyncTime.fire(this._lastSyncTime);
@@ -747,14 +755,14 @@ class ProfileSynchronizer extends Disposable {
 		}
 	}
 
-	async sync(manifestOrLatestData: IUserDataManifest | IUserDataSyncLatestData | null, preview: boolean, executionId: string, token: CancellationToken): Promise<[SyncResource, UserDataSyncError][]> {
+	async sync(manifestOrLatestData: IUserDataManifest | IUserDataSyncLatestData | null, preview: boolean, executionId: string, token: CancellationToken, resources?: ReadonlySet<SyncResource>): Promise<[SyncResource, UserDataSyncError][]> {
 
 		// Return if cancellation is requested
 		if (token.isCancellationRequested) {
 			return [];
 		}
 
-		const synchronizers = this.enabled;
+		const synchronizers = resources ? this.enabled.filter(synchronizer => resources.has(synchronizer.resource)) : this.enabled;
 		if (!synchronizers.length) {
 			return [];
 		}
