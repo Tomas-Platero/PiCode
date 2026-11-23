@@ -7,7 +7,7 @@ import * as DOM from '../../../../../base/browser/dom.js';
 import { Button } from '../../../../../base/browser/ui/button/button.js';
 import { renderIcon } from '../../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
-import { fromNow } from '../../../../../base/common/date.js';
+import { onUnexpectedError } from '../../../../../base/common/errors.js';
 import { Disposable, DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { localize } from '../../../../../nls.js';
@@ -15,10 +15,10 @@ import { ICommandService } from '../../../../../platform/commands/common/command
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { defaultButtonStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
-import { IUserDataSyncEnablementService, IUserDataSyncService, SyncResource, SyncStatus } from '../../../../../platform/userDataSync/common/userDataSync.js';
+import { AutoSyncStatus, IUserDataAutoSyncService, IUserDataSyncEnablementService, IUserDataSyncService, SyncResource, SyncStatus } from '../../../../../platform/userDataSync/common/userDataSync.js';
 import { IUserDataSyncMachine, IUserDataSyncMachinesService } from '../../../../../platform/userDataSync/common/userDataSyncMachines.js';
 import { PI_PROFILE_PARTS, PI_PROFILE_SKIP_SETTING, PiProfilePart, skippedPiProfileParts } from '../../../../../platform/userDataSync/common/piProfileContent.js';
-import { AccountStatus, IUserDataSyncWorkbenchService } from '../../../../services/userDataSync/common/userDataSync.js';
+import { AccountStatus, getSyncAreaLabel, IUserDataSyncWorkbenchService, SHOW_SYNC_LOG_COMMAND_ID } from '../../../../services/userDataSync/common/userDataSync.js';
 import { registerAccountSection } from './picodeAccountSections.js';
 import { IPicodeProEntitlement } from './picodeProEntitlement.js';
 
@@ -102,6 +102,8 @@ type Tone = 'ok' | 'busy' | 'warn' | 'off';
 class PicodeAccountSyncSection extends Disposable {
 
 	private readonly renderStore = this._register(new DisposableStore());
+	private turningOn = false;
+	private autoSyncStatus: AutoSyncStatus | undefined;
 	/** The computers on this account, read once per change: reading them is a call to the cloud. */
 	private machines: IUserDataSyncMachine[] | undefined;
 	private machinesLoading = false;
@@ -110,6 +112,7 @@ class PicodeAccountSyncSection extends Disposable {
 		private readonly container: HTMLElement,
 		@IPicodeProEntitlement private readonly entitlement: IPicodeProEntitlement,
 		@IUserDataSyncService private readonly userDataSyncService: IUserDataSyncService,
+		@IUserDataAutoSyncService private readonly autoSyncService: IUserDataAutoSyncService,
 		@IUserDataSyncEnablementService private readonly enablementService: IUserDataSyncEnablementService,
 		@IUserDataSyncWorkbenchService private readonly workbenchService: IUserDataSyncWorkbenchService,
 		@IUserDataSyncMachinesService private readonly machinesService: IUserDataSyncMachinesService,
@@ -127,6 +130,16 @@ class PicodeAccountSyncSection extends Disposable {
 		this._register(this.enablementService.onDidChangeEnablement(() => { this.machines = undefined; rerender(); }));
 		this._register(this.enablementService.onDidChangeResourceEnablement(rerender));
 		this._register(this.machinesService.onDidChange(() => { this.machines = undefined; rerender(); }));
+		this._register(autoSyncService.onDidChangeStatus(status => {
+			this.autoSyncStatus = status;
+			rerender();
+		}));
+		void autoSyncService.getStatus().then(status => {
+			if (!this._store.isDisposed && !this.autoSyncStatus) {
+				this.autoSyncStatus = status;
+				rerender();
+			}
+		}, onUnexpectedError);
 		this.render();
 	}
 
@@ -178,7 +191,10 @@ class PicodeAccountSyncSection extends Disposable {
 		const status = this.userDataSyncService.status;
 		const signedOut = enabled && this.workbenchService.accountStatus === AccountStatus.Unavailable;
 		const conflicts = this.userDataSyncService.conflicts.length;
-		const tone: Tone = !enabled ? 'off' : signedOut || conflicts > 0 ? 'warn' : status === SyncStatus.Syncing ? 'busy' : 'ok';
+		const paused = this.autoSyncStatus?.state === 'paused';
+		const pending = this.autoSyncStatus?.state === 'pending';
+		const syncing = status === SyncStatus.Syncing || this.autoSyncStatus?.state === 'syncing';
+		const tone: Tone = !enabled ? (this.turningOn ? 'busy' : 'off') : signedOut || conflicts > 0 || paused ? 'warn' : syncing ? 'busy' : pending ? 'off' : 'ok';
 
 		const hero = DOM.append(page, $(`.picode-sync-hero.${tone}`));
 		this.renderFlow(hero, tone, enabled && !signedOut);
@@ -187,17 +203,23 @@ class PicodeAccountSyncSection extends Disposable {
 		const title = DOM.append(text, $('strong'));
 		const line = DOM.append(text, $('span'));
 		const actions = DOM.append(body, $('.picode-sync-hero-actions'));
+		const last = this.userDataSyncService.lastSyncTime;
+		const when = last !== undefined ? localize('picodeSyncLast', "Last synced {0}", new Date(last).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })) : undefined;
+		const addLastSync = () => { if (when) { DOM.append(text, $('span')).textContent = when; } };
 
 		if (!enabled) {
-			title.textContent = localize('picodeSyncOff', "Sync is off");
-			line.textContent = localize('picodeSyncOffDetail', "Choose below what to keep in the cloud, then turn it on.");
-			// The rows below are what the owner chose, so VS Code's own list is not asked a second time.
-			this.button(actions, localize('picodeSyncTurnOn', "Turn on sync"), false, COMMANDS.turnOn, { skipConfigure: true });
+			title.textContent = this.turningOn ? localize('picodeSyncSyncing', "Syncing…") : localize('picodeSyncOff', "Sync is off");
+			line.textContent = this.turningOn ? localize('picodeSyncNeverYet', "First sync on its way") : localize('picodeSyncOffDetail', "Choose below what to keep in the cloud, then turn it on.");
+			const turnOn = this.renderStore.add(new Button(actions, defaultButtonStyles));
+			turnOn.label = localize('picodeSyncTurnOn', "Turn on sync");
+			turnOn.enabled = !this.turningOn;
+			this.renderStore.add(turnOn.onDidClick(() => { void this.turnOn().catch(onUnexpectedError); }));
 			return;
 		}
 		if (signedOut) {
 			title.textContent = localize('picodeSyncSignedOut', "Sign in to keep syncing");
 			line.textContent = localize('picodeSyncSignedOutDetail', "Your session ended. Nothing is sent until you sign in again.");
+			addLastSync();
 			this.button(actions, localize('picodeSyncSignIn', "Sign in"), false, COMMANDS.signIn);
 			this.button(actions, localize('picodeSyncTurnOff', "Turn off"), true, COMMANDS.turnOff);
 			return;
@@ -207,19 +229,41 @@ class PicodeAccountSyncSection extends Disposable {
 			line.textContent = conflicts === 1
 				? localize('picodeSyncOneConflict', "One part changed here and in the cloud. Choose which to keep.")
 				: localize('picodeSyncConflicts', "{0} parts changed here and in the cloud. Choose which to keep.", conflicts);
+			addLastSync();
 			this.button(actions, localize('picodeSyncResolve', "Resolve"), false, COMMANDS.conflicts);
 			this.button(actions, localize('picodeSyncTurnOff', "Turn off"), true, COMMANDS.turnOff);
 			return;
 		}
 
-		const last = this.userDataSyncService.lastSyncTime;
 		const account = this.workbenchService.current?.accountName;
-		title.textContent = status === SyncStatus.Syncing ? localize('picodeSyncSyncing', "Syncing…") : localize('picodeSyncUpToDate', "Up to date");
-		const when = last !== undefined ? localize('picodeSyncLast', "Last synced {0}", fromNow(last, true)) : localize('picodeSyncNeverYet', "First sync on its way");
-		line.textContent = account ? localize('picodeSyncLastWithAccount', "{0} · {1}", when, account) : when;
+		title.textContent = paused ? localize('picodeSyncPaused', "Sync paused") : syncing ? localize('picodeSyncSyncing', "Syncing…") : pending ? localize('picodeSyncPending', "Changes pending") : localize('picodeSyncUpToDate', "Up to date");
+		const retryAt = this.autoSyncStatus?.retryAt;
+		if (paused && retryAt !== undefined) {
+			line.textContent = localize('picodeSyncRetryAt', "Retry at {0}", new Date(retryAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
+			addLastSync();
+		} else {
+			line.textContent = when && account ? localize('picodeSyncLastWithAccount', "{0} · {1}", when, account) : when ?? (paused ? '' : localize('picodeSyncNeverYet', "First sync on its way"));
+		}
 		const now = this.button(actions, localize('picodeSyncNow', "Sync now"), false, COMMANDS.syncNow);
-		now.enabled = status !== SyncStatus.Syncing;
+		now.enabled = !syncing && !(paused && retryAt !== undefined);
 		this.button(actions, localize('picodeSyncTurnOff', "Turn off"), true, COMMANDS.turnOff);
+	}
+
+	private async turnOn(): Promise<void> {
+		if (this.turningOn) {
+			return;
+		}
+		this.turningOn = true;
+		this.render();
+		try {
+			// The rows below already let the user choose what to sync.
+			await this.commandService.executeCommand(COMMANDS.turnOn, { skipConfigure: true });
+		} finally {
+			this.turningOn = false;
+			if (!this._store.isDisposed) {
+				this.render();
+			}
+		}
 	}
 
 	/** This computer — the cloud — the other computers on the account, joined by lines that move while syncing. */
@@ -283,8 +327,14 @@ class PicodeAccountSyncSection extends Disposable {
 		DOM.append(head, $('span.picode-account-muted')).textContent = localize('picodeSyncCount', "{0} of {1}", on, group.items.length);
 		const card = DOM.append(page, $('.picode-sync-card'));
 		const conflicted = new Set(this.userDataSyncService.conflicts.map(c => c.syncResource));
+		const failed = new Set(this.autoSyncStatus?.failedResources);
+		const retryRows = new Set(failed);
 		for (const item of group.items) {
-			this.renderItem(card, item, enabled, item.resource !== undefined && conflicted.has(item.resource));
+			const hasConflict = item.resource !== undefined && conflicted.has(item.resource);
+			const hasFailure = item.resource !== undefined && failed.has(item.resource);
+			const retry = enabled && !hasConflict && this.isOn(item) && item.resource !== undefined && retryRows.delete(item.resource)
+				? item.resource : undefined;
+			this.renderItem(card, item, enabled, hasConflict, hasFailure, retry);
 		}
 		if (group.note) {
 			const note = DOM.append(page, $('p.picode-sync-note'));
@@ -293,7 +343,7 @@ class PicodeAccountSyncSection extends Disposable {
 		}
 	}
 
-	private renderItem(card: HTMLElement, item: IItem, enabled: boolean, conflicted: boolean): void {
+	private renderItem(card: HTMLElement, item: IItem, enabled: boolean, conflicted: boolean, failed: boolean, retryResource?: SyncResource): void {
 		const on = this.isOn(item);
 		const row = DOM.append(card, $(`.picode-sync-item${on ? '.on' : ''}`));
 		const label = DOM.append(row, $('label.picode-sync-item-label'));
@@ -303,11 +353,12 @@ class PicodeAccountSyncSection extends Disposable {
 		const text = DOM.append(label, $('.picode-sync-item-text'));
 		const name = DOM.append(text, $('strong'));
 		DOM.append(name, $('span')).textContent = item.label;
-		// The state shows only when it says something: in the cloud, or changed in two places.
 		if (on && enabled && this.workbenchService.accountStatus === AccountStatus.Available) {
-			const state = DOM.append(name, $(`span.picode-sync-item-state${conflicted ? '.warn' : ''}`));
-			state.appendChild(renderIcon(conflicted ? Codicon.warning : Codicon.passFilled));
-			state.title = conflicted ? localize('picodeSyncTileConflict', "Changed in two places") : localize('picodeSyncTileSynced', "In the cloud");
+			const warning = conflicted || failed;
+			const state = DOM.append(name, $(`span.picode-sync-item-state${warning ? '.warn' : ''}`));
+			state.appendChild(renderIcon(warning ? Codicon.warning : Codicon.passFilled));
+			state.title = conflicted ? localize('picodeSyncTileConflict', "Changed in two places")
+				: failed ? localize('picodeSyncPending', "Changes pending") : localize('picodeSyncTileSynced', "In the cloud");
 		}
 		DOM.append(text, $('span')).textContent = item.description;
 		if (!on) {
@@ -319,6 +370,18 @@ class PicodeAccountSyncSection extends Disposable {
 			restore.label = localize('picodeSyncRestore', "Restore");
 			restore.element.classList.add('picode-sync-small-button');
 			this.renderStore.add(restore.onDidClick(() => { void this.commandService.executeCommand(COMMANDS.restoreChats); }));
+		}
+		if (retryResource !== undefined && this.workbenchService.accountStatus === AccountStatus.Available) {
+			const retry = this.renderStore.add(new Button(row, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
+			const label = localize('picodeSyncRetryResource', "Retry {0}", getSyncAreaLabel(retryResource));
+			retry.label = '$(sync)';
+			retry.element.classList.add('picode-sync-small-button');
+			retry.element.title = label;
+			retry.element.setAttribute('aria-label', label);
+			retry.enabled = this.autoSyncStatus?.state !== 'syncing' && this.autoSyncStatus?.state !== 'paused';
+			this.renderStore.add(retry.onDidClick(() => {
+				void this.autoSyncService.triggerSync([retryResource], { retryResource }).catch(onUnexpectedError);
+			}));
 		}
 		const box = DOM.append(row, $('input.picode-sync-switch')) as HTMLInputElement;
 		box.type = 'checkbox';
@@ -369,6 +432,7 @@ class PicodeAccountSyncSection extends Disposable {
 	/** What is already in the cloud: earlier copies, and the way to wipe it. Quiet, at the end. */
 	private renderCloudData(page: HTMLElement): void {
 		const foot = DOM.append(page, $('.picode-sync-foot'));
+		this.footLink(foot, Codicon.output, localize('picodeSyncShowLog', "Show sync log"), localize('picodeSyncShowLogDetail', "See what started each sync and which resources it updated."), SHOW_SYNC_LOG_COMMAND_ID);
 		this.footLink(foot, Codicon.history, localize('picodeSyncBackups', "Earlier copies"), localize('picodeSyncBackupsDetail', "See what was synced and bring back an earlier copy."), COMMANDS.backups);
 		this.footLink(foot, Codicon.trash, localize('picodeSyncClear', "Delete from the cloud"), localize('picodeSyncClearDetail', "Removes your synced data from the cloud. This computer keeps its own."), COMMANDS.clearCloud);
 	}
