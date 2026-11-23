@@ -7,7 +7,8 @@ import { ITreeItem, TreeItemCollapsibleState, TreeViewItemHandleArg, IViewDescri
 import { localize } from '../../../../nls.js';
 import { TreeViewPane } from '../../../browser/parts/views/treeView.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
-import { IUserDataSyncService, Change, MergeState, IUserDataSyncResource, IResourcePreview, IUserDataSyncEnablementService } from '../../../../platform/userDataSync/common/userDataSync.js';
+import { IUserDataSyncService, Change, MergeState, IUserDataSyncResource, IResourcePreview, IUserDataSyncEnablementService, IUserDataSyncUtilService, SyncResource } from '../../../../platform/userDataSync/common/userDataSync.js';
+import { merge } from '../../../../platform/userDataSync/common/settingsMerge.js';
 import { registerAction2, Action2, MenuId } from '../../../../platform/actions/common/actions.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -22,6 +23,7 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { IUserDataProfile, IUserDataProfilesService, reviveProfile } from '../../../../platform/userDataProfile/common/userDataProfile.js';
 import { DEFAULT_EDITOR_ASSOCIATION } from '../../../common/editor.js';
@@ -43,15 +45,17 @@ export class UserDataSyncConflictsViewPane extends TreeViewPane implements IUser
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IOpenerService openerService: IOpenerService,
 		@IThemeService themeService: IThemeService,
-		@INotificationService notificationService: INotificationService,
+		@INotificationService private readonly syncNotificationService: INotificationService,
 		@IHoverService hoverService: IHoverService,
 		@IUserDataSyncService private readonly userDataSyncService: IUserDataSyncService,
 		@IUserDataSyncWorkbenchService private readonly userDataSyncWorkbenchService: IUserDataSyncWorkbenchService,
 		@IUserDataSyncEnablementService private readonly userDataSyncEnablementService: IUserDataSyncEnablementService,
 		@IUserDataProfilesService private readonly userDataProfilesService: IUserDataProfilesService,
 		@IAccessibleViewInformationService accessibleViewVisibilityService: IAccessibleViewInformationService,
+		@IQuickInputService private readonly quickInputService: IQuickInputService,
+		@IUserDataSyncUtilService private readonly userDataSyncUtilService: IUserDataSyncUtilService,
 	) {
-		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, notificationService, hoverService, accessibleViewVisibilityService);
+		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, syncNotificationService, hoverService, accessibleViewVisibilityService);
 		this._register(this.userDataSyncService.onDidChangeConflicts(() => this.treeView.refresh()));
 		this.registerActions();
 	}
@@ -60,7 +64,7 @@ export class UserDataSyncConflictsViewPane extends TreeViewPane implements IUser
 		super.renderTreeView(DOM.append(container, DOM.$('')));
 
 		const that = this;
-		this.treeView.message = localize('explanation', "Please go through each entry and merge to resolve conflicts.");
+		this.treeView.message = localize('picodeSyncConflictHelp', "Open a file to compare this device and the cloud. You can also keep either version for that file.");
 		this.treeView.dataProvider = { getChildren() { return that.getTreeItems(); } };
 	}
 
@@ -91,7 +95,7 @@ export class UserDataSyncConflictsViewPane extends TreeViewPane implements IUser
 					description: getSyncAreaLabel(resource.syncResource),
 					collapsibleState: TreeItemCollapsibleState.None,
 					command: { id: `workbench.actions.sync.openConflicts`, title: '', arguments: [{ $treeViewId: '', $treeItemHandle: handle } satisfies TreeViewItemHandleArg] },
-					contextValue: `sync-conflict-resource`
+					contextValue: resource.syncResource === SyncResource.Settings ? 'sync-conflict-settings' : 'sync-conflict-resource'
 				};
 				children.push(treeItem);
 			}
@@ -124,12 +128,16 @@ export class UserDataSyncConflictsViewPane extends TreeViewPane implements IUser
 
 	private registerActions(): void {
 		const that = this;
+		const conflictsView = ContextKeyExpr.equals('view', SYNC_CONFLICTS_VIEW_ID);
+		const conflictItem = ContextKeyExpr.regex('viewItem', /^sync-conflict-(resource|settings)$/);
 
 		this._register(registerAction2(class OpenConflictsAction extends Action2 {
 			constructor() {
 				super({
 					id: `workbench.actions.sync.openConflicts`,
-					title: localize({ key: 'workbench.actions.sync.openConflicts', comment: ['This is an action title to show the conflicts between local and remote version of resources'] }, "Show Conflicts"),
+					title: localize('picodeSyncCompareVersions', "Compare This Device and Cloud"),
+					icon: Codicon.diff,
+					menu: { id: MenuId.ViewItemContext, when: ContextKeyExpr.and(conflictsView, conflictItem), group: 'inline', order: 0 },
 				});
 			}
 			async run(accessor: ServicesAccessor, handle: TreeViewItemHandleArg): Promise<void> {
@@ -142,11 +150,11 @@ export class UserDataSyncConflictsViewPane extends TreeViewPane implements IUser
 			constructor() {
 				super({
 					id: `workbench.actions.sync.acceptRemote`,
-					title: localize('workbench.actions.sync.acceptRemote', "Accept Remote"),
+					title: localize('picodeSyncKeepCloudVersion', "Keep Cloud Version"),
 					icon: Codicon.cloudDownload,
 					menu: {
 						id: MenuId.ViewItemContext,
-						when: ContextKeyExpr.and(ContextKeyExpr.equals('view', SYNC_CONFLICTS_VIEW_ID), ContextKeyExpr.equals('viewItem', 'sync-conflict-resource')),
+						when: ContextKeyExpr.and(conflictsView, conflictItem),
 						group: 'inline',
 						order: 1,
 					},
@@ -162,11 +170,11 @@ export class UserDataSyncConflictsViewPane extends TreeViewPane implements IUser
 			constructor() {
 				super({
 					id: `workbench.actions.sync.acceptLocal`,
-					title: localize('workbench.actions.sync.acceptLocal', "Accept Local"),
+					title: localize('picodeSyncKeepDeviceVersion', "Keep This Device's Version"),
 					icon: Codicon.cloudUpload,
 					menu: {
 						id: MenuId.ViewItemContext,
-						when: ContextKeyExpr.and(ContextKeyExpr.equals('view', SYNC_CONFLICTS_VIEW_ID), ContextKeyExpr.equals('viewItem', 'sync-conflict-resource')),
+						when: ContextKeyExpr.and(conflictsView, conflictItem),
 						group: 'inline',
 						order: 2,
 					},
@@ -177,18 +185,83 @@ export class UserDataSyncConflictsViewPane extends TreeViewPane implements IUser
 				await that.userDataSyncWorkbenchService.accept({ syncResource: conflict.syncResource, profile: conflict.profile }, conflict.localResource, undefined, that.userDataSyncEnablementService.isEnabled());
 			}
 		}));
+
+		this._register(registerAction2(class ChooseSettingsAction extends Action2 {
+			constructor() {
+				super({
+					id: 'picode.sync.chooseSettings',
+					title: localize('picodeSyncChooseSettings', "Choose Settings Individually"),
+					icon: Codicon.settingsGear,
+					menu: { id: MenuId.ViewItemContext, when: ContextKeyExpr.and(conflictsView, ContextKeyExpr.equals('viewItem', 'sync-conflict-settings')), group: 'inline', order: 3 },
+				});
+			}
+			async run(_accessor: ServicesAccessor, handle: TreeViewItemHandleArg): Promise<void> {
+				await that.chooseSettings(that.parseHandle(handle.$treeItemHandle));
+			}
+		}));
 	}
 
-	async open(conflictToOpen: IResourcePreview): Promise<void> {
-		if (!this.userDataSyncService.conflicts.some(({ conflicts }) => conflicts.some(({ localResource }) => isEqual(localResource, conflictToOpen.localResource)))) {
+	private async chooseSettings(conflict: UserDataSyncConflictResource): Promise<void> {
+		if (conflict.syncResource !== SyncResource.Settings || !this.hasConflict(conflict)) {
+			return;
+		}
+		const readVersions = () => Promise.all([conflict.localResource, conflict.remoteResource, conflict.baseResource].map(resource => this.userDataSyncService.resolveContent(resource)));
+		const [local, cloud, base] = await readVersions();
+		if (local === null || cloud === null) {
+			await this.open(conflict);
 			return;
 		}
 
-		const remoteResourceName = localize({ key: 'remoteResourceName', comment: ['remote as in file in cloud'] }, "{0} (Remote)", basename(conflictToOpen.remoteResource));
-		const localResourceName = localize('localResourceName', "{0} (Local)", basename(conflictToOpen.remoteResource));
+		// The settings synchronizer already removes ignored settings from these comparison inputs.
+		const format = await this.userDataSyncUtilService.resolveFormattingOptions(conflict.profile.settingsResource);
+		const { conflictsSettings } = merge(local, cloud, base, [], [], format);
+		if (!conflictsSettings.length) {
+			await this.open(conflict);
+			return;
+		}
+
+		const choices: { key: string; value: unknown }[] = [];
+		for (const { key, localValue, remoteValue } of conflictsSettings) {
+			const choice = await this.quickInputService.pick([
+				{ label: localize('picodeSyncThisDevice', "This Device"), detail: this.formatSettingValue(localValue), value: localValue },
+				{ label: localize('picodeSyncCloud', "Cloud"), detail: this.formatSettingValue(remoteValue), value: remoteValue },
+			], { title: key, placeHolder: localize('picodeSyncChooseSettingProgress', "Choose a value to keep ({0} of {1})", choices.length + 1, conflictsSettings.length) });
+			if (!choice) {
+				return;
+			}
+			choices.push({ key, value: choice.value });
+		}
+
+		const [currentLocal, currentCloud, currentBase] = await readVersions();
+		if (!this.hasConflict(conflict) || currentLocal !== local || currentCloud !== cloud || currentBase !== base) {
+			this.syncNotificationService.warn(localize('picodeSyncConflictChanged', "The settings conflict changed. Open it again to review the latest versions."));
+			return;
+		}
+		const result = merge(local, cloud, base, [], choices, format);
+		const content = result.localContent ?? result.remoteContent;
+		if (result.hasConflicts || content === null) {
+			await this.open(conflict);
+			return;
+		}
+		await this.userDataSyncWorkbenchService.accept({ syncResource: conflict.syncResource, profile: conflict.profile }, conflict.previewResource, content, this.userDataSyncEnablementService.isEnabled());
+	}
+
+	private formatSettingValue(value: unknown): string {
+		return value === undefined ? localize('picodeSyncSettingRemoved', "Setting removed") : JSON.stringify(value);
+	}
+
+	private hasConflict(conflict: IResourcePreview): boolean {
+		return this.userDataSyncService.conflicts.some(({ conflicts }) => conflicts.some(({ localResource }) => isEqual(localResource, conflict.localResource)));
+	}
+
+	async open(conflictToOpen: IResourcePreview): Promise<void> {
+		if (!this.hasConflict(conflictToOpen)) {
+			return;
+		}
+
 		await this.editorService.openEditor({
-			input1: { resource: conflictToOpen.remoteResource, label: localize('Theirs', 'Theirs'), description: remoteResourceName },
-			input2: { resource: conflictToOpen.localResource, label: localize('Yours', 'Yours'), description: localResourceName },
+			input1: { resource: conflictToOpen.remoteResource, label: localize('picodeSyncCloud', "Cloud"), description: basename(conflictToOpen.remoteResource) },
+			input2: { resource: conflictToOpen.localResource, label: localize('picodeSyncThisDevice', "This Device"), description: basename(conflictToOpen.localResource) },
 			base: { resource: conflictToOpen.baseResource },
 			result: { resource: conflictToOpen.previewResource },
 			options: {

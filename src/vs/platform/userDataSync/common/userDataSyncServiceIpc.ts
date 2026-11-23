@@ -70,7 +70,7 @@ export class UserDataSyncServiceChannel implements IServerChannel {
 			// sync
 			case '_getInitialData': return Promise.resolve([this.service.status, this.service.conflicts, this.service.lastSyncTime]);
 			case 'reset': return this.service.reset();
-			case 'resetRemote': return this.service.resetRemote();
+			case 'resetRemote': return this.service.resetRemote(args?.[0]);
 			case 'resetLocal': return this.service.resetLocal();
 			case 'hasPreviouslySynced': return this.service.hasPreviouslySynced();
 			case 'hasLocalData': return this.service.hasLocalData();
@@ -197,8 +197,8 @@ export class UserDataSyncServiceChannelClient extends Disposable implements IUse
 		return this.channel.call('reset');
 	}
 
-	resetRemote(): Promise<void> {
-		return this.channel.call('resetRemote');
+	resetRemote(requireConfirmation?: boolean): Promise<void> {
+		return this.channel.call('resetRemote', [requireConfirmation]);
 	}
 
 	resetLocal(): Promise<void> {

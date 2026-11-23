@@ -256,11 +256,11 @@ export class UserDataSyncWorkbenchService extends Disposable implements IUserDat
 	}
 
 	private async updateToken(current: UserDataSyncAccount | undefined): Promise<void> {
-		let value: { token: string; authenticationProviderId: string } | undefined = undefined;
+		let value: { token: string; authenticationProviderId: string; accountId: string } | undefined = undefined;
 		if (current) {
 			try {
 				const token = current.token;
-				value = { token, authenticationProviderId: current.authenticationProviderId };
+				value = { token, authenticationProviderId: current.authenticationProviderId, accountId: current.accountId };
 			} catch (e) {
 				this.logService.error(e);
 			}
