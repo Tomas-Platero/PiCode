@@ -45,15 +45,23 @@ class PicodeAccountOverviewSection extends Disposable {
 		this.renderStore.clear();
 		DOM.clearNode(this.container);
 		const page = DOM.append(this.container, $('.picode-account-page'));
-		DOM.append(page, $('h2')).textContent = localize('picodeAccountOverviewTitle', "Your account");
+		const heading = $('h2');
+		heading.textContent = localize('picodeAccountOverviewTitle', "Your account");
 
 		if (!this.entitlement.signedIn) {
-			DOM.append(page, $('p.picode-account-lead')).textContent = localize('picodeAccountSignedOut', "Sign in to keep your setup in the cloud and unlock Pro features.");
-			const signIn = this.button(page, localize('picodeAccountSignIn', "Sign in or sign up"), false);
+			const access = DOM.append(page, $('.picode-account-access'));
+			const icon = DOM.append(access, $('.picode-account-access-icon'));
+			icon.setAttribute('aria-hidden', 'true');
+			icon.appendChild(renderIcon(Codicon.account));
+			const body = DOM.append(access, $('.picode-account-access-body'));
+			body.appendChild(heading);
+			DOM.append(body, $('p.picode-account-lead')).textContent = localize('picodeAccountSignedOut', "Sign in to keep your setup in the cloud and unlock Pro features.");
+			const signIn = this.button(DOM.append(body, $('.picode-account-access-action')), localize('picodeAccountSignIn', "Sign in or sign up"), false);
 			this.renderStore.add(signIn.onDidClick(() => { void this.authenticationService.createSession(PICODE_AUTH_PROVIDER_ID, [], { activateImmediate: true }); }));
 			return;
 		}
 
+		page.appendChild(heading);
 		const email = this.entitlement.email ?? '';
 		const card = DOM.append(page, $('.picode-account-card'));
 		const avatar = DOM.append(card, $('span.picode-account-avatar'));

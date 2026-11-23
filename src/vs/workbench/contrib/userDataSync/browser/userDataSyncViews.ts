@@ -194,9 +194,11 @@ export class UserDataSyncDataViews extends Disposable {
 				super({
 					id: `workbench.actions.sync.${viewId}.compareWithLocal`,
 					title: localize('workbench.actions.sync.compareWithLocal', "Compare with Local"),
+					icon: Codicon.diff,
 					menu: {
 						id: MenuId.ViewItemContext,
-						when: ContextKeyExpr.and(ContextKeyExpr.equals('view', viewId), ContextKeyExpr.regex('viewItem', /sync-associatedResource-.*/i))
+						when: ContextKeyExpr.and(ContextKeyExpr.equals('view', viewId), ContextKeyExpr.regex('viewItem', /sync-associatedResource-.*/i)),
+						group: 'inline',
 					},
 				});
 			}
@@ -287,9 +289,15 @@ interface ProfileTreeItem extends ITreeItem {
 	profile: Profile;
 }
 
+interface SyncHistoryCategory<T> extends ITreeItem {
+	historyResource: SyncResource;
+	historyProfile?: T;
+}
+
 abstract class UserDataSyncActivityViewDataProvider<T = Profile> implements ITreeViewDataProvider {
 
 	private readonly syncResourceHandlesByProfile = new Map<string, Promise<SyncResourceHandleTreeItem[]>>();
+	protected readonly groupByResource: boolean = false;
 
 	constructor(
 		@IUserDataSyncService protected readonly userDataSyncService: IUserDataSyncService,
@@ -305,12 +313,15 @@ abstract class UserDataSyncActivityViewDataProvider<T = Profile> implements ITre
 			if (!element) {
 				return await this.getRoots();
 			}
+			const category = element as SyncHistoryCategory<T>;
+			if (category.historyResource) {
+				return await this.getCachedResourceHandles(category.handle, category.historyProfile, [category.historyResource]);
+			}
 			if ((<ProfileTreeItem>element).profile || element.handle === this.userDataProfilesService.defaultProfile.id) {
-				let promise = this.syncResourceHandlesByProfile.get(element.handle);
-				if (!promise) {
-					this.syncResourceHandlesByProfile.set(element.handle, promise = this.getSyncResourceHandles(<T>(<ProfileTreeItem>element).profile));
-				}
-				return await promise;
+				const profile = (element as ProfileTreeItem).profile as T | undefined;
+				return this.groupByResource
+					? this.getHistoryCategories(element.handle, profile)
+					: await this.getCachedResourceHandles(element.handle, profile);
 			}
 			if ((<SyncResourceHandleTreeItem>element).syncResourceHandle) {
 				return await this.getChildrenForSyncResourceTreeItem(<SyncResourceHandleTreeItem>element);
@@ -341,6 +352,27 @@ abstract class UserDataSyncActivityViewDataProvider<T = Profile> implements ITre
 		}
 	}
 
+	private getCachedResourceHandles(key: string, profile?: T, resources?: readonly SyncResource[]): Promise<SyncResourceHandleTreeItem[]> {
+		let promise = this.syncResourceHandlesByProfile.get(key);
+		if (!promise) {
+			promise = this.getSyncResourceHandles(profile, resources);
+			this.syncResourceHandlesByProfile.set(key, promise);
+			void promise.catch(() => this.syncResourceHandlesByProfile.get(key) === promise && this.syncResourceHandlesByProfile.delete(key));
+		}
+		return promise;
+	}
+
+	private getHistoryCategories(profileId: string, profile?: T): SyncHistoryCategory<T>[] {
+		return ALL_SYNC_RESOURCES.map(historyResource => ({
+			handle: JSON.stringify([profileId, historyResource]),
+			historyResource,
+			historyProfile: profile,
+			label: { label: getSyncAreaLabel(historyResource) },
+			collapsibleState: TreeItemCollapsibleState.Collapsed,
+			themeIcon: FolderThemeIcon,
+		}));
+	}
+
 	private async getRoots(): Promise<ITreeItem[]> {
 		this.syncResourceHandlesByProfile.clear();
 
@@ -355,7 +387,9 @@ abstract class UserDataSyncActivityViewDataProvider<T = Profile> implements ITre
 			};
 			roots.push(profileTreeItem);
 		} else {
-			const defaultSyncResourceHandles = await this.getSyncResourceHandles();
+			const defaultSyncResourceHandles = this.groupByResource
+				? this.getHistoryCategories(this.userDataProfilesService.defaultProfile.id)
+				: await this.getSyncResourceHandles();
 			roots.push(...defaultSyncResourceHandles);
 		}
 
@@ -402,9 +436,9 @@ abstract class UserDataSyncActivityViewDataProvider<T = Profile> implements ITre
 		});
 	}
 
-	private async getSyncResourceHandles(profile?: T): Promise<SyncResourceHandleTreeItem[]> {
+	private async getSyncResourceHandles(profile?: T, resources: readonly SyncResource[] = ALL_SYNC_RESOURCES): Promise<SyncResourceHandleTreeItem[]> {
 		const treeItems: SyncResourceHandleTreeItem[] = [];
-		const result = await Promise.all(ALL_SYNC_RESOURCES.map(async syncResource => {
+		const result = await Promise.all(resources.map(async syncResource => {
 			const resourceHandles = await this.getResourceHandles(syncResource, profile);
 			return resourceHandles.map((resourceHandle, index) => ({ ...resourceHandle, syncResource, previous: resourceHandles[index + 1] }));
 		}));
@@ -414,8 +448,8 @@ abstract class UserDataSyncActivityViewDataProvider<T = Profile> implements ITre
 			treeItems.push({
 				handle,
 				collapsibleState: TreeItemCollapsibleState.Collapsed,
-				label: { label: getSyncAreaLabel(syncResourceHandle.syncResource) },
-				description: fromNow(syncResourceHandle.created, true),
+				label: { label: this.groupByResource ? fromNow(syncResourceHandle.created, true) : getSyncAreaLabel(syncResourceHandle.syncResource) },
+				description: this.groupByResource ? undefined : fromNow(syncResourceHandle.created, true),
 				tooltip: new Date(syncResourceHandle.created).toLocaleString(),
 				themeIcon: FolderThemeIcon,
 				syncResourceHandle,
@@ -448,6 +482,7 @@ class LocalUserDataSyncActivityViewDataProvider extends UserDataSyncActivityView
 
 class RemoteUserDataSyncActivityViewDataProvider extends UserDataSyncActivityViewDataProvider<ISyncUserDataProfile> {
 
+	protected override readonly groupByResource = true;
 	private machinesPromise: Promise<IUserDataSyncMachine[]> | undefined;
 
 	constructor(

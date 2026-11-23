@@ -254,6 +254,8 @@ export interface IUserDataSyncStoreManagementService {
 export const IUserDataSyncStoreService = createDecorator<IUserDataSyncStoreService>('IUserDataSyncStoreService');
 export interface IUserDataSyncStoreService {
 	readonly _serviceBrand: undefined;
+	readonly requestCount: number;
+	readonly onDidWriteResource: Event<ServerResource>;
 	readonly onDidChangeDonotMakeRequestsUntil: Event<void>;
 	readonly donotMakeRequestsUntil: Date | undefined;
 
@@ -571,7 +573,8 @@ export interface IUserDataSyncEnablementService {
 
 export interface IUserDataSyncTask {
 	readonly manifest: IUserDataManifest | null;
-	run(): Promise<void>;
+	readonly canSelectResources?: boolean;
+	run(resources?: ReadonlySet<SyncResource>): Promise<void>;
 	stop(): Promise<void>;
 }
 
@@ -607,7 +610,7 @@ export interface IUserDataSyncService {
 	accept(syncResource: IUserDataSyncResource, resource: URI, content: string | null | undefined, apply: boolean | { force: boolean }): Promise<void>;
 
 	reset(): Promise<void>;
-	resetRemote(): Promise<void>;
+	resetRemote(requireConfirmation?: boolean): Promise<void>;
 	cleanUpRemoteData(): Promise<void>;
 	resetLocal(): Promise<void>;
 	hasLocalData(): Promise<boolean>;
@@ -633,12 +636,16 @@ export interface IUserDataSyncResourceProviderService {
 	resolveUserDataSyncResource(syncResourceHandle: ISyncResourceHandle): IUserDataSyncResource | undefined;
 }
 
-export type SyncOptions = { immediately?: boolean; skipIfSyncedRecently?: boolean; disableCache?: boolean };
+export type SyncOptions = { immediately?: boolean; skipIfSyncedRecently?: boolean; disableCache?: boolean; wake?: boolean; retryResource?: SyncResource };
+
+export type AutoSyncStatus = { state: 'idle' | 'pending' | 'syncing' | 'paused'; retryAt?: number; failedResources?: readonly SyncResource[] };
 
 export const IUserDataAutoSyncService = createDecorator<IUserDataAutoSyncService>('IUserDataAutoSyncService');
 export interface IUserDataAutoSyncService {
 	_serviceBrand: undefined;
 	readonly onError: Event<UserDataSyncError>;
+	readonly onDidChangeStatus: Event<AutoSyncStatus>;
+	getStatus(): Promise<AutoSyncStatus>;
 	turnOn(): Promise<void>;
 	turnOff(everywhere: boolean): Promise<void>;
 	triggerSync(sources: string[], options?: SyncOptions): Promise<void>;

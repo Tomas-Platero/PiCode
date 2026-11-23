@@ -16,7 +16,7 @@ import { generateUuid } from '../../../../base/common/uuid.js';
 import { IHeaders, IRequestContext, IRequestOptions } from '../../../../base/parts/request/common/request.js';
 import { IConfigurationService } from '../../../configuration/common/configuration.js';
 import { ConfigurationService } from '../../../configuration/common/configurationService.js';
-import { IEnvironmentService } from '../../../environment/common/environment.js';
+import { INativeEnvironmentService } from '../../../environment/common/environment.js';
 import { GlobalExtensionEnablementService } from '../../../extensionManagement/common/extensionEnablementService.js';
 import { DidUninstallExtensionEvent, IExtensionGalleryService, IExtensionManagementService, IGlobalExtensionEnablementService, InstallExtensionResult } from '../../../extensionManagement/common/extensionManagement.js';
 import { IFileService } from '../../../files/common/files.js';
@@ -63,9 +63,10 @@ export class UserDataSyncClient extends Disposable {
 
 		const userRoamingDataHome = URI.file('userdata').with({ scheme: Schemas.inMemory });
 		const userDataSyncHome = joinPath(userRoamingDataHome, '.sync');
-		const environmentService = this.instantiationService.stub(IEnvironmentService, {
+		const environmentService = this.instantiationService.stub(INativeEnvironmentService, {
 			userDataSyncHome,
 			userRoamingDataHome,
+			userDataPath: userRoamingDataHome.fsPath,
 			cacheHome: joinPath(userRoamingDataHome, 'cache'),
 			argvResource: joinPath(userRoamingDataHome, 'argv.json'),
 			sync: 'on'
@@ -84,6 +85,7 @@ export class UserDataSyncClient extends Disposable {
 		});
 
 		const fileService = this._register(new FileService(logService));
+		this._register(fileService.registerProvider(Schemas.file, this._register(new InMemoryFileSystemProvider())));
 		this._register(fileService.registerProvider(Schemas.inMemory, this._register(new InMemoryFileSystemProvider())));
 		this._register(fileService.registerProvider(USER_DATA_SYNC_SCHEME, this._register(new InMemoryFileSystemProvider())));
 		this.instantiationService.stub(IFileService, fileService);
@@ -112,7 +114,7 @@ export class UserDataSyncClient extends Disposable {
 		this.instantiationService.stub(IUserDataSyncStoreService, this._register(this.instantiationService.createInstance(UserDataSyncStoreService)));
 
 		const userDataSyncAccountService: IUserDataSyncAccountService = this._register(this.instantiationService.createInstance(UserDataSyncAccountService));
-		await userDataSyncAccountService.updateAccount({ authenticationProviderId: 'authenticationProviderId', token: 'token' });
+		await userDataSyncAccountService.updateAccount({ authenticationProviderId: 'authenticationProviderId', accountId: 'test-account', token: 'token' });
 		this.instantiationService.stub(IUserDataSyncAccountService, userDataSyncAccountService);
 
 		this.instantiationService.stub(IUserDataSyncMachinesService, this._register(this.instantiationService.createInstance(UserDataSyncMachinesService)));
@@ -199,9 +201,10 @@ export class UserDataSyncTestServer implements IRequestService {
 	reset(): void { this._requests = []; this._responses = []; this._requestsWithAllHeaders = []; }
 
 	private manifestRef = 0;
+	private previousManifestContent: string | undefined;
 	private collectionCounter = 0;
 
-	constructor(private readonly rateLimit = Number.MAX_SAFE_INTEGER, private readonly retryAfter?: number) { }
+	constructor(private readonly rateLimit = Number.MAX_SAFE_INTEGER, private readonly retryAfter?: number, private readonly conditionalManifest = false) { }
 
 	async resolveProxy(url: string): Promise<string | undefined> { return url; }
 	async lookupAuthorization(authInfo: AuthInfo): Promise<Credentials | undefined> { return undefined; }
@@ -280,6 +283,17 @@ export class UserDataSyncTestServer implements IRequestService {
 				}
 			}
 			const manifest: IUserDataManifest = { session: this.session, latest, collections, ref: '1' };
+			if (this.conditionalManifest) {
+				const content = JSON.stringify(manifest);
+				if (content !== this.previousManifestContent) {
+					this.previousManifestContent = content;
+					this.manifestRef++;
+				}
+				const etag = String(this.manifestRef);
+				return headers?.['If-None-Match'] === etag
+					? this.toResponse(304, { etag })
+					: this.toResponse(200, { 'Content-Type': 'application/json', etag }, content);
+			}
 			return this.toResponse(200, { 'Content-Type': 'application/json', etag: `${this.manifestRef++}` }, JSON.stringify(manifest));
 		}
 		return this.toResponse(204, { etag: `${this.manifestRef++}` });
