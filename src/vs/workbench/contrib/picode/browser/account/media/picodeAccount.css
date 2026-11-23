@@ -100,6 +100,59 @@
 	color: var(--vscode-descriptionForeground);
 }
 
+.picode-account-access {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 16px 22px;
+	padding: clamp(16px, 4vw, 28px);
+	border: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, var(--vscode-panel-border)));
+	border-radius: 14px;
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+}
+
+.picode-account-access-icon {
+	display: grid;
+	flex: 0 0 52px;
+	place-items: center;
+	height: 52px;
+	border-radius: 14px;
+	background: color-mix(in srgb, var(--vscode-button-background) 14%, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
+	color: var(--vscode-foreground);
+}
+
+.picode-account-access-icon .codicon {
+	font-size: 26px;
+}
+
+.picode-account-access-body {
+	display: grid;
+	flex: 1 1 240px;
+	gap: 8px;
+	min-width: 0;
+}
+
+.picode-account-access-body h2 {
+	font-size: 22px;
+}
+
+.picode-account-access-body .picode-account-lead {
+	max-width: 48ch;
+}
+
+.picode-account-access-action {
+	justify-self: start;
+	max-width: 100%;
+	margin-top: 8px;
+}
+
+.picode-account-access-action .monaco-button {
+	box-sizing: border-box;
+	min-height: 32px;
+	padding-inline: 14px;
+	white-space: normal;
+}
+
 /* Cards */
 .picode-account-card {
 	display: flex;
@@ -262,15 +315,16 @@ label.picode-account-row:hover,
 /* Connections */
 .picode-account-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-	gap: 12px;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+	gap: 14px;
 }
 
 .picode-account-tile {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
-	padding: 16px 18px;
+	min-width: 0;
+	gap: 12px;
+	padding: 16px;
 	border: 1px solid var(--vscode-panel-border);
 	border-radius: 10px;
 	background: var(--vscode-editorWidget-background, transparent);
@@ -283,17 +337,52 @@ label.picode-account-row:hover,
 	font-size: 14px;
 }
 
+.picode-account-tile-brand {
+	display: grid;
+	place-items: center;
+	flex: 0 0 32px;
+	height: 32px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 8px;
+	background: var(--vscode-editor-background);
+}
+
 .picode-account-tile .picode-account-muted {
 	flex: 1;
+	margin: 0;
 }
 
 .picode-account-tile-foot {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
+	justify-content: flex-end;
+	gap: 8px 12px;
 	min-height: 28px;
+	padding-top: 12px;
+	border-top: 1px solid var(--vscode-panel-border);
+}
+
+.picode-account-tile-foot .picode-account-state {
+	min-width: 0;
+	margin-inline-end: auto;
+	overflow-wrap: anywhere;
+}
+
+.picode-account-tile-foot .picode-account-state .codicon-check {
+	color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.picode-account-tile-foot .monaco-button {
+	width: auto;
+	max-width: 100%;
 }
 
 /* Cloud sync */
+.picode-account-content:has(> .picode-sync-page) {
+	height: 100%;
+}
+
 .picode-sync-page {
 	gap: 18px;
 	max-width: 720px;
@@ -384,7 +473,14 @@ label.picode-account-row:hover,
 .picode-sync-flow-line.moving {
 	background: repeating-linear-gradient(90deg, var(--picode-sync-tone) 0 8px, transparent 8px 14px);
 	background-size: 28px 2px;
+}
+
+.monaco-enable-motion .picode-sync-flow-line.moving {
 	animation: picode-sync-flow 0.9s linear infinite;
+}
+
+.monaco-reduce-motion .picode-sync-flow-cloud .codicon-modifier-spin {
+	animation: none;
 }
 
 @keyframes picode-sync-flow {
@@ -659,7 +755,8 @@ input.picode-sync-switch:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.picode-sync-flow-line.moving {
+	.monaco-enable-motion .picode-sync-flow-line.moving,
+	.picode-sync-flow-cloud .codicon-modifier-spin {
 		animation: none;
 	}
 }

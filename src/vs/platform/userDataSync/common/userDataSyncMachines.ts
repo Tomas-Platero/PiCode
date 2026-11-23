@@ -39,7 +39,7 @@ export interface IUserDataSyncMachinesService {
 	getMachines(manifest?: IUserDataManifest): Promise<IUserDataSyncMachine[]>;
 
 	addCurrentMachine(manifest?: IUserDataManifest): Promise<void>;
-	removeCurrentMachine(manifest?: IUserDataManifest): Promise<void>;
+	removeCurrentMachine(manifest?: IUserDataManifest, isCurrent?: () => boolean): Promise<void>;
 	renameMachine(machineId: string, name: string): Promise<void>;
 	setEnablements(enbalements: [string, boolean][]): Promise<void>;
 }
@@ -114,13 +114,16 @@ export class UserDataSyncMachinesService extends Disposable implements IUserData
 		}
 	}
 
-	async removeCurrentMachine(manifest?: IUserDataManifest): Promise<void> {
+	async removeCurrentMachine(manifest?: IUserDataManifest, isCurrent?: () => boolean): Promise<void> {
 		const currentMachineId = await this.currentMachineIdPromise;
-		const machineData = await this.readMachinesData(manifest);
+		if (isCurrent && !isCurrent()) { return; }
+		const fresh = isCurrent ? await this.userDataSyncStoreService.readResource(UserDataSyncMachinesService.RESOURCE, null) : undefined;
+		const machineData = fresh ? this.parseMachinesData(fresh) : await this.readMachinesData(manifest);
+		if (isCurrent && !isCurrent()) { return; }
 		const updatedMachines = machineData.machines.filter(({ id }) => id !== currentMachineId);
 		if (updatedMachines.length !== machineData.machines.length) {
 			machineData.machines = updatedMachines;
-			await this.writeMachinesData(machineData);
+			await this.writeMachinesData(machineData, fresh?.ref);
 		}
 	}
 
@@ -170,16 +173,20 @@ export class UserDataSyncMachinesService extends Disposable implements IUserData
 
 	private async readMachinesData(manifest?: IUserDataManifest): Promise<IMachinesData> {
 		this.userData = await this.readUserData(manifest);
-		const machinesData = this.parse(this.userData);
+		return this.parseMachinesData(this.userData);
+	}
+
+	private parseMachinesData(userData: IUserData): IMachinesData {
+		const machinesData = this.parse(userData);
 		if (machinesData.version !== UserDataSyncMachinesService.VERSION) {
 			throw new Error(localize('error incompatible', "Cannot read machines data as the current version is incompatible. Please update {0} and try again.", this.productService.nameLong));
 		}
 		return machinesData;
 	}
 
-	private async writeMachinesData(machinesData: IMachinesData): Promise<void> {
+	private async writeMachinesData(machinesData: IMachinesData, previousRef = this.userData?.ref ?? null): Promise<void> {
 		const content = JSON.stringify(machinesData);
-		const ref = await this.userDataSyncStoreService.writeResource(UserDataSyncMachinesService.RESOURCE, content, this.userData?.ref || null);
+		const ref = await this.userDataSyncStoreService.writeResource(UserDataSyncMachinesService.RESOURCE, content, previousRef);
 		this.userData = { ref, content };
 		this._onDidChange.fire();
 	}

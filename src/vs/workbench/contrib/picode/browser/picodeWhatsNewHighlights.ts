@@ -37,6 +37,32 @@ export interface IWhatsNewHighlight {
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
 		{
+			id: 'syncRecovery',
+			since: '2.4.11',
+			plan: 'pro',
+			icon: Codicon.cloud,
+			title: localize('picodeWhatsNew.syncRecovery.title', "Pick up where you left off"),
+			summary: localize('picodeWhatsNew.syncRecovery.summary', "Cloud sync checks for changes when you return to PiCode or reconnect. Changes waiting to upload stay pending when you close the editor."),
+			points: [
+				localize('picodeWhatsNew.syncRecovery.point1', "Retry a category in Cloud sync, or compare and restore an earlier version from Earlier copies."),
+			],
+			preview: 'syncParts',
+			action: 'openCloudSync',
+		},
+		{
+			id: 'accountOverview',
+			since: '2.4.11',
+			plan: 'free',
+			icon: Codicon.account,
+			title: localize('picodeWhatsNew.accountOverview.title', "A clearer place to sign in"),
+			summary: localize('picodeWhatsNew.accountOverview.summary', "Open Account in Settings to find the new sign-in card and refreshed GitHub and Jira connections."),
+			points: [
+				localize('picodeWhatsNew.accountOverview.point1', "The active Agent or Editor mode is easier to see in the title bar."),
+			],
+			preview: 'settings',
+			action: 'openAccount',
+		},
+		{
 			id: 'chatPreferences',
 			since: '2.4.10',
 			plan: 'free',

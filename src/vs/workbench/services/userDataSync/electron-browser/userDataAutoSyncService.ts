@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IUserDataAutoSyncService, SyncOptions, UserDataSyncError } from '../../../../platform/userDataSync/common/userDataSync.js';
+import { AutoSyncStatus, IUserDataAutoSyncService, SyncOptions, UserDataSyncError } from '../../../../platform/userDataSync/common/userDataSync.js';
 import { ISharedProcessService } from '../../../../platform/ipc/electron-browser/services.js';
 import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Event } from '../../../../base/common/event.js';
@@ -15,6 +15,9 @@ class UserDataAutoSyncService implements IUserDataAutoSyncService {
 
 	private readonly channel: IChannel;
 	get onError(): Event<UserDataSyncError> { return Event.map(this.channel.listen<Error>('onError'), e => UserDataSyncError.toUserDataSyncError(e)); }
+	get onDidChangeStatus(): Event<AutoSyncStatus> { return this.channel.listen('onDidChangeStatus'); }
+
+	getStatus(): Promise<AutoSyncStatus> { return this.channel.call('getStatus'); }
 
 	constructor(
 		@ISharedProcessService sharedProcessService: ISharedProcessService,

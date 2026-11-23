@@ -3,6 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { DomEmitter } from '../../../../base/browser/event.js';
+import { mainWindow } from '../../../../base/browser/window.js';
+import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { isWeb } from '../../../../base/common/platform.js';
@@ -28,6 +31,9 @@ export class UserDataSyncTrigger extends Disposable implements IWorkbenchContrib
 		@IHostService hostService: IHostService,
 	) {
 		super();
+		this._register(this._register(new DomEmitter(mainWindow, 'online')).event(() => {
+			void userDataAutoSyncService.triggerSync(['networkOnline'], { wake: true }).catch(onUnexpectedError);
+		}));
 		const event = Event.filter(
 			Event.any<string | undefined>(
 				Event.map(editorService.onDidActiveEditorChange, () => this.getUserDataEditorInputSource(editorService.activeEditor)),

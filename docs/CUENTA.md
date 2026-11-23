@@ -13,6 +13,15 @@
 | 🔌 **Connections** | Los servicios Pro que traen trabajo al chat (issues de GitHub, Jira…). Cada uno dice si está incluido, bloqueado o próximo. |
 | 🛡️ **Privacy** | Lo que PiCode envía y lo que nunca envía, con *Help improve PiCode* (ADR-045). La frecuencia de las actualizaciones vive ahora en *Preferences › Updates*. |
 
+Si hay muchos cambios seguidos, PiCode los agrupa antes de sincronizar. **Sync now** da prioridad a una sincronización manual. Si este equipo alcanza su límite de peticiones, PiCode avisa y vuelve a sincronizar al terminar la pausa. Los cambios locales se conservan; no hace falta reiniciar.
+
+- **Estado.** *Cloud sync* muestra los cambios pendientes, una pausa y la hora del reintento cuando se conoce. La última sincronización correcta se conserva si un ciclo falla parcialmente.
+- **Desactivar.** En este equipo se aplica al momento, incluso sin conexión. PiCode reintenta retirar el equipo en la cuenta original. Para todos los equipos, espera a que el servidor confirme la operación.
+- **Conflictos y diagnóstico.** *Resolve* permite comparar o elegir la versión de cada archivo y, en Ajustes, decidir por clave. *Show sync log* muestra el origen del ciclo, las peticiones hechas durante ese ciclo y los recursos guardados en la nube. El detalle por recurso también muestra las actualizaciones locales.
+- **Entre equipos.** PiCode comprueba al volver a su ventana o recuperar la conexión. En escritorio, al pasar a segundo plano adelanta el envío si hay cambios pendientes y espacia el respaldo periódico a quince minutos. Las categorías pendientes se recuerdan al cerrar y se vuelven a comprobar al arrancar.
+- **Reintentar una categoría.** El aviso junto a una categoría indica que quedó pendiente y permite volver a intentarlo. Si desde entonces hubo cambios de otros equipos, PiCode los comprueba también.
+- **Recuperar una versión.** En *Earlier copies*, abre la categoría y la fecha. El icono de comparación muestra la diferencia con la copia del equipo. Al confirmar *Restore*, la versión elegida pasa a ser la actual de esa categoría en el equipo y en la nube. PiCode carga las versiones de una categoría al desplegarla.
+
 ## Cómo se añade una función Pro nueva
 
 1. Se declara con `registerProFeature` (`picodeProEntitlement.ts`): nombre, frase, icono y si ya está disponible.

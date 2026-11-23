@@ -10,6 +10,7 @@ import { IUserDataSyncLogService, IUserDataSyncStoreService, UserDataSyncErrorCo
 
 export interface IUserDataSyncAccount {
 	readonly authenticationProviderId: string;
+	readonly accountId: string;
 	readonly token: string;
 }
 
@@ -57,7 +58,7 @@ export class UserDataSyncAccountService extends Disposable implements IUserDataS
 	}
 
 	async updateAccount(account: IUserDataSyncAccount | undefined): Promise<void> {
-		if (account && this._account ? account.token !== this._account.token || account.authenticationProviderId !== this._account.authenticationProviderId : account !== this._account) {
+		if (account && this._account ? account.token !== this._account.token || account.authenticationProviderId !== this._account.authenticationProviderId || account.accountId !== this._account.accountId : account !== this._account) {
 			this._account = account;
 			if (this._account) {
 				this.userDataSyncStoreService.setAuthToken(this._account.token, this._account.authenticationProviderId);
