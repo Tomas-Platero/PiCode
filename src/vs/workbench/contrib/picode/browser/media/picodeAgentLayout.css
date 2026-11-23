@@ -871,14 +871,13 @@
 	visibility: visible;
 }
 
-/* -- the layout switch: one rounded track, the layout in use is the lit thumb ------------------ */
+/* -- the layout switch: one rounded track with two segments ------------------------------------ */
 
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-agent),
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-editor) {
 	margin: 0;
-	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 22%, transparent);
-	background: color-mix(in srgb, var(--vscode-foreground) 14%, var(--vscode-titleBar-activeBackground, transparent));
-	box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+	border: 1px solid var(--vscode-contrastBorder, var(--vscode-commandCenter-border));
+	background: var(--vscode-commandCenter-background, transparent);
 }
 
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-agent) {
@@ -886,7 +885,6 @@
 	align-items: center;
 	border-right: none;
 	border-radius: 999px 0 0 999px;
-	padding: 2px 0 2px 2px;
 }
 
 .part.titlebar li.action-item:has(> .action-label.codicon-picode-layout-editor) {
@@ -897,48 +895,56 @@
 	/* The title bar spaces its buttons 4px apart (`gap`); the two halves of the track must touch. */
 	margin-left: -4px;
 	margin-right: 4px;
-	padding: 2px 2px 2px 0;
 }
 
 .part.titlebar .action-label.codicon-picode-layout-agent,
 .part.titlebar .action-label.codicon-picode-layout-editor {
-	/* A round thumb of a fixed size, centred in the track. */
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	box-sizing: border-box;
-	width: 30px;
-	height: 20px;
+	width: 32px;
+	height: 24px;
 	padding: 0;
 	margin: 0;
-	border-radius: 999px;
 	/* The toolbar's own "toggled" look (a light outline and background) is not this switch's. */
 	outline: none !important;
 	border: none !important;
-	color: var(--vscode-descriptionForeground);
-	opacity: 0.75;
-	transition: background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+	color: inherit;
 }
 
-.part.titlebar .action-label.codicon-picode-layout-agent:not(.checked):hover,
-.part.titlebar .action-label.codicon-picode-layout-editor:not(.checked):hover {
-	color: var(--vscode-foreground);
-	opacity: 1;
-	background: transparent !important;
+.part.titlebar .action-label.codicon-picode-layout-agent {
+	border-radius: 999px 0 0 999px;
+}
+
+.part.titlebar .action-label.codicon-picode-layout-editor {
+	border-radius: 0 999px 999px 0;
+}
+
+.part.titlebar .titlebar-right .action-toolbar-container .action-label:is(.codicon-picode-layout-agent, .codicon-picode-layout-editor):not(.checked):hover {
+	color: var(--vscode-commandCenter-activeForeground);
+	background: var(--vscode-commandCenter-activeBackground) !important;
 }
 
 .part.titlebar .action-label.codicon-picode-layout-agent:focus-visible,
 .part.titlebar .action-label.codicon-picode-layout-editor:focus-visible {
 	outline: 1px solid var(--vscode-focusBorder) !important;
-	outline-offset: 1px;
+	outline-offset: -2px;
 }
 
-.part.titlebar .action-label.codicon-picode-layout-agent.checked,
-.part.titlebar .action-label.codicon-picode-layout-editor.checked {
-	color: var(--vscode-button-foreground);
-	opacity: 1;
-	background: var(--vscode-button-background) !important;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+.monaco-workbench .part.titlebar .titlebar-right .action-toolbar-container .action-label:is(.codicon-picode-layout-agent, .codicon-picode-layout-editor).checked {
+	/* Keep this pair together for contrast even when a theme overrides button colors. */
+	color: #fff;
+	background: #005a9e !important;
+	&:focus-visible {
+		outline-color: currentColor !important;
+	}
+
+	@media (forced-colors: active) {
+		forced-color-adjust: none;
+		color: HighlightText;
+		background-color: Highlight !important;
+	}
 }
 
 /* -- the switch's robot blinks while the layout changes --------------------------------------- */

@@ -93,7 +93,7 @@ class PicodeConnectionsSection extends Disposable {
 	private renderCard(grid: HTMLElement, connector: IPicodeConnector): void {
 		const card = DOM.append(grid, $('.picode-account-tile'));
 		const head = DOM.append(card, $('.picode-account-tile-head'));
-		head.appendChild(createServiceLogo(connector.serviceId));
+		DOM.append(head, $('.picode-account-tile-brand')).appendChild(createServiceLogo(connector.serviceId));
 		DOM.append(head, $('strong')).textContent = connector.label;
 		DOM.append(card, $('p.picode-account-muted')).textContent = connector.description;
 

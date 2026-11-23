@@ -2,8 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-//
-import { Event } from '../../../base/common/event.js';
+import { RunOnceScheduler } from '../../../base/common/async.js';
+import { Emitter, Event } from '../../../base/common/event.js';
 import { IMeteredConnectionService } from '../../meteredConnection/common/meteredConnection.js';
 import { INativeHostService } from '../../native/common/native.js';
 import { IProductService } from '../../product/common/productService.js';
@@ -32,10 +32,29 @@ export class UserDataAutoSyncService extends BaseUserDataAutoSyncService {
 	) {
 		super(productService, userDataSyncStoreManagementService, userDataSyncStoreService, userDataSyncEnablementService, userDataSyncService, logService, authTokenService, telemetryService, userDataSyncMachinesService, storageService, meteredConnectionService);
 
+		let inBackground = false;
+		const foreground = this._register(new Emitter<string>());
+		const background = this._register(new RunOnceScheduler(() => {
+			inBackground = true;
+			this.setBackgroundSync(true);
+			void this.flushPendingChanges().catch(error => logService.error(error));
+		}, 1_000));
+		this._register(nativeHostService.onDidBlurMainOrAuxiliaryWindow(() => background.schedule()));
+		this._register(nativeHostService.onDidFocusMainOrAuxiliaryWindow(() => {
+			background.cancel();
+			if (inBackground) {
+				inBackground = false;
+				this.setBackgroundSync(false);
+				foreground.fire('windowFocus');
+			}
+		}));
 		this._register(Event.debounce<string, string[]>(Event.any<string>(
-			Event.map(nativeHostService.onDidFocusMainWindow, () => 'windowFocus'),
+			foreground.event,
 			Event.map(nativeHostService.onDidOpenMainWindow, () => 'windowOpen'),
-		), (last, source) => last ? [...last, source] : [source], 1000)(sources => this.triggerSync(sources, { skipIfSyncedRecently: true })));
+			Event.map(nativeHostService.onDidResumeOS, () => 'systemResume'),
+		), (last, source) => last ? [...last, source] : [source], 500)(sources => {
+			void this.triggerSync(sources, { wake: true }).catch(error => logService.error(error));
+		}));
 	}
 
 }
