@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.10-beta",
+			"notes": "### ✨ New\n\n- highlight new chat and workspace settings"
+		},
+		{
 			"version": "2.4.9-beta",
 			"notes": "### ✨ New\n\n- prepare experimental release 2.4.9 (#294)"
 		},
