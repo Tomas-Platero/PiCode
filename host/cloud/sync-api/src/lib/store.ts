@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { DocumentSnapshot, Transaction } from "firebase-admin/firestore";
+import type { DocumentSnapshot, Transaction } from "firebase-admin/firestore";
 import { firestore } from "./firebase-admin";
 import {
   MAX_STORED_CONTENT_BYTES,
   NON_EXISTING_RESOURCE_REF,
   RESOURCE_NAME_PATTERN,
-  SyncDataPayload,
-  SyncManifestBody,
-  SyncRefEntry,
+  type SyncDataPayload,
+  type SyncManifestBody,
+  type SyncRefEntry,
 } from "./contract";
 import { quotaBytesFor, type PlanId } from "./quota";
 import {
@@ -199,25 +199,29 @@ async function ensureCounter(uid: string, manifest: ManifestDoc): Promise<Manife
     usedBytes: totalUsed(revisions),
   };
 
-  await firestore().runTransaction(async (tx) => {
+  const upgrade = await firestore().runTransaction(async (tx) => {
     const snapshot = await readManifestInTx(tx, uid);
     const current = manifestFromSnapshot(snapshot);
-    // Another instance may have migrated this user while this one was walking: its number is as
-    // good as ours, and overwriting it with a stale one would be worse than doing nothing.
-    if (current !== null && current.revisions !== undefined) {
-      return;
+    if (current === null || current.session !== manifest.session) {
+      throw new HttpError(503, "Unavailable", "The sync manifest changed during its upgrade. Try again.");
     }
-    tx.set(manifestDoc(uid), {
-      latest: migrated.latest,
-      revisions: migrated.revisions ?? {},
-      usedBytes: migrated.usedBytes ?? 0,
-      session: migrated.session || randomUUID(),
+    if (current.revisions !== undefined && current.usedBytes !== undefined) {
+      return { manifest: current, written: false };
+    }
+    if (current.ref !== manifest.ref) {
+      throw new HttpError(503, "Unavailable", "The sync manifest changed during its upgrade. Try again.");
+    }
+    const upgraded = {
+      ...migrated,
+      session: current.session || randomUUID(),
       ref: randomUUID(),
       updatedAt: Date.now(),
-    });
+    };
+    tx.set(manifestDoc(uid), upgraded);
+    return { manifest: upgraded, written: true };
   });
 
-  if (expired.length > 0) {
+  if (upgrade.written && expired.length > 0) {
     const writer = firestore().bulkWriter();
     for (const entry of expired) {
       writer.delete(refsCol(uid, entry.resource).doc(entry.ref));
@@ -225,18 +229,23 @@ async function ensureCounter(uid: string, manifest: ManifestDoc): Promise<Manife
     await writer.close();
   }
 
-  return migrated;
+  return upgrade.manifest;
 }
 
 /** Read the user's manifest, creating (and returning) it when missing. */
 export async function readOrCreateManifest(
   uid: string,
 ): Promise<SyncManifestBody> {
-  const created = await firestore().runTransaction(async (tx) => {
+  const current = manifestFromSnapshot(await manifestDoc(uid).get());
+  if (current !== null) {
+    return toManifestBody(await ensureCounter(uid, current));
+  }
+
+  const manifest = await firestore().runTransaction(async (tx) => {
     const snapshot = await readManifestInTx(tx, uid);
-    const manifest = manifestFromSnapshot(snapshot);
-    if (manifest) {
-      return null;
+    const existing = manifestFromSnapshot(snapshot);
+    if (existing !== null) {
+      return existing;
     }
     const fresh: ManifestDoc = {
       latest: {},
@@ -249,15 +258,7 @@ export async function readOrCreateManifest(
     tx.set(manifestDoc(uid), fresh);
     return fresh;
   });
-  if (created !== null) {
-    return toManifestBody(created);
-  }
-  const current = manifestFromSnapshot(await manifestDoc(uid).get());
-  if (current === null) {
-    // Deleted between the transaction and this read: one more pass is cheaper than a wrong answer.
-    return readOrCreateManifest(uid);
-  }
-  return toManifestBody(await ensureCounter(uid, current));
+  return toManifestBody(await ensureCounter(uid, manifest));
 }
 
 /** List all ref entries of a resource, oldest first. */
@@ -350,13 +351,16 @@ export async function writeResource(
   }
   const limitBytes = quotaBytesFor(plan);
 
-  const manifestSnapshot = await manifestDoc(uid).get();
-  const manifest = manifestFromSnapshot(manifestSnapshot);
-  await ensureCounter(uid, manifest ?? { latest: {}, session: "", ref: "", updatedAt: 0 });
-
-  return firestore().runTransaction(async (tx) => {
+  const commit = (expectedSession?: string) => firestore().runTransaction(async (tx) => {
     const snapshot = await readManifestInTx(tx, uid);
-    const current = manifestFromSnapshot(snapshot) ?? {
+    const existing = manifestFromSnapshot(snapshot);
+    if (expectedSession !== undefined && existing?.session !== expectedSession) {
+      throw new HttpError(503, "Unavailable", "The sync manifest changed during its upgrade. Try again.");
+    }
+    if (existing && (existing.revisions === undefined || existing.usedBytes === undefined)) {
+      return existing;
+    }
+    const current = existing ?? {
       latest: {},
       session: "",
       ref: "",
@@ -433,12 +437,24 @@ export async function writeResource(
     });
     return newRef;
   });
+  const result = await commit();
+  if (typeof result === "string") {
+    return result;
+  }
+  const upgraded = await ensureCounter(uid, result);
+  const retried = await commit(upgraded.session);
+  if (typeof retried !== "string") {
+    throw new HttpError(503, "Unavailable", "The sync manifest changed during its upgrade. Try again.");
+  }
+  return retried;
 }
 
 /** Delete every ref of a resource and reset its manifest entry to "0". */
 export async function deleteResource(uid: string, resource: string): Promise<void> {
   const current = manifestFromSnapshot(await manifestDoc(uid).get());
-  await ensureCounter(uid, current ?? { latest: {}, session: "", ref: "", updatedAt: 0 });
+  if (current) {
+    await ensureCounter(uid, current);
+  }
   await firestore().runTransaction(async (tx) => {
     const snapshot = await readManifestInTx(tx, uid);
     const manifest = manifestFromSnapshot(snapshot) ?? {
@@ -471,7 +487,9 @@ export async function deleteResourceRef(
   ref: string,
 ): Promise<void> {
   const current = manifestFromSnapshot(await manifestDoc(uid).get());
-  await ensureCounter(uid, current ?? { latest: {}, session: "", ref: "", updatedAt: 0 });
+  if (current) {
+    await ensureCounter(uid, current);
+  }
   await firestore().runTransaction(async (tx) => {
     const refDocRef = refsCol(uid, resource).doc(ref);
     const snapshot = await tx.get(refDocRef);
