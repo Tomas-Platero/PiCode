@@ -1,4 +1,8 @@
 {
+	"Generated image": "Oluşturulan görsel",
+	"Generating image…": "Görsel oluşturuluyor…",
+	"Image generation failed": "Görsel oluşturulamadı",
+	"Image generation finished": "Görsel oluşturuldu",
 	" · resets {0} {1}": " · {1} {0} tarihinde sıfırlanır",
 	"\"{0}\" is not a http or https URL.": "\"{0}\" bir http veya https adresi değil.",
 	"# Memory check": "# Hafıza denetimi",

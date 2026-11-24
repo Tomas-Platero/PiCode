@@ -244,4 +244,8 @@
 	impHintKeybindings: '내 사용자 지정 단축키',
 	impCatSnippets: '스니펫',
 	impHintSnippets: '내 코드 템플릿',
+	subLoadFailed: "구독을 불러올 수 없습니다. 계속 진행하고 채팅에서 모델을 선택할 수 있습니다.",
+	subOpenFailed: "로그인을 시작할 수 없습니다. 다시 시도하세요.",
+	subBrowserOpenFailed: "브라우저가 열리지 않았습니다. 아래 버튼으로 다시 시도하세요.",
+	subAnswerFailed: "답변을 보낼 수 없습니다. 다시 시도하세요.",
 };

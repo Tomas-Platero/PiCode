@@ -244,4 +244,8 @@
 	impHintKeybindings: 'Özel kısayollarınız',
 	impCatSnippets: 'Kod parçacıkları',
 	impHintSnippets: 'Kod şablonlarınız',
+	subLoadFailed: "Abonelikler yüklenemedi. Devam edip sohbetten bir model seçebilirsiniz.",
+	subOpenFailed: "Oturum açma başlatılamadı. Tekrar deneyin.",
+	subBrowserOpenFailed: "Tarayıcı açılmadı. Tekrar denemek için aşağıdaki düğmeyi kullanın.",
+	subAnswerFailed: "Yanıtınız gönderilemedi. Tekrar deneyin.",
 };

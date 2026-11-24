@@ -1,4 +1,8 @@
 {
+	"Generated image": "產生的圖片",
+	"Generating image…": "正在產生圖片…",
+	"Image generation failed": "圖片產生失敗",
+	"Image generation finished": "圖片產生完成",
 	" · resets {0} {1}": " · 於 {0} {1} 重設",
 	"\"{0}\" is not a http or https URL.": "「{0}」不是 http 或 https 網址。",
 	"# Memory check": "# 記憶檢查",

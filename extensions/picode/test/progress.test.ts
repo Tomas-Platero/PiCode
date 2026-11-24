@@ -21,6 +21,10 @@ test('the progress line names the work, and the bare tool when there is nothing 
 	assert.strictEqual(toolProgress('read', undefined), 'read');
 });
 
+test('image tools show a generating status instead of the tool identifier', () => {
+	assert.strictEqual(toolProgress('mcp_generate_image', {}), 'Generating image…');
+});
+
 test('arguments that arrive as an object are shown as readable JSON', () => {
 	assert.strictEqual(
 		toolInputText({ path: 'src/app.ts', limit: 20 }),

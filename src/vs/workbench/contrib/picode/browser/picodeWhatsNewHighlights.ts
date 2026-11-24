@@ -37,6 +37,19 @@ export interface IWhatsNewHighlight {
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
 		{
+			id: 'layoutTransition',
+			since: '2.4.12',
+			plan: 'free',
+			icon: Codicon.layout,
+			title: localize('picodeWhatsNew.layoutTransition.title', "A smoother change of view"),
+			summary: localize('picodeWhatsNew.layoutTransition.summary', "Switch between Agent and Editor with a smooth transition."),
+			points: [
+				localize('picodeWhatsNew.layoutTransition.point1', "Your current view stays visible while the next one is prepared."),
+			],
+			preview: 'layout',
+			action: 'switchLayout',
+		},
+		{
 			id: 'syncRecovery',
 			since: '2.4.11',
 			plan: 'pro',

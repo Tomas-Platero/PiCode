@@ -244,4 +244,8 @@
 	impHintKeybindings: '你的自訂快速鍵',
 	impCatSnippets: '程式碼片段',
 	impHintSnippets: '你的程式碼範本',
+	subLoadFailed: "無法載入訂閱。你可以繼續並在聊天中選擇模型。",
+	subOpenFailed: "無法開始登入。請重試。",
+	subBrowserOpenFailed: "瀏覽器未開啟。請使用下方按鈕重試。",
+	subAnswerFailed: "無法傳送你的回答。請重試。",
 };
