@@ -244,4 +244,8 @@
 	impHintKeybindings: 'カスタム ショートカット',
 	impCatSnippets: 'スニペット',
 	impHintSnippets: 'コードのテンプレート',
+	subLoadFailed: "サブスクリプションを読み込めませんでした。続行してチャットからモデルを選べます。",
+	subOpenFailed: "サインインを開始できませんでした。もう一度お試しください。",
+	subBrowserOpenFailed: "ブラウザーが開きませんでした。下のボタンでもう一度お試しください。",
+	subAnswerFailed: "回答を送信できませんでした。もう一度お試しください。",
 };

@@ -9,7 +9,8 @@ import { localize, localize2 } from '../../../../nls.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
-import { timeout } from '../../../../base/common/async.js';
+import { DeferredPromise, Throttler, timeout } from '../../../../base/common/async.js';
+import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { IsAuxiliaryWindowContext } from '../../../common/contextkeys.js';
@@ -44,7 +45,8 @@ export const PICODE_LAYOUT_SETTING = 'picode.appearance.layout';
 export type PicodeLayout = 'agent' | 'editor';
 
 const PICODE_AGENT_LAYOUT_CLASS = 'picode-agent';
-const PICODE_LAYOUT_BLINK_CLASS = 'picode-layout-blink';
+const startupLayoutReady = new DeferredPromise<void>();
+export const picodeStartupLayoutReady = startupLayoutReady.p;
 
 /** The workbench settings the Agent layout sets, and the value each takes there. */
 const AGENT_SETTINGS: ReadonlyArray<readonly [string, unknown]> = [
@@ -106,7 +108,7 @@ const AGENT_SESSIONS_WIDTH = 260;
 const AGENT_REVIEW_WIDTH = 320;
 
 /** Set once a workspace's Agent columns are arranged: later starts keep what the user left. */
-const AGENT_ARRANGED_KEY = 'picode.layout.agentArranged';
+export const AGENT_ARRANGED_KEY = 'picode.layout.agentArranged';
 
 /** The chat's share of what the review side bar leaves, while a file is open beside it. */
 const AGENT_CHAT_SHARE_WITH_EDITOR = 0.5;
@@ -155,19 +157,12 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 	) {
 		super();
 		const layout = picodeLayoutOf(this.configurationService);
-		this.applyClass(layout);
-		if (layout === 'agent') {
-			void this.enterAgent();
-		} else {
-			void this.leaveAgent();
-		}
+		void this.layoutChanges.queue(() => this.applyLayout(layout)).then(() => startupLayoutReady.complete());
 
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(PICODE_LAYOUT_SETTING)) {
 				const next = picodeLayoutOf(this.configurationService);
-				this.applyClass(next);
-				this.blink();
-				void (next === 'agent' ? this.enterAgent() : this.leaveAgent());
+				void this.layoutChanges.queue(() => this.switchLayout(next));
 			}
 		}));
 		this._register(this.layoutService.onDidAddContainer(({ container }) => {
@@ -188,33 +183,28 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 		}));
 	}
 
-	private blinkTimer: ReturnType<typeof setTimeout> | undefined;
+	private readonly layoutChanges = this._register(new Throttler());
 
-	/** The robot on the layout switch blinks while the columns move. */
-	private blink(): void {
-		const containers = [...this.layoutService.containers];
-		for (const container of containers) {
-			container.classList.remove(PICODE_LAYOUT_BLINK_CLASS);
-			// Read layout so a second switch in a row restarts the animation.
-			void container.offsetWidth;
-			container.classList.add(PICODE_LAYOUT_BLINK_CLASS);
+	private async switchLayout(layout: PicodeLayout): Promise<void> {
+		const container = this.layoutService.mainContainer;
+		const document = container.ownerDocument;
+		if (container.classList.contains(PICODE_AGENT_LAYOUT_CLASS) === (layout === 'agent')) {
+			return;
 		}
-		if (this.blinkTimer !== undefined) {
-			clearTimeout(this.blinkTimer);
+		if (!document.startViewTransition || document.hidden || container.classList.contains('monaco-reduce-motion') ||
+			document.defaultView?.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			return this.applyLayout(layout);
 		}
-		this.blinkTimer = setTimeout(() => {
-			this.blinkTimer = undefined;
-			for (const container of containers) {
-				container.classList.remove(PICODE_LAYOUT_BLINK_CLASS);
-			}
-		}, 900);
+
+		// Chromium keeps the old frame on screen throughout the asynchronous rearrangement.
+		// The root snapshots then blend as a pair, including areas where panels exchanged places.
+		const transition = document.startViewTransition(() => this.applyLayout(layout));
+		await transition.finished;
 	}
 
-	override dispose(): void {
-		if (this.blinkTimer !== undefined) {
-			clearTimeout(this.blinkTimer);
-		}
-		super.dispose();
+	private applyLayout(layout: PicodeLayout): Promise<void> {
+		this.applyClass(layout);
+		return (layout === 'agent' ? this.enterAgent() : this.leaveAgent()).catch(onUnexpectedError);
 	}
 
 	private applyClass(layout: PicodeLayout): void {
@@ -266,17 +256,19 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 		this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART);
 		this.layoutService.setPartHidden(false, Parts.SIDEBAR_PART);
 		this.layoutService.setPartHidden(false, Parts.PANEL_PART);
-		void this.paneCompositeService.openPaneComposite(SESSIONS_CONTAINER_ID, ViewContainerLocation.AuxiliaryBar);
-		void this.paneCompositeService.openPaneComposite(CHAT_CONTAINER_ID, ViewContainerLocation.Panel);
 		if (this.editorService.visibleEditors.length === 0) {
 			this.hideEditorArea();
 		}
+		await Promise.all([
+			this.openLayoutPane(SESSIONS_CONTAINER_ID, ViewContainerLocation.AuxiliaryBar),
+			this.openLayoutPane(CHAT_CONTAINER_ID, ViewContainerLocation.Panel),
+		]);
 		if (!firstTime) {
 			// Every start opens on Status, not on whichever tab the bar was left on (the workbench
 			// restores that one, usually the file explorer). A wide bar already shows Status as its column.
 			await timeout(0);
 			if (startView !== STATUS_CONTAINER_ID || !sidebarSideColumn.visible) {
-				void this.paneCompositeService.openPaneComposite(startView, ViewContainerLocation.Sidebar);
+				await this.openLayoutPane(startView, ViewContainerLocation.Sidebar);
 			}
 			return;
 		}
@@ -284,13 +276,13 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 		await timeout(0);
 		this.sizeColumns(true);
 		this.orderReviewTabs();
-		this.storageService.store(AGENT_ARRANGED_KEY, true, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		// The bar starts with Status alone; once it is laid out narrow, Status is a tab to open.
 		await timeout(0);
-		const status = await this.paneCompositeService.openPaneComposite(startView, ViewContainerLocation.Sidebar);
+		const status = await this.openLayoutPane(startView, ViewContainerLocation.Sidebar);
 		if (!status) {
-			void this.paneCompositeService.openPaneComposite(EXPLORER_CONTAINER_ID, ViewContainerLocation.Sidebar);
+			await this.openLayoutPane(EXPLORER_CONTAINER_ID, ViewContainerLocation.Sidebar);
 		}
+		this.storageService.store(AGENT_ARRANGED_KEY, true, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 	}
 
 	/**
@@ -385,7 +377,18 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 		this.layoutService.setPartHidden(!panelWasOpen, Parts.PANEL_PART);
 		this.layoutService.setPartHidden(false, Parts.EDITOR_PART);
 		this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART);
-		void this.paneCompositeService.openPaneComposite(CHAT_CONTAINER_ID, ViewContainerLocation.AuxiliaryBar);
+		await this.openLayoutPane(CHAT_CONTAINER_ID, ViewContainerLocation.AuxiliaryBar);
+	}
+
+	private async openLayoutPane(id: string, location: ViewContainerLocation) {
+		const registered = this.paneCompositeService.getPaneComposite(id, location) !== undefined;
+		const opening = this.paneCompositeService.openPaneComposite(id, location);
+		if (!registered) {
+			// Unregistered panes may wait for the extension host; keep the layout usable meanwhile.
+			void opening.catch(onUnexpectedError);
+			return undefined;
+		}
+		return opening;
 	}
 
 	/** With no file open the centre is the chat's: the editor steps aside. */

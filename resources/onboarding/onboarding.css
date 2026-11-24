@@ -782,6 +782,26 @@ button.secondary.compact {
 	animation: spin 700ms linear infinite;
 }
 
+.sub-opening,
+.sub-opening > .hint {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.sub-opening {
+	justify-content: space-between;
+	flex-wrap: wrap;
+}
+
+.sub-opening > .hint {
+	margin: 0;
+}
+
+.prow:has(.sub-opening) > .prow-head:disabled {
+	opacity: 1;
+}
+
 @keyframes spin {
 	to {
 		transform: rotate(360deg);
@@ -1879,5 +1899,9 @@ button.secondary.compact {
 	.spinner {
 		animation-duration: 1.4s !important;
 		animation-iteration-count: infinite !important;
+	}
+
+	.sub-opening .spinner {
+		animation: none !important;
 	}
 }

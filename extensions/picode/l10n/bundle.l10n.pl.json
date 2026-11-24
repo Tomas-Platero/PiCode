@@ -1,4 +1,8 @@
 {
+	"Generated image": "Wygenerowany obraz",
+	"Generating image…": "Generowanie obrazu…",
+	"Image generation failed": "Nie udało się wygenerować obrazu",
+	"Image generation finished": "Generowanie obrazu zakończone",
 	" · resets {0} {1}": " · odnowi się {1} {0}",
 	"\"{0}\" is not a http or https URL.": "„{0}” nie jest adresem http ani https.",
 	"# Memory check": "# Sprawdzenie pamięci",

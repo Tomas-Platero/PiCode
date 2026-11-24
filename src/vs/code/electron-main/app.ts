@@ -12,6 +12,7 @@ import { VSBuffer } from '../../base/common/buffer.js';
 import { toErrorMessage } from '../../base/common/errorMessage.js';
 import { Event } from '../../base/common/event.js';
 import { parse } from '../../base/common/jsonc.js';
+import { applyEdits, setProperty } from '../../base/common/jsonEdit.js';
 import { getPathLabel } from '../../base/common/labels.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Schemas, VSCODE_AUTHORITY } from '../../base/common/network.js';
@@ -26,7 +27,9 @@ import { Server as ElectronIPCServer } from '../../base/parts/ipc/electron-main/
 import { Client as MessagePortClient } from '../../base/parts/ipc/electron-main/ipc.mp.js';
 import { Server as NodeIPCServer } from '../../base/parts/ipc/node/ipc.net.js';
 import { IProxyAuthService, ProxyAuthService } from '../../platform/native/electron-main/auth.js';
-import { localize } from '../../nls.js';
+import { getNLSLanguage, localize } from '../../nls.js';
+import type { IExtensionManifest } from '../../platform/extensions/common/extensions.js';
+import type { ILanguagePackItem } from '../../platform/languagePacks/common/languagePacks.js';
 import { IBackupMainService } from '../../platform/backup/electron-main/backup.js';
 import { BackupMainService } from '../../platform/backup/electron-main/backupMainService.js';
 import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
@@ -118,7 +121,7 @@ import { IExtensionsScannerService } from '../../platform/extensionManagement/co
 import { ExtensionsScannerService } from '../../platform/extensionManagement/node/extensionsScannerService.js';
 import { UserDataProfilesHandler } from '../../platform/userDataProfile/electron-main/userDataProfilesHandler.js';
 import { ProfileStorageChangesListenerChannel } from '../../platform/userDataProfile/electron-main/userDataProfileStorageIpc.js';
-import { Promises, RunOnceScheduler, runWhenGlobalIdle } from '../../base/common/async.js';
+import { Promises, raceTimeout, RunOnceScheduler, runWhenGlobalIdle } from '../../base/common/async.js';
 import { CancellationToken } from '../../base/common/cancellation.js';
 import { resolveMachineId, resolveSqmId, resolveDevDeviceId, validateDevDeviceId } from '../../platform/telemetry/electron-main/telemetryUtils.js';
 import { ExtensionsProfileScannerService } from '../../platform/extensionManagement/node/extensionsProfileScannerService.js';
@@ -746,7 +749,7 @@ export class CodeApplication extends Disposable {
 		]);
 
 		// Shared process
-		const { sharedProcessReady, sharedProcessClient } = this.setupSharedProcess(machineId, sqmId, devDeviceId);
+		const { sharedProcessReady, sharedProcessClient, startForOnboarding } = this.setupSharedProcess(machineId, sqmId, devDeviceId);
 
 		// Services
 		const appInstantiationService = await this.initServices(machineId, sqmId, devDeviceId, sharedProcessReady);
@@ -815,7 +818,15 @@ export class CodeApplication extends Disposable {
 		// comes first, and the workbench is opened only when it is done or skipped. It resolves with
 		// the folder the owner picked there, if any, and it never throws — a setup that fails opens
 		// the editor anyway, which is the one promise this window cannot break.
-		this.picodeOnboardingFolder = await runOnboardingGate(picodeSetupDeps).then(outcome => outcome.folder);
+		const onboarding = await runOnboardingGate(picodeSetupDeps);
+		this.picodeOnboardingFolder = onboarding.folder;
+		const hasStartupFiles = () => (globalThis as { macOpenFiles?: string[] }).macOpenFiles?.length;
+		if (onboarding.firstRunLanguage && !initialProtocolUrls?.urls.length && !initialProtocolUrls?.openables.length && !hasStartupFiles()
+			&& await this.prepareFirstRunLanguage(onboarding.firstRunLanguage, startForOnboarding) && !hasStartupFiles()) {
+			const addArgs = onboarding.folder ? ['--folder-uri', URI.file(onboarding.folder).toString()] : undefined;
+			await this.lifecycleMainService.relaunch({ addArgs });
+			return;
+		}
 
 		// Open Windows
 		await appInstantiationService.invokeFunction(accessor => this.openFirstWindow(accessor, initialProtocolUrls));
@@ -838,6 +849,63 @@ export class CodeApplication extends Disposable {
 			}, 2500));
 		}, 2500));
 		eventuallyPhaseScheduler.schedule();
+	}
+
+	private async prepareFirstRunLanguage(language: string, startForOnboarding: () => Promise<MessagePortClient>): Promise<boolean> {
+		if (language === getNLSLanguage() || this.environmentMainService.args.locale) {
+			return false;
+		}
+		const argv = this.environmentMainService.argvResource;
+		try {
+			const initial = await this.fileService.readFile(argv);
+			const content = initial.value.toString();
+			const settings = parse(content);
+			if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+				return false;
+			}
+
+			if (language !== 'en' && !await raceTimeout(this.ensureFirstRunLanguagePack(language, startForOnboarding), 10_000)) {
+				return false;
+			}
+			const latest = await this.fileService.readFile(argv);
+			if (latest.value.toString() !== content) {
+				return false;
+			}
+			const edited = applyEdits(content, setProperty(content, ['locale'], language, { tabSize: 4, insertSpaces: false, eol: '\n' }));
+			await this.fileService.writeFile(argv, VSBuffer.fromString(edited), { etag: latest.etag, mtime: latest.mtime });
+			return true;
+		} catch (error) {
+			this.logService.warn('[picode-language] could not apply the language before opening the editor', error);
+			return false;
+		}
+	}
+
+	private async ensureFirstRunLanguagePack(language: string, startForOnboarding: () => Promise<MessagePortClient>): Promise<boolean> {
+		const client = await startForOnboarding();
+		const languagePacks = client.getChannel('languagePacks');
+		const isInstalled = async () => (await languagePacks.call<ILanguagePackItem[]>('getInstalledLanguages', [])).some(item => item.id?.toLowerCase() === language);
+		if (await isInstalled()) {
+			return true;
+		}
+		const folder = URI.joinPath(URI.file(this.environmentMainService.userDataPath), 'picode-language');
+		const note = URI.joinPath(folder, 'pending.json');
+		if (!await this.fileService.exists(note)) {
+			return false;
+		}
+		const pending = JSON.parse((await this.fileService.readFile(note)).value.toString());
+		if (pending.language !== language || typeof pending.pack !== 'string' || !/^[a-z]{2}(?:-[a-z]{2})?$/.test(pending.pack)
+			|| typeof pending.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(pending.version)) {
+			return false;
+		}
+		const vsix = URI.joinPath(folder, `${pending.pack}-${pending.version}.vsix`);
+		const extensions = client.getChannel('extensions');
+		const manifest = await extensions.call<IExtensionManifest>('getManifest', [vsix]);
+		if (manifest.publisher.toLowerCase() !== 'ms-ceintl' || manifest.name.toLowerCase() !== `vscode-language-pack-${pending.pack}`
+			|| !manifest.contributes?.localizations?.some(entry => entry.languageId.toLowerCase() === language)) {
+			return false;
+		}
+		await extensions.call('install', [vsix, { isMachineScoped: false, donotIncludePackAndDependencies: true }]);
+		return isInstalled();
 	}
 
 	private async setupProtocolUrlHandlers(accessor: ServicesAccessor, mainProcessElectronServer: ElectronIPCServer): Promise<IInitialProtocolUrls | undefined> {
@@ -1188,7 +1256,7 @@ export class CodeApplication extends Disposable {
 		return false;
 	}
 
-	private setupSharedProcess(machineId: string, sqmId: string, devDeviceId: string): { sharedProcessReady: Promise<MessagePortClient>; sharedProcessClient: Promise<MessagePortClient> } {
+	private setupSharedProcess(machineId: string, sqmId: string, devDeviceId: string): { sharedProcessReady: Promise<MessagePortClient>; sharedProcessClient: Promise<MessagePortClient>; startForOnboarding: () => Promise<MessagePortClient> } {
 		const sharedProcess = this._register(this.mainInstantiationService.createInstance(SharedProcess, machineId, sqmId, devDeviceId));
 
 		this._register(sharedProcess.onDidCrash(() => this.windowsMainService?.sendToFocused('vscode:reportSharedProcessCrash')));
@@ -1209,7 +1277,14 @@ export class CodeApplication extends Disposable {
 			return sharedProcessClient;
 		})();
 
-		return { sharedProcessReady, sharedProcessClient };
+		return {
+			sharedProcessReady,
+			sharedProcessClient,
+			startForOnboarding: () => {
+				sharedProcess.startForOnboarding();
+				return sharedProcessReady;
+			},
+		};
 	}
 
 	private async initServices(machineId: string, sqmId: string, devDeviceId: string, sharedProcessReady: Promise<MessagePortClient>): Promise<IInstantiationService> {

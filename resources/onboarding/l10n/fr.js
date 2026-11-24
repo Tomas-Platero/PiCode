@@ -244,4 +244,8 @@
 	impHintKeybindings: 'Vos raccourcis personnalisés',
 	impCatSnippets: 'Extraits',
 	impHintSnippets: 'Vos modèles de code',
+	subLoadFailed: "Impossible de charger les abonnements. Vous pouvez continuer et choisir un modèle dans le chat.",
+	subOpenFailed: "Impossible de démarrer la connexion. Réessayez.",
+	subBrowserOpenFailed: "Le navigateur ne s’est pas ouvert. Utilisez le bouton ci-dessous pour réessayer.",
+	subAnswerFailed: "Impossible d’envoyer votre réponse. Réessayez.",
 };

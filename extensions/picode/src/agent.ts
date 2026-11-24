@@ -11,6 +11,7 @@ import { writeNamedTranscript } from './session-transcript';
 import { branchSlugOf, isPlaceholderBranch, openWorktree, placeholderBranch, renameBranch, repoRootOf, setActiveChatFolder } from './session-worktree';
 import { contextBlockFor } from './editor-context';
 import { imagesOf, type PiImage } from './chat-images';
+import { generatedImagesOf, isImageCreationTool } from './generated-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
 import { compareModels, MAX_COMPARED_MODELS, MIN_COMPARED_MODELS, renderComparison } from './compare-models';
 import { listModels } from './wizard-models';
@@ -474,6 +475,17 @@ function pushToolCard(
 		part.enablePartialUpdate = true;
 		part.isComplete = result !== undefined;
 		part.isError = isError;
+		if (isImageCreationTool(toolName)) {
+			if (isError) {
+				part.isComplete = true;
+				part.pastTenseMessage = vscode.l10n.t('Image generation failed');
+			} else if (part.isComplete) {
+				part.pastTenseMessage = vscode.l10n.t('Image generation finished');
+			} else {
+				part.invocationMessage = new vscode.MarkdownString('$(loading~spin) ', true).appendText(line);
+				part.pastTenseMessage = undefined;
+			}
+		}
 		stream.push(part);
 	} catch (error) {
 		// The card is a window onto the work; losing the window must not end the turn.
@@ -659,6 +671,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 	// One ledger per turn: the card says what THIS answer changed, even while another chat's turn
 	// is changing other files at the same time.
 	const ledger = new TurnEditLedger();
+	const imagePreviews: ReturnType<typeof generatedImagesOf>[] = [];
 	// The answer's own text, as it streamed.
 	let answer = '';
 	sessionsInChatTurn.add(session);
@@ -731,6 +744,9 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// A file this tool has written lands in the ledger — when the tool succeeded;
 				// a failed tool did not change the file, and the card never says it did.
 				recordToolResult(ledger, event.toolName, endArgs, event.isError, sessionCwd);
+				if (event.isError !== true && isImageCreationTool(event.toolName)) {
+					imagePreviews.push(generatedImagesOf(event.toolName, event.result));
+				}
 				// The call's own row, now with what the tool answered.
 				const memory = memoryCard(event.toolName, endArgs);
 				if (memory !== undefined) {
@@ -810,7 +826,16 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// The change card comes last, once the ledger's reads have settled: the turn ends
 				// with it, so "what changed" is the last thing the transcript says — never a card
 				// missing the file whose read was still in flight.
-				void pushTurnEditsCard(ledger, stream, log).then(resolve, () => resolve());
+				void Promise.all(imagePreviews).then(previews => {
+					for (const { path } of previews.flat()) {
+						if (token.isCancellationRequested) {
+							break;
+						}
+						const uri = vscode.Uri.file(path).toString();
+						const label = vscode.l10n.t('Generated image');
+						stream.markdown(`\n\n[![${label}](<${uri}>)](<${uri}>)\n\n`);
+					}
+				}).finally(() => pushTurnEditsCard(ledger, stream, log)).then(resolve, () => resolve());
 			}
 		});
 

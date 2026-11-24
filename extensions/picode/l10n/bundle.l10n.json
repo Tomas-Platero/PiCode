@@ -118,6 +118,8 @@
 	"Filter memories…": "Filter memories…",
 	"Finish signing in in your browser.": "Finish signing in in your browser.",
 	"Finished": "Finished",
+	"Generated image": "Generated image",
+	"Generating image…": "Generating image…",
 	"Gentle AI telemetry is off in PiCode.": "Gentle AI telemetry is off in PiCode.",
 	"Getting started…": "Getting started…",
 	"GitHub Copilot": "GitHub Copilot",
@@ -127,6 +129,8 @@
 	"Header sent to the server": "Header sent to the server",
 	"How \"{0}\" is reached: a local command or a remote URL": "How \"{0}\" is reached: a local command or a remote URL",
 	"How the server is reached: a local command or a remote URL": "How the server is reached: a local command or a remote URL",
+	"Image generation failed": "Image generation failed",
+	"Image generation finished": "Image generation finished",
 	"Importing a conversation file is only available in pi’s terminal.": "Importing a conversation file is only available in pi’s terminal.",
 	"Installed from git; npm cannot say whether it is behind": "Installed from git; npm cannot say whether it is behind",
 	"Installed {0} package into this profile.": "Installed {0} package into this profile.",
@@ -187,6 +191,7 @@
 	"Moving between branches of a conversation is only available in pi’s terminal.": "Moving between branches of a conversation is only available in pi’s terminal.",
 	"Name of the MCP server": "Name of the MCP server",
 	"Name of the new branch. It starts from where the project is now.": "Name of the new branch. It starts from where the project is now.",
+	"Name this session": "Name this session",
 	"Needs review": "Needs review",
 	"New Session on a Branch": "New Session on a Branch",
 	"New branch…": "New branch…",
@@ -347,6 +352,7 @@
 	"Running in the background": "Running in the background",
 	"Same model as the rest": "Same model as the rest",
 	"Save this conversation as a web page": "Save this conversation as a web page",
+	"Save this memory?": "Save this memory?",
 	"Saved": "Saved",
 	"Saved {0} to memory": "Saved {0} to memory",
 	"Saved {0} to memory · {1}": "Saved {0} to memory · {1}",
@@ -662,7 +668,5 @@
 	"🤖 Answers": "🤖 Answers",
 	"🧠 Model": "🧠 Model",
 	"🧠 Thinking set to **{0}**.": "🧠 Thinking set to **{0}**.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.",
-	"Save this memory?": "Save this memory?",
-	"Name this session": "Name this session"
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}."
 }

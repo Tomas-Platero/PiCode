@@ -975,6 +975,20 @@ have to be updated for changes to the rules above, or to support more deeply nes
 	max-width: 100%;
 }
 
+.interactive-item-container .value .rendered-markdown img[src*="/picode-images-"][src*="/generated-image-"] {
+	display: block;
+	width: auto;
+	height: auto;
+	max-height: 32rem;
+	border-radius: 12px;
+	object-fit: contain;
+}
+
+.monaco-reduce-motion .chat-query-title-part .codicon-loading,
+.monaco-reduce-motion .chat-thinking-title-detail .codicon-loading {
+	animation: none;
+}
+
 .chat-tool-hover,
 .interactive-item-container {
 

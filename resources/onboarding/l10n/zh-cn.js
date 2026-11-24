@@ -244,4 +244,8 @@
 	impHintKeybindings: '你的自定义快捷方式',
 	impCatSnippets: '代码片段',
 	impHintSnippets: '你的代码模板',
+	subLoadFailed: "无法加载订阅。你可以继续并在聊天中选择模型。",
+	subOpenFailed: "无法启动登录。请重试。",
+	subBrowserOpenFailed: "浏览器未打开。请使用下方按钮重试。",
+	subAnswerFailed: "无法发送你的回答。请重试。",
 };

@@ -303,6 +303,11 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 	}
 
 	private async openGettingStarted(showTelemetryNotice?: boolean) {
+		// Agent layout already welcomes the user in its empty chat.
+		if (this.configurationService.getValue<string>('picode.appearance.layout') === 'agent') {
+			return;
+		}
+
 		const startupEditorTypeID = gettingStartedInputTypeId;
 		const editor = this.editorService.activeEditor;
 
