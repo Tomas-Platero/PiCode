@@ -16,6 +16,7 @@
  */
 
 import { l10n } from './l10n.ts';
+import { isImageCreationTool } from './generated-images.ts';
 
 /** The fields a tool's arguments may carry, tried in this order for each tool. */
 function firstString(args: unknown, keys: readonly string[]): string | undefined {
@@ -54,6 +55,9 @@ const MAX_ARGUMENT_CHARS = 80;
  * line failed to load.
  */
 export function toolProgress(toolName: string, args: unknown): string {
+	if (isImageCreationTool(toolName)) {
+		return l10n.t('Generating image…');
+	}
 	const keys = IDENTIFYING_ARGUMENT[toolName];
 	const argument = keys === undefined ? undefined : firstString(args, keys);
 	if (argument === undefined) {

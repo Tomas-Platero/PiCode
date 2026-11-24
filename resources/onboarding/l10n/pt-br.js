@@ -244,4 +244,8 @@
 	impHintKeybindings: 'Seus atalhos personalizados',
 	impCatSnippets: 'Snippets',
 	impHintSnippets: 'Seus modelos de código',
+	subLoadFailed: "Não foi possível carregar as assinaturas. Você pode continuar e escolher um modelo no chat.",
+	subOpenFailed: "Não foi possível iniciar a sessão. Tente novamente.",
+	subBrowserOpenFailed: "O navegador não abriu. Use o botão abaixo para tentar novamente.",
+	subAnswerFailed: "Não foi possível enviar sua resposta. Tente novamente.",
 };

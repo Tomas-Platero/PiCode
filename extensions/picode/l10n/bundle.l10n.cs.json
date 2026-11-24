@@ -1,4 +1,8 @@
 {
+	"Generated image": "Vygenerovaný obrázek",
+	"Generating image…": "Generování obrázku…",
+	"Image generation failed": "Generování obrázku selhalo",
+	"Image generation finished": "Generování obrázku dokončeno",
 	" · resets {0} {1}": " · resetuje {0} {1}",
 	"\"{0}\" is not a http or https URL.": "„{0}“ není adresa http ani https.",
 	"# Memory check": "# Kontrola paměti",

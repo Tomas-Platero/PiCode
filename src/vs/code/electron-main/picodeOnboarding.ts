@@ -297,10 +297,13 @@ export function requestSetupWindow(mode: OnboardingMode = 'setup'): boolean {
 export interface OnboardingOutcome {
 	/** A folder chosen on the last step, handed to the editor's first window. */
 	readonly folder?: string;
+	/** The display language requested before the first workbench opens. */
+	readonly firstRunLanguage?: string;
 }
 
 interface SetupWindowResult {
 	readonly folder?: string;
+	readonly language?: string;
 }
 
 /**
@@ -741,11 +744,12 @@ function registerIpc(deps: OnboardingDeps, options: IpcOptions): { dispose: () =
 		return { ...answer, snapshot: answer.ok ? ((answer.data as { snapshot?: unknown } | undefined)?.snapshot) : undefined };
 	}));
 
-	ipcMain.handle(CHANNELS.finish, guard(async (result: { folder?: unknown; skipped?: unknown } | undefined) => {
+	ipcMain.handle(CHANNELS.finish, guard(async (result: { folder?: unknown; skipped?: unknown; language?: unknown } | undefined) => {
 		writeOnboardingFlag(onboardingDataDir(deps), deps.productService.version, deps.logService);
 		const folder = typeof result?.folder === 'string' && result.folder.length > 0 ? result.folder : undefined;
+		const language = typeof result?.language === 'string' && /^[a-z]{2}(?:-[a-z]{2})?$/.test(result.language) ? result.language : undefined;
 		// The reply goes first; `finish` only hides the window, so the page is alive to receive it.
-		setTimeout(() => options.finish({ folder }), 0);
+		setTimeout(() => options.finish({ folder, language }), 0);
 		return { ok: true };
 	}));
 
@@ -1017,7 +1021,8 @@ export async function runOnboardingGate(deps: OnboardingDeps): Promise<Onboardin
 		// process died with an access violation, with nothing logged after it. One turn of the loop
 		// is all it takes for the close to be over.
 		await new Promise<void>(resolve => setImmediate(resolve));
-		return result.folder !== undefined ? { folder: result.folder } : {};
+		const completed = onboardingReason(readOnboardingFlag(onboardingDataDir(deps)), deps.productService.version) === undefined;
+		return { folder: result.folder, firstRunLanguage: reason === 'first-run' && completed ? result.language : undefined };
 	} catch (error) {
 		deps.logService.warn('[picode-onboarding] the setup failed; opening the editor', error);
 		return {};

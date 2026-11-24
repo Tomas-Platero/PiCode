@@ -10,7 +10,8 @@
  * starts, so a language chosen here cannot be applied live. What it can do is have everything
  * ready: the language pack (Microsoft's, from Open VSX) is downloaded in the background while the
  * person walks through the steps, and left in the editor's data folder with a note saying what it
- * is. The editor, on its first start, installs it and VS Code's own prompt offers the restart.
+ * is. First-run setup consumes the pack before opening the editor. In-editor setup lets the
+ * standard language-pack prompt offer the switch.
  *
  * No `vscode` import: this runs in the setup's backend process, where there is no extension host.
  */
