@@ -14,7 +14,7 @@ export interface ChatImages {
 }
 
 /** Providers reject far smaller payloads than this; one that large is not a screenshot. */
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 /** The binary reference the chat gives for a pasted or attached image, recognised by its shape. */
 interface BinaryReference {

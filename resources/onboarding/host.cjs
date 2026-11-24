@@ -170,6 +170,13 @@ async function loginStreaming(host, paths, providerId) {
 			send({ type: 'event', event });
 		},
 		prompt(prompt) {
+			// Choose the same browser option the window used to select, without an IPC round trip.
+			const preferred = prompt.type === 'select'
+				? (prompt.options.find(option => /\(default\)/i.test(option.label ?? '')) ?? prompt.options.find(option => /browser/i.test(option.label ?? '')))
+				: undefined;
+			if (preferred !== undefined) {
+				return Promise.resolve(preferred.id);
+			}
 			const id = String(++nextId);
 			const { signal, ...shown } = prompt;
 			send({ type: 'prompt', id, prompt: shown });

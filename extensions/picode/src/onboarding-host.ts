@@ -231,6 +231,7 @@ export interface SetupSnapshot {
 	/** How much of the editor travels with a chat message (`picode.context.mode`). */
 	readonly contextMode: 'project' | 'file' | 'selection';
 	readonly providers: readonly ProviderFacts[];
+	readonly featuredSubscriptions: readonly SubscriptionChoice[];
 	readonly packages: readonly string[];
 }
 
@@ -343,6 +344,7 @@ export function setupSnapshot(paths: SetupPaths): SetupSnapshot {
 		layout: readEditorSetting(paths, 'picode.appearance.layout') === 'agent' ? 'agent' : 'editor',
 		defaultModel: readDefaultModel(paths),
 		providers: profileProviders(paths),
+		featuredSubscriptions: FEATURED_SUBSCRIPTIONS,
 		packages: readPackages(paths),
 	};
 }
@@ -485,6 +487,7 @@ export async function importApply(paths: SetupPaths, request: { source: string; 
 /** The SDK slice a login needs: the one call that builds a runtime over PiCode's profile. */
 interface LoginSdk {
 	createAgentSessionServices(options: { cwd: string; agentDir: string }): Promise<{ modelRuntime: PiModelRuntime }>;
+	ModelRuntime?: { create(options: { authPath: string; modelsPath: string; allowModelNetwork: boolean }): Promise<PiModelRuntime> };
 }
 
 /** One provider a subscription can be opened for. */
@@ -549,6 +552,21 @@ async function loginRuntime(paths: SetupPaths): Promise<PiModelRuntime> {
 	return services.modelRuntime;
 }
 
+/** A fresh profile has no extension sources that could replace a built-in sign-in. */
+function canUseBuiltInCatalog(paths: SetupPaths): boolean {
+	if (existsSync(path.join(paths.profileDir, 'extensions')) || existsSync(path.join(paths.distributionRoot, '.pi'))) {
+		return false;
+	}
+	try {
+		const settings = JSON.parse(readFileSync(path.join(paths.profileDir, 'settings.json'), 'utf8').replace(/^\uFEFF/, ''));
+		return settings !== null && typeof settings === 'object' && !Array.isArray(settings)
+			&& ['packages', 'extensions'].every(key => settings[key] === undefined
+				|| (Array.isArray(settings[key]) && settings[key].length === 0));
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === 'ENOENT';
+	}
+}
+
 /**
  * The providers a subscription can be opened for.
  *
@@ -556,7 +574,28 @@ async function loginRuntime(paths: SetupPaths): Promise<PiModelRuntime> {
  * `oauth.login` is one this button would fail on.
  */
 export async function subscriptionChoices(paths: SetupPaths): Promise<SubscriptionChoice[]> {
-	const runtime = await loginRuntime(paths);
+	const runtime = await builtInModelRuntime(paths);
+	return runtime ? subscriptionChoicesFrom(runtime) : [];
+}
+
+/** Loads the built-in provider registry without starting a session or installing packages. */
+async function builtInModelRuntime(paths: SetupPaths): Promise<PiModelRuntime | undefined> {
+	const entry = firstExisting(sdkCandidates(paths.distributionRoot));
+	if (entry === undefined) {
+		throw new Error('the pi that ships with PiCode was not found, so no provider can be signed in');
+	}
+	const sdk = await importPiModule<LoginSdk>(entry);
+	if (!sdk.ModelRuntime) {
+		return undefined;
+	}
+	return sdk.ModelRuntime.create({
+		authPath: path.join(paths.profileDir, 'auth.json'),
+		modelsPath: path.join(paths.profileDir, 'models.json'),
+		allowModelNetwork: false,
+	});
+}
+
+function subscriptionChoicesFrom(runtime: PiModelRuntime): SubscriptionChoice[] {
 	// The order is the product's, not the alphabet's: the subscriptions most people come for
 	// first, then the rest by name. Same list the editor's own picker ranks by.
 	return runtime
@@ -579,7 +618,10 @@ export async function subscriptionChoices(paths: SetupPaths): Promise<Subscripti
  * file, and a model id's prefix is not a provider. Each provider is listed once, with its own models.
  */
 export async function availableProviders(paths: SetupPaths): Promise<AvailableProvider[]> {
-	const runtime = await loginRuntime(paths);
+	return availableProvidersFrom(await loginRuntime(paths));
+}
+
+async function availableProvidersFrom(runtime: PiModelRuntime): Promise<AvailableProvider[]> {
 	const models = typeof runtime.getAvailable === 'function' ? await runtime.getAvailable() : [];
 	const names = new Map(runtime.getProviders().map(provider => [provider.id, provider.name] as const));
 	const grouped = new Map<string, string[]>();
@@ -605,7 +647,13 @@ export async function loginProvider(paths: SetupPaths, providerId: string, bridg
 	if (id.length === 0) {
 		throw new Error('a sign-in needs a provider');
 	}
-	const runtime = await loginRuntime(paths);
+	const builtin = canUseBuiltInCatalog(paths) && FEATURED_SUBSCRIPTIONS.some(provider => provider.id === id)
+		? await builtInModelRuntime(paths)
+		: undefined;
+	const supportsLogin = builtin?.getProviders().some(provider => provider.id === id && typeof provider.auth?.oauth?.login === 'function');
+	const runtime = supportsLogin && typeof builtin?.login === 'function' && canUseBuiltInCatalog(paths)
+		? builtin
+		: await loginRuntime(paths);
 	if (typeof runtime.login !== 'function') {
 		throw new Error('this pi cannot sign a provider in; updating pi is what brings that');
 	}
@@ -642,6 +690,7 @@ export type HostCommand =
 	| 'clearPendingCode'
 	| 'subscriptions'
 	| 'availableProviders'
+	| 'providerCatalog'
 	| 'gentle'
 	| 'setGentle'
 	| 'prepareLanguage';
@@ -665,6 +714,7 @@ export type HostAnswer =
 	| EndpointProbe
 	| readonly SubscriptionChoice[]
 	| readonly AvailableProvider[]
+	| { readonly providers: readonly AvailableProvider[]; readonly subscriptions: readonly SubscriptionChoice[] }
 	| GentleSettings
 	| { readonly language: LanguageOutcome }
 	| { readonly snapshot: SetupSnapshot };
@@ -772,6 +822,11 @@ export async function runHostCommand(paths: SetupPaths, command: string, payload
 			return subscriptionChoices(paths);
 		case 'availableProviders':
 			return availableProviders(paths);
+		case 'providerCatalog': {
+			const builtin = canUseBuiltInCatalog(paths) ? await builtInModelRuntime(paths) : undefined;
+			const runtime = builtin ?? await loginRuntime(paths);
+			return { providers: await availableProvidersFrom(runtime), subscriptions: subscriptionChoicesFrom(runtime) };
+		}
 		case 'gentle':
 			return gentleSettings(paths.profileDir);
 		case 'setGentle':

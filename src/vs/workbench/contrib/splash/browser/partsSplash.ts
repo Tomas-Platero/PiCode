@@ -6,8 +6,11 @@
 import { onDidChangeFullscreen, isFullscreen } from '../../../../base/browser/browser.js';
 import * as dom from '../../../../base/browser/dom.js';
 import { Color } from '../../../../base/common/color.js';
+import { raceTimeout } from '../../../../base/common/async.js';
 import { Event } from '../../../../base/common/event.js';
-import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { DisposableStore, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { FileAccess } from '../../../../base/common/network.js';
+import { localize } from '../../../../nls.js';
 import { editorBackground, foreground } from '../../../../platform/theme/common/colorRegistry.js';
 import { getThemeTypeSelector, IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { DEFAULT_EDITOR_MIN_DIMENSIONS } from '../../../browser/parts/editor/editor.js';
@@ -22,6 +25,8 @@ import { ISplashStorageService } from './splash.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
 import { TitleBarSetting } from '../../../../platform/window/common/window.js';
+import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
+import { AGENT_ARRANGED_KEY, picodeLayoutOf, picodeStartupLayoutReady } from '../../picode/browser/picodeLayoutStyle.js';
 
 export class PartsSplash {
 
@@ -41,7 +46,11 @@ export class PartsSplash {
 		@ISplashStorageService private readonly _partSplashService: ISplashStorageService,
 		@IEditorGroupsService editorGroupsService: IEditorGroupsService,
 		@ILifecycleService lifecycleService: ILifecycleService,
+		@IStorageService storageService: IStorageService,
 	) {
+		if (picodeLayoutOf(_configService) === 'agent' && storageService.get(AGENT_ARRANGED_KEY, StorageScope.WORKSPACE) === undefined) {
+			this.showAgentStartup();
+		}
 		Event.once(_layoutService.onDidLayoutMainContainer)(() => {
 			this._removePartsSplash();
 			perf.mark('code/didRemovePartsSplash');
@@ -62,6 +71,19 @@ export class PartsSplash {
 				this._savePartsSplash();
 			}
 		}, this, this._disposables);
+	}
+
+	private showAgentStartup(): void {
+		const cover = dom.$('.picode-agent-startup', { role: 'status' },
+			dom.$('img', { src: FileAccess.asBrowserUri('vs/workbench/contrib/picode/browser/media/picode.svg').toString(true), alt: '' }),
+			dom.$('span', {}, localize('picodeAgentStartup', "Opening Agent workspace…")),
+		);
+		const theme = this._themeService.getColorTheme();
+		cover.style.backgroundColor = (theme.getColor(editorBackground) || themes.WORKBENCH_BACKGROUND(theme)).toString();
+		cover.style.color = theme.getColor(foreground)?.toString() ?? '';
+		this._layoutService.mainContainer.ownerDocument.body.appendChild(cover);
+		const cleanup = this._disposables.add(toDisposable(() => cover.remove()));
+		void raceTimeout(picodeStartupLayoutReady, 3500).then(() => this._disposables.delete(cleanup));
 	}
 
 	dispose(): void {

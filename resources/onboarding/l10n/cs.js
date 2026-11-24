@@ -244,4 +244,8 @@
 	impHintKeybindings: 'Vaše vlastní zkratky',
 	impCatSnippets: 'Úryvky',
 	impHintSnippets: 'Vaše šablony kódu',
+	subLoadFailed: "Předplatná se nepodařilo načíst. Můžete pokračovat a vybrat model v chatu.",
+	subOpenFailed: "Přihlášení se nepodařilo spustit. Zkuste to znovu.",
+	subBrowserOpenFailed: "Prohlížeč se neotevřel. Zkuste to tlačítkem níže.",
+	subAnswerFailed: "Odpověď se nepodařilo odeslat. Zkuste to znovu.",
 };
