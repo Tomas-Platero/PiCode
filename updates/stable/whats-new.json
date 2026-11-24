@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.11",
+			"notes": "### ✨ New\n\n- improve recovery and account settings\n\n### ⚡ Faster\n\n- reduce manifest reads and guard legacy upgrades"
+		},
+		{
 			"version": "2.4.10",
 			"notes": "### ✨ New\n\n- highlight new chat and workspace settings"
 		},
