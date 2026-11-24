@@ -1,15 +1,10 @@
 {
-  "version": "e476df7cb6a2174e37d190a171dcfce1aa9c8e41",
-  "productVersion": "1.146.24",
-  "picodeVersion": "2.4.11",
-  "kind": "minor",
-  "timestamp": 1795441912205,
-  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v2.4.11/PiCode-win32-x64-2.4.11.zip",
-  "sha256hash": "aeb85d979b46c49f9662ffb249842056498faabf782ae6e7ff91f270e4bbfd88",
-  "delta": {
-    "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v2.4.11/PiCode-win32-x64-2.4.11-update-from-2.4.10.zip",
-    "sha256hash": "7c6ae91792f810fa322040754654f241d9c7e9528f3f193c9748d36b94fe5065",
-    "from": "2.4.10"
-  },
-  "signature": "85j91TLpmZlIjEyPJZEM6eiknr/P/48pumqyIK5xODUeKVLVIJzGJlToSo9jv7c6eo1s9Rj6SBxn5es3chcaDg=="
+  "version": "8e4040f5d72233bebf101b1919844372eebeb83f",
+  "productVersion": "1.146.25",
+  "picodeVersion": "2.4.12",
+  "kind": "release",
+  "timestamp": 1795525473042,
+  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v2.4.12/PiCode-win32-x64-2.4.12.zip",
+  "sha256hash": "1f7fe43ad3fd193cf75c72736dbe9b8c6c3d1d43aded2407ffa847de49500783",
+  "signature": "8gu6pRBtlmjdO83Kqh/w6ZdoHcBhGKRsL3cVrzk9Aao2wbMZxcNdn/eGbT4iN0l+N8dXYKIzVBHm/yHllIR8Bg=="
 }
