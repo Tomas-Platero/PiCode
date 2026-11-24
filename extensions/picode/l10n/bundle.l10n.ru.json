@@ -1,4 +1,8 @@
 {
+	"Generated image": "Созданное изображение",
+	"Generating image…": "Создание изображения…",
+	"Image generation failed": "Не удалось создать изображение",
+	"Image generation finished": "Изображение создано",
 	" · resets {0} {1}": " · сбрасывает {0} {1}",
 	"\"{0}\" is not a http or https URL.": "«{0}» — это не адрес http или https.",
 	"# Memory check": "# Проверка памяти",

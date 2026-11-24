@@ -1,4 +1,8 @@
 {
+	"Generated image": "생성된 이미지",
+	"Generating image…": "이미지 생성 중…",
+	"Image generation failed": "이미지 생성 실패",
+	"Image generation finished": "이미지 생성 완료",
 	" · resets {0} {1}": " · {0} {1}에 초기화",
 	"\"{0}\" is not a http or https URL.": "\"{0}\"은(는) http 또는 https URL이 아닙니다.",
 	"# Memory check": "# 메모리 점검",

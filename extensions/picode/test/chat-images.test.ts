@@ -11,11 +11,37 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { imagesOf, sniffImage } from '../src/chat-images.ts';
+import { generatedImagesOf } from '../src/generated-images.ts';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const png = (tail = true): Uint8Array => Uint8Array.from([
 	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5, 6, 7, 8,
 	...(tail ? [0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82] : []),
 ]);
+
+test('generated image bytes and an image tool path are copied to the temporary preview directory', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'picode-preview-test-'));
+	try {
+		const source = join(root, 'source image.png');
+		await writeFile(source, png());
+		const content = [
+			{ type: 'image', data: Buffer.from(png()).toString('base64') },
+			{ type: 'text', text: 'Generated: `' + source + '`' },
+		];
+		const previews = await generatedImagesOf('mcp_generate_image', { content }, root);
+		assert.equal(previews.length, 2);
+		for (const preview of previews) {
+			assert.equal(preview.mimeType, 'image/png');
+			assert.notEqual(preview.path, source);
+			assert.deepEqual(await readFile(preview.path), Buffer.from(png()));
+		}
+		assert.deepEqual(await generatedImagesOf('read', { content }, root), []);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
 
 test('a whole PNG is accepted and a cut-off one is not', () => {
 	assert.equal(sniffImage(png()), 'image/png');
