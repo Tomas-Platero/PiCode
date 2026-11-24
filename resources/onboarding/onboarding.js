@@ -42,6 +42,7 @@ for (const [code, table] of Object.entries(STRINGS)) {
 }
 
 let language = 'en';
+let languagePreparation = Promise.resolve();
 
 /** One word, from the current language; `{0}`, `{1}`… are filled from the extra arguments. */
 function t(key, ...args) {
@@ -143,6 +144,7 @@ const PLANS_URL = 'https://www.getpicode.app/pricing';
 
 /** How long the browser gets to come back by itself before pasting is offered. */
 const PASTE_FALLBACK_MS = 30000;
+const SIGN_IN_OPEN_TIMEOUT_MS = 30000;
 
 const STEPS = ['welcome', 'layout', 'agent', 'look', 'done'];
 
@@ -165,6 +167,8 @@ const state = {
 	liveProvidersLoading: false,
 	subscriptions: undefined,
 	subscriptionsLoading: false,
+	providerCatalogFailed: false,
+	providerCatalogRevision: 0,
 	subscriptionError: undefined,
 	/** The subscription sign-in in progress, if any. */
 	signIn: undefined,
@@ -840,20 +844,31 @@ function refsOf(provider) {
 }
 
 async function loadProviders() {
-	if (state.liveProviders !== undefined || state.liveProvidersLoading) {
+	if (state.liveProviders !== undefined || state.liveProvidersLoading || state.providerCatalogFailed) {
 		return;
 	}
+	const revision = state.providerCatalogRevision;
 	state.liveProvidersLoading = true;
 	try {
-		const answer = await window.picode.command('availableProviders', {});
-		if (Array.isArray(answer?.data)) {
-			state.liveProviders = answer.data;
+		const { data } = await window.picode.command('providerCatalog', {}) ?? {};
+		if (revision !== state.providerCatalogRevision) {
+			return;
 		}
+		if (!Array.isArray(data?.providers) || !Array.isArray(data?.subscriptions)) {
+			throw new Error('Invalid provider catalog');
+		}
+		state.liveProviders = data.providers;
+		state.subscriptions = data.subscriptions;
+		state.subscriptionError = undefined;
 	} catch {
-		// The declared providers stay on screen; nothing is lost by pi not answering.
+		if (revision === state.providerCatalogRevision) {
+			state.providerCatalogFailed = true;
+		}
 	} finally {
-		state.liveProvidersLoading = false;
-		render();
+		if (revision === state.providerCatalogRevision) {
+			state.liveProvidersLoading = false;
+			render();
+		}
 	}
 }
 
@@ -862,16 +877,26 @@ async function loadSubscriptions() {
 	if (state.subscriptions !== undefined || state.subscriptionsLoading) {
 		return;
 	}
+	const revision = state.providerCatalogRevision;
 	state.subscriptionsLoading = true;
 	try {
 		const answer = await window.picode.command('subscriptions', {});
-		state.subscriptions = Array.isArray(answer?.data) ? answer.data : [];
-	} catch (error) {
-		state.subscriptions = [];
-		state.subscriptionError = messageOf(error);
+		if (!Array.isArray(answer?.data)) {
+			throw new Error('Invalid subscription catalog');
+		}
+		if (revision === state.providerCatalogRevision && state.subscriptions === undefined) {
+			state.subscriptions = answer.data;
+		}
+	} catch {
+		if (revision === state.providerCatalogRevision && state.subscriptions === undefined) {
+			state.subscriptions = [];
+			state.subscriptionError = t('subLoadFailed');
+		}
 	} finally {
-		state.subscriptionsLoading = false;
-		render();
+		if (revision === state.providerCatalogRevision) {
+			state.subscriptionsLoading = false;
+			render();
+		}
 	}
 }
 
@@ -986,7 +1011,7 @@ async function choosePi(key) {
 	state.piChoice = key;
 	render();
 	await withBusy('', async () => { await command('setRuntime', { runtime: key }); });
-	state.liveProviders = undefined;
+	resetProviderCatalog();
 	render();
 }
 
@@ -1023,11 +1048,12 @@ function modelPanel() {
 	const connected = providers
 		.filter(provider => provider.models.length > 0 && matches(provider.name, provider.id))
 		.map(provider => connectedRow(provider, current));
-	const subscriptions = state.subscriptions === undefined
-		? (query.length === 0 ? [0, 1, 2].map(index => el('div', { class: 'prow skeleton', key: `skeleton-${index}` })) : [])
-		: state.subscriptions
-			.filter(provider => matches(provider.name, provider.id, provider.note))
-			.map(subscriptionRow);
+	const subscriptionOptions = state.liveProviders === undefined && !state.subscriptions?.length
+		? snapshot().featuredSubscriptions ?? []
+		: state.subscriptions ?? [];
+	const subscriptions = subscriptionOptions
+		.filter(provider => matches(provider.name, provider.id, provider.note))
+		.map(subscriptionRow);
 	const keys = [...PROVIDER_PRESETS, { id: 'custom', label: t('providerCustom') }]
 		.filter(preset => matches(preset.label, preset.id, preset.id === 'custom' ? t('providerCustomWhy') : undefined))
 		.map(keyRow);
@@ -1057,9 +1083,9 @@ function modelPanel() {
 		nothing ? el('p', { class: 'hint', key: 'none', text: t('providerNoMatch', state.providerQuery.trim()) }) : undefined,
 		group('g-connected', t('groupConnected'), connected),
 		group('g-subscriptions', t('groupSubscriptions'), subscriptions,
-			state.subscriptionsLoading && state.subscriptions === undefined ? el('p', { class: 'hint', text: t('subLoading') })
-				: state.subscriptionError ? el('p', { class: 'hint error', text: state.subscriptionError })
-					: state.subscriptions?.length === 0 && query.length === 0 ? el('p', { class: 'hint', text: t('subNone') }) : undefined),
+			state.providerCatalogFailed && state.subscriptionError ? el('p', { class: 'hint error', role: 'status', text: state.subscriptionError })
+				: state.liveProviders !== undefined && subscriptionOptions.length === 0 && query.length === 0
+					? el('p', { class: 'hint', text: t('subNone') }) : undefined),
 		group('g-keys', t('groupKeys'), keys),
 	);
 }
@@ -1170,6 +1196,13 @@ function signInBody(provider, running) {
 				: running.url === undefined ? t('subStarting') : t('subWaiting');
 
 	const prompt = running.prompt;
+	if (running.running && running.url === undefined && running.code === undefined && prompt === undefined) {
+		return el('div', { class: 'sub-opening' },
+			el('p', { class: 'hint', role: 'status' },
+				el('span', { class: 'spinner', 'aria-hidden': 'true' }), note),
+			el('button', { type: 'button', class: 'secondary', onclick: () => window.picode.signIn.cancel() }, t('subCancel')),
+		);
+	}
 	// pi's "or paste the code here" waits behind the browser: shown only if it has not come back.
 	const pasteReady = prompt?.type === 'manual_code' && running.pasteReady === true;
 	const showPrompt = prompt !== undefined && (prompt.type !== 'manual_code' || pasteReady);
@@ -1177,7 +1210,7 @@ function signInBody(provider, running) {
 	const actions = [];
 	if (phase === 'browser' || phase === 'code') {
 		if (running.url !== undefined) {
-			actions.push(el('button', { type: 'button', class: 'secondary', onclick: () => window.picode.openExternal(running.url) }, t('subOpenAgain')));
+			actions.push(el('button', { type: 'button', class: 'secondary', onclick: () => openSignInPage(running.url) }, t('subOpenAgain')));
 		}
 		actions.push(el('button', { type: 'button', class: 'secondary', onclick: () => window.picode.signIn.cancel() }, t('subCancel')));
 	} else if (phase === 'failed') {
@@ -1194,7 +1227,8 @@ function signInBody(provider, running) {
 					: el('span', { class: 'spinner' }),
 			note,
 		),
-		phase === 'browser' && running.url !== undefined ? el('p', { class: 'hint', text: t('subBrowserHint') }) : undefined,
+		running.browserOpenFailed ? el('p', { class: 'hint error', role: 'status', text: t('subBrowserOpenFailed') })
+			: phase === 'browser' && running.url !== undefined ? el('p', { class: 'hint', text: t('subBrowserHint') }) : undefined,
 		phase === 'code' ? [
 			el('button', {
 				type: 'button',
@@ -1211,6 +1245,7 @@ function signInBody(provider, running) {
 		showPrompt ? (prompt.type === 'manual_code'
 			? el('div', { class: 'sub-paste' }, el('p', { class: 'hint', text: t('subPasteHint') }), promptField(prompt))
 			: promptField(prompt)) : undefined,
+		showPrompt && running.answerFailed ? el('p', { class: 'hint error', role: 'status', text: t('subAnswerFailed') }) : undefined,
 		phase === 'failed' ? el('p', { class: 'hint error', text: signInFailure(running.error) }) : undefined,
 		actions.length > 0 ? el('div', { class: 'panel-actions' }, actions) : undefined,
 	);
@@ -1218,11 +1253,15 @@ function signInBody(provider, running) {
 
 /** One of pi's questions, as a field the page can answer. */
 function promptField(prompt) {
-	const send = value => {
-		void window.picode.signIn.answer(prompt.id, value);
-		// Answered: the question leaves the row, so only what pi says next is left to wait on.
-		if (state.signIn?.prompt?.id === prompt.id) {
-			state.signIn = { ...state.signIn, prompt: undefined };
+	const send = async value => {
+		let answered = false;
+		try {
+			answered = (await window.picode.signIn.answer(prompt.id, value))?.ok === true;
+		} catch {
+			// Keep the same prompt available so the answer can be retried.
+		}
+		if (state.signIn?.prompt === prompt) {
+			state.signIn = { ...state.signIn, prompt: answered ? undefined : prompt, answerFailed: !answered };
 			render();
 		}
 	};
@@ -1249,6 +1288,19 @@ function promptField(prompt) {
 	);
 }
 
+async function openSignInPage(url) {
+	let opened = false;
+	try {
+		opened = (await window.picode.openExternal(url))?.ok === true;
+	} catch {
+		// Keep the retry button available when the system cannot launch its browser.
+	}
+	if (state.signIn?.running && state.signIn.url === url) {
+		state.signIn = { ...state.signIn, browserOpenFailed: !opened };
+		render();
+	}
+}
+
 /** Starts pi's own sign-in and follows it, event by event. */
 async function startSignIn(providerId) {
 	clearTimeout(state.pasteTimer);
@@ -1257,9 +1309,25 @@ async function startSignIn(providerId) {
 	state.subscriptionError = undefined;
 	render();
 	let run;
-	const unsubscribe = window.picode.signIn.onEvent(message => {
-		// Events from an attempt that is no longer the one on screen are not ours to act on.
-		if (run !== undefined && message.run !== undefined && message.run !== run) {
+	let active = true;
+	let openingTimer;
+	const queuedEvents = [];
+	const cleanup = () => {
+		active = false;
+		clearTimeout(openingTimer);
+		clearTimeout(state.pasteTimer);
+		unsubscribe();
+	};
+	const fail = (error = t('subOpenFailed')) => {
+		if (!active) {
+			return;
+		}
+		cleanup();
+		state.signIn = { ...state.signIn, providerId, running: false, prompt: undefined, error };
+		render();
+	};
+	const handleEvent = message => {
+		if (!active || message.run !== run) {
 			return;
 		}
 		const current = state.signIn ?? { running: true, providerId };
@@ -1267,12 +1335,14 @@ async function startSignIn(providerId) {
 			const event = message.event ?? {};
 			// pi's own wording is its plumbing: the row says where things stand in the setup's words.
 			if (event.type === 'auth_url') {
+				clearTimeout(openingTimer);
 				state.signIn = { ...current, url: event.url };
-				void window.picode.openExternal(event.url);
+				void openSignInPage(event.url);
 			} else if (event.type === 'device_code') {
+				clearTimeout(openingTimer);
 				state.signIn = { ...current, code: event.userCode, url: event.verificationUri };
 				void navigator.clipboard.writeText(event.userCode).catch(() => undefined);
-				void window.picode.openExternal(event.verificationUri);
+				void openSignInPage(event.verificationUri);
 			} else {
 				return;
 			}
@@ -1280,17 +1350,8 @@ async function startSignIn(providerId) {
 			return;
 		}
 		if (message.type === 'prompt') {
-			// "How do you want to sign in?" has an answer already: the browser one, which pi marks as
-			// its default. It is sent straight away and the question never reaches the screen.
-			const options = message.prompt?.options ?? [];
-			const preferred = message.prompt?.type === 'select'
-				? (options.find(option => /\(default\)/i.test(option.label ?? '')) ?? options.find(option => /browser/i.test(option.label ?? '')))
-				: undefined;
-			if (preferred !== undefined) {
-				void window.picode.signIn.answer(message.id, preferred.id);
-				return;
-			}
-			state.signIn = { ...current, prompt: { id: message.id, ...message.prompt }, pasteReady: false };
+			clearTimeout(openingTimer);
+			state.signIn = { ...current, prompt: { id: message.id, ...message.prompt }, pasteReady: false, answerFailed: false };
 			if (message.prompt?.type === 'manual_code') {
 				clearTimeout(state.pasteTimer);
 				state.pasteTimer = setTimeout(() => {
@@ -1311,7 +1372,7 @@ async function startSignIn(providerId) {
 			return;
 		}
 		if (message.type === 'done') {
-			clearTimeout(state.pasteTimer);
+			cleanup();
 			state.signIn = { ...current, running: false, finished: true, prompt: undefined };
 			// The tick shows for a moment, then the row goes back to saying it is signed in.
 			setTimeout(() => {
@@ -1320,34 +1381,59 @@ async function startSignIn(providerId) {
 					render();
 				}
 			}, 1800);
-			unsubscribe();
 			void refreshAfterSignIn();
 			render();
 			return;
 		}
-		if (message.type === 'cancelled' || message.type === 'exit') {
-			// `exit` is the safety net: whatever ended the child, the row must stop saying it waits.
-			clearTimeout(state.pasteTimer);
+		if (message.type === 'cancelled') {
+			cleanup();
 			state.signIn = undefined;
-			unsubscribe();
 			render();
 			return;
 		}
-		if (message.type === 'error') {
-			clearTimeout(state.pasteTimer);
-			state.signIn = { ...current, running: false, prompt: undefined, error: message.message ?? '' };
-			unsubscribe();
-			render();
+		if (message.type === 'error' || message.type === 'exit') {
+			fail(message.message || undefined);
+		}
+	};
+	const unsubscribe = window.picode.signIn.onEvent(message => {
+		if (run === undefined) {
+			queuedEvents.push(message);
+		} else {
+			handleEvent(message);
 		}
 	});
-	const started = await window.picode.signIn.start(providerId);
-	run = started?.run;
+	openingTimer = setTimeout(() => {
+		void window.picode.signIn.cancel().catch(() => undefined);
+		fail();
+	}, SIGN_IN_OPEN_TIMEOUT_MS);
+	try {
+		const started = await window.picode.signIn.start(providerId);
+		if (started?.ok !== true || !Number.isSafeInteger(started.run)) {
+			fail();
+			return;
+		}
+		run = started.run;
+		for (const message of queuedEvents) {
+			handleEvent(message);
+		}
+	} catch {
+		fail();
+	}
+}
+
+function resetProviderCatalog() {
+	state.providerCatalogRevision++;
+	state.providerCatalogFailed = false;
+	state.liveProvidersLoading = false;
+	state.subscriptionsLoading = false;
+	state.liveProviders = undefined;
+	state.subscriptions = undefined;
+	state.subscriptionError = undefined;
 }
 
 /** After a sign-in the profile has new models: ask again. */
 async function refreshAfterSignIn() {
-	state.liveProviders = undefined;
-	state.subscriptions = undefined;
+	resetProviderCatalog();
 	await withBusy('', async () => {
 		const answer = await window.picode.command('state', {});
 		if (answer?.data) {
@@ -1478,7 +1564,7 @@ async function connectProvider() {
 		const models = answer.data?.models?.length ?? 0;
 		state.provider = { ...state.provider, key: '' };
 		state.probe = undefined;
-		state.liveProviders = undefined;
+		resetProviderCatalog();
 		state.openProvider = `live:${request.id}`;
 		state.providerQuery = '';
 		const label = PROVIDER_PRESETS.find(preset => preset.id === request.id && preset.endpoint === request.endpoint)?.label ?? request.id;
@@ -1648,7 +1734,7 @@ function summary() {
 function languageRow() {
 	const name = STRINGS[language]?.language ?? language;
 	if (state.languageOutcome === 'ready') {
-		return { key: 'language', mark: '🌐', label: t('languageFact'), value: `${name} · ${t('languageReady')}` };
+		return { key: 'language', mark: '🌐', label: t('languageFact'), value: state.mode === 'first-run' ? name : `${name} · ${t('languageReady')}` };
 	}
 	if (state.languageOutcome === 'offline') {
 		return { key: 'language', mark: '🌐', label: t('languageFact'), value: `${name} · ${t('languageOffline')}` };
@@ -1903,7 +1989,15 @@ async function finish(skipped) {
 		if (skipped !== true) {
 			await command('setExtras', { values: { privacy: state.extras.privacy === true } });
 		}
-		await window.picode.finish({ skipped: skipped === true, folder: state.folder });
+		if (state.mode === 'first-run') {
+			let limit;
+			try {
+				await Promise.race([languagePreparation, new Promise(resolve => { limit = setTimeout(resolve, 1500); })]);
+			} finally {
+				clearTimeout(limit);
+			}
+		}
+		await window.picode.finish({ skipped: skipped === true, folder: state.folder, language });
 	});
 }
 
@@ -1984,7 +2078,7 @@ function fillLanguages() {
 		close(true);
 		if (typeof code === 'string' && code !== language) {
 			setLanguage(code);
-			void prepareLanguage(code);
+			queueLanguagePreparation(code);
 		}
 	};
 	fill(list, codes.map(code => el('li', {
@@ -2051,6 +2145,10 @@ async function prepareLanguage(code) {
 	} catch {
 		// Nothing to say: the editor still opens.
 	}
+}
+
+function queueLanguagePreparation(code) {
+	languagePreparation = languagePreparation.then(() => code === language ? prepareLanguage(code) : undefined);
 }
 
 /* ------------------------------------------------------------------ *
@@ -2127,7 +2225,7 @@ async function main() {
 	}
 
 	go(0);
-	void prepareLanguage(language);
+	queueLanguagePreparation(language);
 	// Opened by the editor's Import command: that view is the whole window.
 	if (state.mode === 'import') {
 		void openImportView({ embedded: false });

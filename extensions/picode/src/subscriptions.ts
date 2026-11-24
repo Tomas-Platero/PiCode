@@ -116,13 +116,13 @@ export interface SubscriptionRow extends vscode.QuickPickItem {
  *
  * Only the **order** and the note are here; see the module comment for where they come from.
  */
-export const FEATURED_SUBSCRIPTIONS: readonly { readonly id: string; readonly note: string }[] = [
-	{ id: 'openai-codex', note: l10n.t('ChatGPT Plus or Pro') },
-	{ id: 'anthropic', note: l10n.t('Claude Pro or Max') },
-	{ id: 'github-copilot', note: l10n.t('GitHub Copilot') },
-	{ id: 'xai', note: l10n.t('Grok or X subscription') },
-	{ id: 'kimi-coding', note: l10n.t('Kimi For Coding') },
-	{ id: 'openrouter', note: l10n.t('OpenRouter credits') },
+export const FEATURED_SUBSCRIPTIONS: readonly { readonly id: string; readonly name: string; readonly note: string }[] = [
+	{ id: 'openai-codex', name: 'OpenAI Codex', note: l10n.t('ChatGPT Plus or Pro') },
+	{ id: 'anthropic', name: 'Anthropic', note: l10n.t('Claude Pro or Max') },
+	{ id: 'github-copilot', name: 'GitHub Copilot', note: l10n.t('GitHub Copilot') },
+	{ id: 'xai', name: 'xAI', note: l10n.t('Grok or X subscription') },
+	{ id: 'kimi-coding', name: 'Kimi For Coding', note: l10n.t('Kimi For Coding') },
+	{ id: 'openrouter', name: 'OpenRouter', note: l10n.t('OpenRouter credits') },
 ];
 
 /** The position of a provider in that order; everything else sorts after it, by name. */

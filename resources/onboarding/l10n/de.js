@@ -244,4 +244,8 @@
 	impHintKeybindings: 'Deine eigenen Tastenkürzel',
 	impCatSnippets: 'Snippets',
 	impHintSnippets: 'Deine Code-Vorlagen',
+	subLoadFailed: "Abonnements konnten nicht geladen werden. Du kannst fortfahren und im Chat ein Modell wählen.",
+	subOpenFailed: "Die Anmeldung konnte nicht gestartet werden. Versuche es erneut.",
+	subBrowserOpenFailed: "Der Browser wurde nicht geöffnet. Versuche es mit der Schaltfläche unten erneut.",
+	subAnswerFailed: "Deine Antwort konnte nicht gesendet werden. Versuche es erneut.",
 };

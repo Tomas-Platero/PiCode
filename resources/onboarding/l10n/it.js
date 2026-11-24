@@ -244,4 +244,8 @@
 	impHintKeybindings: 'Le tue scorciatoie personalizzate',
 	impCatSnippets: 'Snippet',
 	impHintSnippets: 'I tuoi modelli di codice',
+	subLoadFailed: "Impossibile caricare gli abbonamenti. Puoi continuare e scegliere un modello dalla chat.",
+	subOpenFailed: "Impossibile avviare l’accesso. Riprova.",
+	subBrowserOpenFailed: "Il browser non si è aperto. Usa il pulsante qui sotto per riprovare.",
+	subAnswerFailed: "Impossibile inviare la risposta. Riprova.",
 };

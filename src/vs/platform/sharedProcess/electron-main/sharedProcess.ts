@@ -91,6 +91,11 @@ export class SharedProcess extends Disposable {
 		e.sender.postMessage(responseChannel, nonce, [port]);
 	}
 
+	/** Allows first-run setup to install a display language before there is a workbench window. */
+	startForOnboarding(): void {
+		this.firstWindowConnectionBarrier.open();
+	}
+
 	private onWillShutdown(): void {
 		this.logService.trace('[SharedProcess] onWillShutdown');
 

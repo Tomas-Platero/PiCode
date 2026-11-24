@@ -1,5 +1,11 @@
 # Diseño de PiCode
 
+## ✨ Experiencia del chat y primer arranque
+
+El chat indica cuándo se está generando una imagen y muestra el resultado de las herramientas compatibles. Las vistas previas se guardan en una ubicación temporal, se retiran al cerrar PiCode o tras 24 horas y permiten abrir la imagen desde el chat.
+
+El asistente ofrece los proveedores desde el principio y prepara Pi en segundo plano. Si se elige Agent, el primer arranque muestra la marca mientras se prepara esa vista. Al cambiar entre Agent y Editor, la vista actual permanece visible hasta que la nueva está preparada y ambas se funden. La opción de reducir movimiento elimina el fundido.
+
 > Cómo ha de ser el producto, hasta donde sabemos hoy. Las frases del dueño viven en
 > `AGENTS.md`; su visión completa, en `docs/VISION.md`. Este documento dice **cómo se junta
 > todo**. Los `patch` que aparecen en documentos históricos ya no existen: el árbol vive en

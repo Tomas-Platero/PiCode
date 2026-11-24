@@ -244,4 +244,8 @@
 	impHintKeybindings: 'Twoje własne skróty',
 	impCatSnippets: 'Fragmenty kodu',
 	impHintSnippets: 'Twoje szablony kodu',
+	subLoadFailed: "Nie udało się wczytać subskrypcji. Możesz kontynuować i wybrać model na czacie.",
+	subOpenFailed: "Nie udało się rozpocząć logowania. Spróbuj ponownie.",
+	subBrowserOpenFailed: "Przeglądarka się nie otworzyła. Spróbuj ponownie przyciskiem poniżej.",
+	subAnswerFailed: "Nie udało się wysłać odpowiedzi. Spróbuj ponownie.",
 };
