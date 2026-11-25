@@ -2484,5 +2484,9 @@
 	"picodeSyncChooseSettingProgress": "Wähle den Wert, den du behalten möchtest ({0} von {1})",
 	"picodeSyncConflictChanged": "Der Einstellungskonflikt hat sich geändert. Öffne ihn erneut, um die neuesten Versionen zu prüfen.",
 	"picodeSyncSettingRemoved": "Einstellung entfernt",
-	"picode.profileChip.unknown": "Agentenprofil"
+	"picode.profileChip.unknown": "Agentenprofil",
+	"picodeUsageHistoryTitle": "Unterhaltungsaktivität · letzte 30 Tage",
+	"picodeUsageHistoryUnavailable": "Unterhaltungsaktivität ist noch nicht verfügbar.",
+	"picodeUsageHistoryTokens": "{0} Tokens",
+	"picodeUsageHistoryEmpty": "Keine Unterhaltungsaktivität in diesem Zeitraum."
 }

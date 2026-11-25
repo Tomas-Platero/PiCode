@@ -2484,5 +2484,9 @@
 	"picodeSyncChooseSettingProgress": "Escolha o valor a manter ({0} de {1})",
 	"picodeSyncConflictChanged": "O conflito de configurações mudou. Abra-o novamente para ver as versões mais recentes.",
 	"picodeSyncSettingRemoved": "Configuração removida",
-	"picode.profileChip.unknown": "Perfil do agente"
+	"picode.profileChip.unknown": "Perfil do agente",
+	"picodeUsageHistoryTitle": "Atividade de conversas · últimos 30 dias",
+	"picodeUsageHistoryUnavailable": "A atividade de conversas ainda não está disponível.",
+	"picodeUsageHistoryTokens": "{0} tokens",
+	"picodeUsageHistoryEmpty": "Nenhuma atividade de conversa neste período."
 }
