@@ -47,6 +47,7 @@ export interface ProfilesPi {
 interface LiveSession {
 	readonly pi: ProfilesPi;
 	readonly context: object;
+	readonly agentDir?: string;
 	used: number;
 	/** The profile this editor last moved the chat to, when it did. */
 	profile?: string;
@@ -65,13 +66,13 @@ export interface ProfilesInlineExtension {
 	readonly factory: (pi: ProfilesPi) => void;
 }
 
-export function agentProfilesExtension(chatKey: string): ProfilesInlineExtension {
+export function agentProfilesExtension(chatKey: string, agentDir?: string): ProfilesInlineExtension {
 	return {
 		name: 'picode-agent-profiles',
 		hidden: true,
 		factory: pi => {
 			pi.on('session_start', (_event, context) => {
-				live.set(chatKey, { pi, context, used: ++order });
+				live.set(chatKey, { pi, context, agentDir, used: ++order });
 				const pending = pendingDefault;
 				if (pending !== undefined) {
 					pendingDefault = undefined;
@@ -95,18 +96,92 @@ export function agentProfilesExtension(chatKey: string): ProfilesInlineExtension
 	};
 }
 
-/** Whether a chat is running, so a profile can be applied right now. */
-export function hasLiveSession(): boolean {
-	return live.size > 0;
+/** Reload credentials for live sessions belonging to the selected internal profile. */
+export async function refreshLiveCredentials(agentDir: string): Promise<boolean> {
+	const registries = new Set<{ refresh(options: { allowNetwork: false }): Promise<{ aborted?: boolean; errors?: Map<unknown, unknown> }> }>();
+	for (const session of live.values()) {
+		if (session.agentDir !== agentDir) {
+			continue;
+		}
+		const context = session.context as { modelRegistry?: { refresh(options: { allowNetwork: false }): Promise<{ aborted?: boolean; errors?: Map<unknown, unknown> }> } };
+		if (typeof context.modelRegistry?.refresh === 'function') {
+			registries.add(context.modelRegistry);
+		}
+	}
+	const results = await Promise.allSettled([...registries].map(async registry => registry.refresh({ allowNetwork: false })));
+	return results.every(result => result.status === 'fulfilled' && !result.value.aborted && !result.value.errors?.size);
 }
 
-/** The profile the chat in front was moved to by the editor, if it was. */
-export function frontChatProfile(): string | undefined {
-	return frontSession()?.profile;
+/** Whether a chat is running, so a profile can be applied right now. */
+export function hasLiveSession(chatKey?: string): boolean {
+	return chatKey === undefined ? live.size > 0 : live.has(chatKey);
+}
+
+/** The model currently held by one live Pi session. */
+export function frontChatModel(chatKey?: string): { provider: string; id: string } | undefined {
+	try {
+		const model = (frontSession(chatKey)?.context as { model?: { provider?: unknown; id?: unknown } } | undefined)?.model;
+		return typeof model?.provider === 'string' && model.provider.length > 0 && typeof model.id === 'string' && model.id.length > 0
+			? { provider: model.provider, id: model.id } : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Read existing Gentle session state without resolving or freezing a profile. */
+export function readKnownSessionProfile(sessionId: string | undefined, stores: { bindings?: unknown; startupNone?: unknown; frozen?: unknown }, freezes = true): string | null | undefined {
+	if (!sessionId) {
+		return undefined;
+	}
+	const binding = stores.bindings instanceof Map ? stores.bindings.get(sessionId) as { name?: unknown } | undefined : undefined;
+	if (typeof binding?.name === 'string' && binding.name.length > 0) {
+		return binding.name;
+	}
+	if (!freezes) {
+		return undefined;
+	}
+	if (stores.startupNone instanceof Set && stores.startupNone.has(sessionId)) {
+		return null;
+	}
+	const snapshot = stores.frozen instanceof Map ? stores.frozen.get(sessionId) as { profile?: { name?: unknown } } | undefined : undefined;
+	if (!snapshot || !Object.hasOwn(snapshot, 'profile')) {
+		return undefined;
+	}
+	if (snapshot.profile === undefined) {
+		return null;
+	}
+	return typeof snapshot.profile.name === 'string' && snapshot.profile.name.length > 0 ? snapshot.profile.name : undefined;
+}
+
+/** The known profile, null when the session has none, or undefined when unknown. */
+export function frontChatProfile(chatKey?: string): string | null | undefined {
+	const session = frontSession(chatKey);
+	if (!session) {
+		return undefined;
+	}
+	try {
+		const context = session.context as { sessionManager?: { getSessionId?(): string | undefined } };
+		const sessionId = context.sessionManager?.getSessionId?.();
+		if (!sessionId) {
+			return session.profile;
+		}
+		const globals = globalThis as Record<symbol, unknown>;
+		const registry = globals[Symbol.for('gentle-pi:session-profile-freeze')] as { frozen?: unknown } | undefined;
+		return readKnownSessionProfile(sessionId, {
+			bindings: globals[Symbol.for('gentle-pi:session-profile-bindings')],
+			startupNone: globals[Symbol.for('gentle-pi:session-profile-startup-none')],
+			frozen: registry?.frozen,
+		}, process.env.GENTLE_PI_AGENTS_CHILD !== '1' && process.env.GENTLE_PI_PROFILE_FOLLOW !== '1');
+	} catch {
+		return undefined;
+	}
 }
 
 /** The chat the owner used last: "this chat". */
-function frontSession(): LiveSession | undefined {
+function frontSession(chatKey?: string): LiveSession | undefined {
+	if (chatKey !== undefined) {
+		return live.get(chatKey);
+	}
 	let front: LiveSession | undefined;
 	for (const session of live.values()) {
 		if (front === undefined || session.used > front.used) {
@@ -171,8 +246,8 @@ function resultOf(value: unknown): ApplyResult {
  * `confirmation_required` with the dialog its own screen would show; showing it and calling again with
  * its `confirmation` is the caller's part.
  */
-export async function applyAgentProfile(profile: string, mode: ApplyMode, confirmation?: string): Promise<ApplyResult> {
-	const session = frontSession();
+export async function applyAgentProfile(profile: string, mode: ApplyMode, confirmation?: string, chatKey?: string): Promise<ApplyResult> {
+	const session = frontSession(chatKey);
 	if (session === undefined) {
 		return { status: 'unavailable' };
 	}
@@ -198,9 +273,9 @@ export async function applyAgentProfile(profile: string, mode: ApplyMode, confir
 }
 
 /** Applies without asking: the owner already chose this (an editor profile, or a choice made while no chat ran). */
-export async function applyConfirmed(profile: string, mode: ApplyMode): Promise<ApplyResult> {
-	const first = await applyAgentProfile(profile, mode);
-	return first.status === 'confirmation_required' ? applyAgentProfile(profile, mode, first.confirmation) : first;
+export async function applyConfirmed(profile: string, mode: ApplyMode, chatKey?: string): Promise<ApplyResult> {
+	const first = await applyAgentProfile(profile, mode, undefined, chatKey);
+	return first.status === 'confirmation_required' ? applyAgentProfile(profile, mode, first.confirmation, chatKey) : first;
 }
 
 /** Remembers a default chosen while no chat runs; the next chat applies it as it starts. */
