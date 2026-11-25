@@ -343,7 +343,7 @@
 	"Restore": "復元",
 	"Restore {0} pi session file from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "PiCode Cloudからpiのセッションファイルを{0}件復元しますか？このマシンの内容と異なるファイルは上書きされます。",
 	"Restore {0} pi session files from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "PiCode Cloudからpiのセッションファイルを{0}件復元しますか？このマシンの内容と異なるファイルは上書きされます。",
-	"Review mode needs the Gentle AI program, which PiCode does not include.": "確認モードにはGentle AIのプログラムが必要ですが、PiCodeには含まれていません。",
+	"Review is unavailable in this session. Check that this PiCode build includes a compatible review runtime.": "このセッションではレビューを利用できません。このバージョンの PiCode に互換性のあるレビュープログラムが含まれているか確認してください。",
 	"Review permissions are only available in pi’s terminal.": "確認の権限設定はpiのターミナルでのみ使えます。",
 	"Revisions": "リビジョン",
 	"Running": "実行中",

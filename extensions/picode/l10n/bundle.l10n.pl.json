@@ -343,7 +343,7 @@
 	"Restore": "Przywróć",
 	"Restore {0} pi session file from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "Przywrócić {0} plik sesji pi z PiCode Cloud? Pliki różniące się od tych na tym komputerze zostaną nadpisane.",
 	"Restore {0} pi session files from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "Przywrócić {0} plików sesji pi z PiCode Cloud? Pliki różniące się od tych na tym komputerze zostaną nadpisane.",
-	"Review mode needs the Gentle AI program, which PiCode does not include.": "Tryb przeglądu wymaga programu Gentle AI, którego PiCode nie zawiera.",
+	"Review is unavailable in this session. Check that this PiCode build includes a compatible review runtime.": "Przegląd jest niedostępny w tej sesji. Sprawdź, czy ta wersja PiCode zawiera zgodny program do przeglądu.",
 	"Review permissions are only available in pi’s terminal.": "Przeglądanie uprawnień jest dostępne tylko w terminalu pi.",
 	"Revisions": "Wersje",
 	"Running": "Działa",

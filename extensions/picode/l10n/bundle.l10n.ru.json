@@ -343,7 +343,7 @@
 	"Restore": "Восстановить",
 	"Restore {0} pi session file from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "Восстановить {0} файл сеанса pi из PiCode Cloud? Файлы, отличающиеся от имеющихся на этом компьютере, будут перезаписаны.",
 	"Restore {0} pi session files from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "Восстановить файлы сеансов pi ({0}) из PiCode Cloud? Файлы, отличающиеся от имеющихся на этом компьютере, будут перезаписаны.",
-	"Review mode needs the Gentle AI program, which PiCode does not include.": "Режиму проверки нужна программа Gentle AI, которую PiCode не включает.",
+	"Review is unavailable in this session. Check that this PiCode build includes a compatible review runtime.": "Проверка недоступна в этом сеансе. Убедитесь, что эта версия PiCode включает совместимую программу проверки.",
 	"Review permissions are only available in pi’s terminal.": "Разрешения на проверку доступны только в терминале pi.",
 	"Revisions": "Ревизии",
 	"Running": "Выполняется",

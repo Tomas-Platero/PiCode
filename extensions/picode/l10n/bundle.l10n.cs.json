@@ -343,7 +343,7 @@
 	"Restore": "Obnovit",
 	"Restore {0} pi session file from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "Obnovit {0} soubor relace pi z PiCode Cloud? Soubory, které se liší od těch na tomto počítači, se přepíšou.",
 	"Restore {0} pi session files from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "Obnovit soubory relací pi ({0}) z PiCode Cloud? Soubory, které se liší od těch na tomto počítači, se přepíšou.",
-	"Review mode needs the Gentle AI program, which PiCode does not include.": "Režim kontroly potřebuje program Gentle AI, který PiCode neobsahuje.",
+	"Review is unavailable in this session. Check that this PiCode build includes a compatible review runtime.": "Kontrola není v této relaci dostupná. Ověřte, že tato verze PiCode obsahuje kompatibilní program pro kontrolu.",
 	"Review permissions are only available in pi’s terminal.": "Oprávnění ke kontrole jsou dostupná jen v terminálu pi.",
 	"Revisions": "Revize",
 	"Running": "Běží",
