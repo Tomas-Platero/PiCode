@@ -2484,5 +2484,9 @@
 	"picodeSyncChooseSettingProgress": "유지할 값 선택 ({0}/{1})",
 	"picodeSyncConflictChanged": "설정 충돌이 변경되었습니다. 다시 열어 최신 버전을 확인하세요.",
 	"picodeSyncSettingRemoved": "설정이 삭제됨",
-	"picode.profileChip.unknown": "에이전트 프로필"
+	"picode.profileChip.unknown": "에이전트 프로필",
+	"picodeUsageHistoryTitle": "대화 활동 · 최근 30일",
+	"picodeUsageHistoryUnavailable": "대화 활동을 아직 사용할 수 없습니다.",
+	"picodeUsageHistoryTokens": "토큰 {0}개",
+	"picodeUsageHistoryEmpty": "이 기간의 대화 활동이 없습니다."
 }

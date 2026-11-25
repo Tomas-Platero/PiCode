@@ -2484,5 +2484,9 @@
 	"picodeSyncChooseSettingProgress": "残す値を選択 ({0}/{1})",
 	"picodeSyncConflictChanged": "設定の競合が変わりました。開き直して最新のバージョンを確認してください。",
 	"picodeSyncSettingRemoved": "設定は削除済み",
-	"picode.profileChip.unknown": "エージェントプロファイル"
+	"picode.profileChip.unknown": "エージェントプロファイル",
+	"picodeUsageHistoryTitle": "会話のアクティビティ · 過去30日間",
+	"picodeUsageHistoryUnavailable": "会話のアクティビティはまだ利用できません。",
+	"picodeUsageHistoryTokens": "{0} トークン",
+	"picodeUsageHistoryEmpty": "この期間の会話アクティビティはありません。"
 }

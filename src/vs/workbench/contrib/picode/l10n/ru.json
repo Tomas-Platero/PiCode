@@ -2484,5 +2484,9 @@
 	"picodeSyncChooseSettingProgress": "Выберите значение, которое нужно сохранить ({0} из {1})",
 	"picodeSyncConflictChanged": "Конфликт настроек изменился. Откройте его снова, чтобы проверить последние версии.",
 	"picodeSyncSettingRemoved": "Настройка удалена",
-	"picode.profileChip.unknown": "Профиль агента"
+	"picode.profileChip.unknown": "Профиль агента",
+	"picodeUsageHistoryTitle": "Активность бесед · последние 30 дней",
+	"picodeUsageHistoryUnavailable": "Активность бесед пока недоступна.",
+	"picodeUsageHistoryTokens": "Токены: {0}",
+	"picodeUsageHistoryEmpty": "За этот период активности бесед нет."
 }

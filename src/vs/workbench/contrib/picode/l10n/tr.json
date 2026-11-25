@@ -2484,5 +2484,9 @@
 	"picodeSyncChooseSettingProgress": "Saklanacak değeri seçin ({0}/{1})",
 	"picodeSyncConflictChanged": "Ayar uyuşmazlığı değişti. Son sürümleri görmek için yeniden açın.",
 	"picodeSyncSettingRemoved": "Ayar kaldırıldı",
-	"picode.profileChip.unknown": "Aracı profili"
+	"picode.profileChip.unknown": "Aracı profili",
+	"picodeUsageHistoryTitle": "Sohbet etkinliği · son 30 gün",
+	"picodeUsageHistoryUnavailable": "Sohbet etkinliği henüz kullanılamıyor.",
+	"picodeUsageHistoryTokens": "{0} token",
+	"picodeUsageHistoryEmpty": "Bu dönemde sohbet etkinliği yok."
 }
