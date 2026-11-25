@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "Überprüfungseinstellungen",
 	"picodeGentleReviewOptionsDesc": "Wählen Sie, ob Überprüfungen für dieses Projekt oder in ganz PiCode aktiviert sind.",
 	"picodeGentleCodeReview": "Codeüberprüfung",
-	"picode.review.enabled": "Codeüberprüfung mit Gentle in PiCode-Chats verfügbar machen."
+	"picode.review.enabled": "Codeüberprüfung mit Gentle in PiCode-Chats verfügbar machen.",
+	"picodeWhatsNew.agentActivity.title": "Die Agentenaktivität im Überblick",
+	"picodeWhatsNew.agentActivity.summary": "Sieh dir die jüngste Unterhaltungsaktivität und den Fortschritt deiner Agenten an.",
+	"picodeWhatsNew.agentActivity.point1": "Wähle in den Einstellungen, wie Gentle AI deine Arbeit überprüft."
 }

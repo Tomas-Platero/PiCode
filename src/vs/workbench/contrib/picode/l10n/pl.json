@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "Ustawienia przeglądu",
 	"picodeGentleReviewOptionsDesc": "Wybierz, czy włączyć przeglądy w tym projekcie, czy w całym PiCode.",
 	"picodeGentleCodeReview": "Przegląd kodu",
-	"picode.review.enabled": "Udostępnij przegląd kodu z Gentle w czatach PiCode."
+	"picode.review.enabled": "Udostępnij przegląd kodu z Gentle w czatach PiCode.",
+	"picodeWhatsNew.agentActivity.title": "Aktywność agentów w skrócie",
+	"picodeWhatsNew.agentActivity.summary": "Sprawdzaj ostatnią aktywność rozmów i postępy agentów.",
+	"picodeWhatsNew.agentActivity.point1": "W ustawieniach wybierz, jak Gentle AI ma sprawdzać Twoją pracę."
 }

@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "İnceleme ayarları",
 	"picodeGentleReviewOptionsDesc": "İncelemeleri bu projede mi yoksa PiCode genelinde mi etkinleştireceğinizi seçin.",
 	"picodeGentleCodeReview": "Kod incelemesi",
-	"picode.review.enabled": "PiCode sohbetlerinde Gentle ile kod incelemesini kullanılabilir yapın."
+	"picode.review.enabled": "PiCode sohbetlerinde Gentle ile kod incelemesini kullanılabilir yapın.",
+	"picodeWhatsNew.agentActivity.title": "Aracı etkinliğine genel bakış",
+	"picodeWhatsNew.agentActivity.summary": "Son sohbet etkinliğini görün ve aracıların ilerlemesini takip edin.",
+	"picodeWhatsNew.agentActivity.point1": "Gentle AI tarafından çalışmanızın nasıl inceleneceğini Ayarlar’dan seçin."
 }

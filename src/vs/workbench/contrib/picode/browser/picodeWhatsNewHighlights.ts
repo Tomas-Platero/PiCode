@@ -37,6 +37,19 @@ export interface IWhatsNewHighlight {
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
 		{
+			id: 'agentActivity',
+			since: '2.4.13',
+			plan: 'free',
+			icon: Codicon.graph,
+			title: localize('picodeWhatsNew.agentActivity.title', "Your agent activity at a glance"),
+			summary: localize('picodeWhatsNew.agentActivity.summary', "See recent conversation activity and follow agent progress."),
+			points: [
+				localize('picodeWhatsNew.agentActivity.point1', "Choose how Gentle AI reviews your work in Settings."),
+			],
+			preview: 'usage',
+			action: 'showUsageLimits',
+		},
+		{
 			id: 'layoutTransition',
 			since: '2.4.12',
 			plan: 'free',
