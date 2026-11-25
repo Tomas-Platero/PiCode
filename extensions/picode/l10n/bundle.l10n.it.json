@@ -668,5 +668,6 @@
 	"🧠 Thinking set to **{0}**.": "🧠 Ragionamento impostato su **{0}**.",
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Ragionamento: **{0}**. Scegline uno con `/thinking <livello>`: {1}.",
 	"Save this memory?": "Salvare questo ricordo?",
-	"Name this session": "Assegna un nome alla sessione"
+	"Name this session": "Assegna un nome alla sessione",
+	"Tokens": "Token"
 }

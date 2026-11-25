@@ -668,5 +668,6 @@
 	"🧠 Thinking set to **{0}**.": "🧠 思考レベルを**{0}**に設定しました。",
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 思考: **{0}**。`/thinking <level>`で選べます: {1}。",
 	"Save this memory?": "この記憶を保存しますか？",
-	"Name this session": "セッションに名前を付ける"
+	"Name this session": "セッションに名前を付ける",
+	"Tokens": "トークン"
 }
