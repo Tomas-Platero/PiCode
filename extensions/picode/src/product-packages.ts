@@ -116,7 +116,7 @@ export const REMOVED_PACKAGE_NAMES: readonly string[] = [
 export const PRODUCT_PACKAGES: readonly ProductPackage[] = [
 	{ name: 'gentle-pi', version: '4.9.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
 	{ name: 'gentle-engram', version: '0.8.0' },
-	{ name: 'pi-intercom', version: '0.18.1' },
+	{ name: 'pi-intercom', version: '0.19.0' },
 	// Gentle AI installs it next to gentle-pi: gentle-pi's explorer asks for its web tools
 	// (`web_search`, `fetch_content`...) and silently goes without them when it is missing.
 	{ name: 'pi-web-access', version: '0.48.0' },
