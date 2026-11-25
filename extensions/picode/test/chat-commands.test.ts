@@ -34,6 +34,16 @@ test('an extension command goes to pi untouched', () => {
 	assert.deepEqual(routeSlash('/mcp login x', context), { kind: 'pi', text: '/mcp login x' });
 });
 
+test('review mode is routed only to a session with a compatible runtime and command', () => {
+	for (const name of ['gentle:review-mode', 'gentle:rdd']) {
+		const command = `/${name}`;
+		const registered = { ...context, extensionCommands: new Set([name]) };
+		assert.equal(routeSlash(command, registered)?.kind, 'unavailable');
+		assert.equal(routeSlash(command, { ...context, gentleReviewAvailable: true })?.kind, 'unavailable');
+		assert.deepEqual(routeSlash(command, { ...registered, gentleReviewAvailable: true }), { kind: 'pi', text: command });
+	}
+});
+
 test('a skill picked from the slash list is loaded the way pi loads skills', () => {
 	assert.deepEqual(routeSlash('/vitest', context), { kind: 'pi', text: '/skill:vitest' });
 	assert.deepEqual(routeSlash('/vitest add a test', context), { kind: 'pi', text: '/skill:vitest add a test' });
