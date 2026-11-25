@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "Nastavení kontroly",
 	"picodeGentleReviewOptionsDesc": "Zvolte, zda kontroly povolit v tomto projektu nebo v celém PiCode.",
 	"picodeGentleCodeReview": "Kontrola kódu",
-	"picode.review.enabled": "Zpřístupnit kontrolu kódu pomocí Gentle v chatech PiCode."
+	"picode.review.enabled": "Zpřístupnit kontrolu kódu pomocí Gentle v chatech PiCode.",
+	"picodeWhatsNew.agentActivity.title": "Přehled aktivity agenta",
+	"picodeWhatsNew.agentActivity.summary": "Sledujte nedávnou aktivitu konverzací a průběh práce agentů.",
+	"picodeWhatsNew.agentActivity.point1": "V Nastavení zvolte, jak má Gentle AI kontrolovat vaši práci."
 }

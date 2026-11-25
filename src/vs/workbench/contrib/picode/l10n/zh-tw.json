@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "審查設定",
 	"picodeGentleReviewOptionsDesc": "選擇要在目前專案或整個 PiCode 中啟用審查。",
 	"picodeGentleCodeReview": "程式碼審查",
-	"picode.review.enabled": "在 PiCode 聊天中提供 Gentle 程式碼審查。"
+	"picode.review.enabled": "在 PiCode 聊天中提供 Gentle 程式碼審查。",
+	"picodeWhatsNew.agentActivity.title": "一目瞭然的代理程式活動",
+	"picodeWhatsNew.agentActivity.summary": "查看近期對話活動並追蹤代理程式進度。",
+	"picodeWhatsNew.agentActivity.point1": "在設定中選擇 Gentle AI 檢查工作的方式。"
 }

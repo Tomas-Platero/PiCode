@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "검토 설정",
 	"picodeGentleReviewOptionsDesc": "이 프로젝트 또는 PiCode 전체에서 검토를 사용할지 선택하세요.",
 	"picodeGentleCodeReview": "코드 검토",
-	"picode.review.enabled": "PiCode 채팅에서 Gentle 코드 검토를 사용할 수 있게 합니다."
+	"picode.review.enabled": "PiCode 채팅에서 Gentle 코드 검토를 사용할 수 있게 합니다.",
+	"picodeWhatsNew.agentActivity.title": "에이전트 활동 한눈에 보기",
+	"picodeWhatsNew.agentActivity.summary": "최근 대화 활동과 에이전트 진행 상황을 확인하세요.",
+	"picodeWhatsNew.agentActivity.point1": "설정에서 Gentle AI가 작업을 검토하는 방식을 선택하세요."
 }

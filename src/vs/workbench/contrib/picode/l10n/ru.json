@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "Настройки проверки",
 	"picodeGentleReviewOptionsDesc": "Выберите, включать ли проверки в этом проекте или во всём PiCode.",
 	"picodeGentleCodeReview": "Проверка кода",
-	"picode.review.enabled": "Сделать проверку кода с Gentle доступной в чатах PiCode."
+	"picode.review.enabled": "Сделать проверку кода с Gentle доступной в чатах PiCode.",
+	"picodeWhatsNew.agentActivity.title": "Активность агентов с первого взгляда",
+	"picodeWhatsNew.agentActivity.summary": "Просматривайте недавнюю активность бесед и прогресс агентов.",
+	"picodeWhatsNew.agentActivity.point1": "Выберите в настройках, как Gentle AI проверяет вашу работу."
 }

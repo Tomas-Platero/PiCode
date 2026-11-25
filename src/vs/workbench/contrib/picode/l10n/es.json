@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "Opciones de revisión",
 	"picodeGentleReviewOptionsDesc": "Elige si quieres habilitar las revisiones en este proyecto o en todo PiCode.",
 	"picodeGentleCodeReview": "Revisión de código",
-	"picode.review.enabled": "Permitir la revisión de código con Gentle en los chats de PiCode."
+	"picode.review.enabled": "Permitir la revisión de código con Gentle en los chats de PiCode.",
+	"picodeWhatsNew.agentActivity.title": "La actividad de tus agentes de un vistazo",
+	"picodeWhatsNew.agentActivity.summary": "Consulta la actividad reciente de las conversaciones y el progreso de los agentes.",
+	"picodeWhatsNew.agentActivity.point1": "Elige en Ajustes cómo revisa Gentle AI tu trabajo."
 }
