@@ -1,5 +1,6 @@
 {
   "version": "3.7.2",
+  "licenseVersion": "3.7.2",
   "asset": "engram_3.7.2_windows_amd64.zip",
   "sha256": "515a716ce966202058d4b9f310626fde72583cfc64ccefbf0dcc81456260089c",
   "assetArm64": "engram_3.7.2_windows_arm64.zip",
