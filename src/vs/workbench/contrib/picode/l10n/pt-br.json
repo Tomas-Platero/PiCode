@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "Atividade de conversas · últimos 30 dias",
 	"picodeUsageHistoryUnavailable": "A atividade de conversas ainda não está disponível.",
 	"picodeUsageHistoryTokens": "{0} tokens",
-	"picodeUsageHistoryEmpty": "Nenhuma atividade de conversa neste período."
+	"picodeUsageHistoryEmpty": "Nenhuma atividade de conversa neste período.",
+	"picodeGentleReviewOptions": "Configurações de revisão",
+	"picodeGentleReviewOptionsDesc": "Escolha se as revisões ficam ativadas neste projeto ou em todo o PiCode.",
+	"picodeGentleCodeReview": "Revisão de código",
+	"picode.review.enabled": "Disponibilize a revisão de código com Gentle nas conversas do PiCode."
 }

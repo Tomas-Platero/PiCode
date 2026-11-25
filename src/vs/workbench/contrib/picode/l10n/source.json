@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "Conversation activity · last 30 days",
 	"picodeUsageHistoryUnavailable": "Conversation activity is not available yet.",
 	"picodeUsageHistoryTokens": "{0} tokens",
-	"picodeUsageHistoryEmpty": "No conversation activity in this period."
+	"picodeUsageHistoryEmpty": "No conversation activity in this period.",
+	"picodeGentleReviewOptions": "Review settings",
+	"picodeGentleReviewOptionsDesc": "Choose whether reviews are enabled for this project or across PiCode.",
+	"picodeGentleCodeReview": "Code review",
+	"picode.review.enabled": "Make Gentle code review available in PiCode chats."
 }

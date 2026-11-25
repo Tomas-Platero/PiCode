@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "Unterhaltungsaktivität · letzte 30 Tage",
 	"picodeUsageHistoryUnavailable": "Unterhaltungsaktivität ist noch nicht verfügbar.",
 	"picodeUsageHistoryTokens": "{0} Tokens",
-	"picodeUsageHistoryEmpty": "Keine Unterhaltungsaktivität in diesem Zeitraum."
+	"picodeUsageHistoryEmpty": "Keine Unterhaltungsaktivität in diesem Zeitraum.",
+	"picodeGentleReviewOptions": "Überprüfungseinstellungen",
+	"picodeGentleReviewOptionsDesc": "Wählen Sie, ob Überprüfungen für dieses Projekt oder in ganz PiCode aktiviert sind.",
+	"picodeGentleCodeReview": "Codeüberprüfung",
+	"picode.review.enabled": "Codeüberprüfung mit Gentle in PiCode-Chats verfügbar machen."
 }

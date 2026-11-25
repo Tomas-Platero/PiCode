@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "Активность бесед · последние 30 дней",
 	"picodeUsageHistoryUnavailable": "Активность бесед пока недоступна.",
 	"picodeUsageHistoryTokens": "Токены: {0}",
-	"picodeUsageHistoryEmpty": "За этот период активности бесед нет."
+	"picodeUsageHistoryEmpty": "За этот период активности бесед нет.",
+	"picodeGentleReviewOptions": "Настройки проверки",
+	"picodeGentleReviewOptionsDesc": "Выберите, включать ли проверки в этом проекте или во всём PiCode.",
+	"picodeGentleCodeReview": "Проверка кода",
+	"picode.review.enabled": "Сделать проверку кода с Gentle доступной в чатах PiCode."
 }
