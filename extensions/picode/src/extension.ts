@@ -72,6 +72,9 @@ import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
 import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from './product-packages';
 import { fetchLatestRelease, probeEngineVersionAsync, updateEngine } from './memory-update';
 import { readDefaultModel, readGit, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
+import { readUsageHistory } from './usage-history';
+import { refreshLiveCredentials } from './agent-profiles-live';
+import { GENTLE_REVIEW_ENV, GENTLE_REVIEW_SETTING } from './gentle-review-runtime';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND, VOICE_CANCEL_COMMAND, VOICE_DOWNLOAD_COMMAND, VOICE_FINISH_COMMAND, VOICE_LISTEN_COMMAND, VOICE_POLL_COMMAND, VOICE_REMOVE_COMMAND } from './status-contract';
 import { shouldDownloadOnStart, VoiceController } from './voice-controller';
@@ -1126,6 +1129,10 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	};
 
 	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => packageRows()));
+	disposables.push(vscode.commands.registerCommand('picode.usage.history', () => {
+		const uri = requireProfileUri();
+		return readUsageHistory(path.dirname(profileDirectory(uri)), piRuntimeRoot(distributionRoot(uri)));
+	}));
 
 	// The `+N −M` under Changes in the Agent layout's status column, for the folder the editor asks about.
 	disposables.push(vscode.commands.registerCommand(DIFF_STAT_COMMAND, (folder: unknown) => typeof folder === 'string' ? timed('status: lines changed', () => diffStat(folder)) : undefined));
@@ -2603,10 +2610,17 @@ export function activate(context: vscode.ExtensionContext): void {
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
 	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
 	applyProductEnv(process.env, profileDirectory(context.extensionUri));
+	const syncGentleReview = () => {
+		process.env[GENTLE_REVIEW_ENV] = vscode.workspace.getConfiguration().get<boolean>(GENTLE_REVIEW_SETTING) === true ? '1' : '0';
+	};
+	syncGentleReview();
 	// "Help Improve PiCode" also decides whether pi sends its own install and update report.
 	const syncUsageSharing = () => applyUsageSharing(vscode.workspace.getConfiguration('picode.privacy').get<boolean>('shareUsage') !== false);
 	syncUsageSharing();
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+		if (e.affectsConfiguration(GENTLE_REVIEW_SETTING)) {
+			syncGentleReview();
+		}
 		if (e.affectsConfiguration('picode.privacy.shareUsage')) {
 			syncUsageSharing();
 		}
@@ -2956,22 +2970,34 @@ const setupDeps = {
 	// A saved list is served at once; re-reading it waits for the first chat (`refreshSubscriptionModels`).
 	loadCachedModels();
 	warmUpModels();
-	context.subscriptions.push(onPiSessionChanged(() => refreshModelsWaitingForChat()));
+	context.subscriptions.push(onPiSessionChanged(() => {
+		refreshModelsWaitingForChat();
+		void vscode.commands.executeCommand('picode.chat.profileChip.refresh').then(undefined, () => undefined);
+	}));
 	const modelsTimer = setInterval(() => warmUpModels(), 30 * 60_000);
 	context.subscriptions.push(new vscode.Disposable(() => clearInterval(modelsTimer)));
+	const refreshConnectedModels = () => {
+		forgetPiRuntime();
+		void refreshLiveCredentials(profileDirectory(context.extensionUri)).then(ok => {
+			if (!ok) {
+				console.warn('[picode] Could not refresh credentials in every active session.');
+			}
+			onDidChangeModels.fire();
+		});
+	};
 
 	// The wizard's provider/model commands (the welcome page's model step).
 	context.subscriptions.push(...registerWizardModelCommands({
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
-		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },
+		refreshModels: refreshConnectedModels,
 	}));
 
 	// The Providers panel's own sign-in: the same login, drawn step by step inside the panel.
 	context.subscriptions.push(...registerProviderAuthCommands({
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
-		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },
+		refreshModels: refreshConnectedModels,
 	}));
 
 	context.subscriptions.push(
@@ -2979,12 +3005,7 @@ const setupDeps = {
 			connectSubscription({
 				distributionRoot: distributionRoot(context.extensionUri),
 				profileDir: profileDirectory(context.extensionUri),
-				refreshModels: () => {
-					// A new credential changes what pi's catalogue answers, so the cached runtime — and with
-					// it the model list the editor is about to ask for — is dropped.
-					forgetPiRuntime();
-					onDidChangeModels.fire();
-				},
+				refreshModels: refreshConnectedModels,
 			}),
 		),
 	);

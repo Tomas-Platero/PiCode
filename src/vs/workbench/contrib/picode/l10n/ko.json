@@ -2483,5 +2483,6 @@
 	"picodeSyncCloud": "클라우드",
 	"picodeSyncChooseSettingProgress": "유지할 값 선택 ({0}/{1})",
 	"picodeSyncConflictChanged": "설정 충돌이 변경되었습니다. 다시 열어 최신 버전을 확인하세요.",
-	"picodeSyncSettingRemoved": "설정이 삭제됨"
+	"picodeSyncSettingRemoved": "설정이 삭제됨",
+	"picode.profileChip.unknown": "에이전트 프로필"
 }

@@ -669,5 +669,7 @@
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Réflexion : **{0}**. Choisissez-en une avec `/thinking <level>` : {1}.",
 	"Save this memory?": "Enregistrer ce souvenir ?",
 	"Name this session": "Nommez cette session",
+	"The profile was applied, but its model is unavailable in the chat selector.": "Le profil a été appliqué, mais son modèle est indisponible dans le sélecteur du chat.",
+	"The profile was applied, but its model could not be selected in this chat.": "Le profil a été appliqué, mais son modèle n’a pas pu être sélectionné dans ce chat.",
 	"Tokens": "Jetons"
 }

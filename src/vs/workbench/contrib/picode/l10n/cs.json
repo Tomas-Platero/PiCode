@@ -2483,5 +2483,6 @@
 	"picodeSyncCloud": "Cloud",
 	"picodeSyncChooseSettingProgress": "Vyberte hodnotu, kterou chcete ponechat ({0} z {1})",
 	"picodeSyncConflictChanged": "Konflikt nastavení se změnil. Otevřete jej znovu a zkontrolujte nejnovější verze.",
-	"picodeSyncSettingRemoved": "Nastavení odebráno"
+	"picodeSyncSettingRemoved": "Nastavení odebráno",
+	"picode.profileChip.unknown": "Profil agenta"
 }

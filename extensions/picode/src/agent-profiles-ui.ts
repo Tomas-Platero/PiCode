@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { agentProfilesState, editAgentProfiles, ORCHESTRATOR, ProfileEditError, resolvedProfile, type AgentProfilesState, type ProfileEdit } from './agent-profiles';
-import { applyAgentProfile, applyConfirmed, deferDefault, frontChatProfile, hasLiveSession, type ApplyResult } from './agent-profiles-live';
+import { applyAgentProfile, applyConfirmed, deferDefault, frontChatModel, frontChatProfile, hasLiveSession, type ApplyResult } from './agent-profiles-live';
 import { listAgents } from './gentle-models';
 
 /** What the settings page and the chat's chip read. */
@@ -30,6 +30,8 @@ export interface AgentProfilesView extends AgentProfilesState {
 	readonly live: boolean;
 	/** The profile the chat in front was moved to from the editor, when it was. */
 	readonly chat?: string | null;
+	/** Result of an explicit profile-use request, when this view answers one. */
+	readonly useSucceeded?: boolean;
 }
 
 function workspaceFolder(): string | undefined {
@@ -41,16 +43,17 @@ function editorProfileChoice(): string | undefined {
 	return value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function view(profileDir: string): AgentProfilesView {
+function view(profileDir: string, chatKey?: string): AgentProfilesView {
 	const state = agentProfilesState(profileDir, workspaceFolder());
 	const editorProfile = editorProfileChoice();
+	const chat = frontChatProfile(chatKey);
 	return {
 		...state,
 		agents: [ORCHESTRATOR, ...listAgents(profileDir)],
 		resolved: resolvedProfile(state),
 		...(editorProfile === undefined ? {} : { editorProfile }),
-		live: hasLiveSession(),
-		...(frontChatProfile() === undefined ? {} : { chat: frontChatProfile() }),
+		live: hasLiveSession(chatKey),
+		...(chat === undefined ? {} : { chat }),
 	};
 }
 
@@ -67,8 +70,8 @@ function noteOf(result: ApplyResult): string | undefined {
  * `session` moves only the chat in front. Gentle's own confirmation is shown when `ask` is set.
  * Returns whether it was used.
  */
-async function useProfile(profileDir: string, name: string, mode: 'default' | 'session', ask: boolean): Promise<boolean> {
-	if (!hasLiveSession()) {
+async function useProfile(profileDir: string, name: string, mode: 'default' | 'session', ask: boolean, chatKey?: string): Promise<boolean> {
+	if (!hasLiveSession(chatKey)) {
 		if (mode === 'session') {
 			void vscode.window.showInformationMessage(vscode.l10n.t('Send a message in the chat first, then choose a profile for it.'));
 			return false;
@@ -79,7 +82,7 @@ async function useProfile(profileDir: string, name: string, mode: 'default' | 's
 		deferDefault(name);
 		return true;
 	}
-	let result = await applyAgentProfile(name, mode);
+	let result = await applyAgentProfile(name, mode, undefined, chatKey);
 	if (result.status === 'confirmation_required') {
 		if (ask) {
 			const apply = vscode.l10n.t('Apply');
@@ -88,7 +91,7 @@ async function useProfile(profileDir: string, name: string, mode: 'default' | 's
 				return false;
 			}
 		}
-		result = await applyAgentProfile(name, mode, result.confirmation);
+		result = await applyAgentProfile(name, mode, result.confirmation, chatKey);
 	}
 	switch (result.status) {
 		case 'applied':
@@ -110,7 +113,7 @@ async function useProfile(profileDir: string, name: string, mode: 'default' | 's
 	}
 	if (mode === 'default') {
 		// The chat in front follows too: Gentle's default only reaches new chats' subagents.
-		await applyConfirmed(name, 'session');
+		await applyConfirmed(name, 'session', chatKey);
 	}
 	return true;
 }
@@ -122,7 +125,7 @@ function profilesChanged(): void {
 
 export function registerAgentProfilesCommands(profileDir: string): vscode.Disposable[] {
 	return [
-		vscode.commands.registerCommand(AGENT_PROFILES_STATE_COMMAND, (): AgentProfilesView => view(profileDir)),
+		vscode.commands.registerCommand(AGENT_PROFILES_STATE_COMMAND, (chatKey?: string): AgentProfilesView => view(profileDir, chatKey)),
 		vscode.commands.registerCommand(AGENT_PROFILES_EDIT_COMMAND, async (edit: ProfileEdit): Promise<AgentProfilesView | { readonly error: string }> => {
 			try {
 				const before = agentProfilesState(profileDir, workspaceFolder());
@@ -142,15 +145,33 @@ export function registerAgentProfilesCommands(profileDir: string): vscode.Dispos
 				return { error: error instanceof ProfileEditError ? error.message : String(error) };
 			}
 		}),
-		vscode.commands.registerCommand(AGENT_PROFILES_USE_COMMAND, async (request: { name?: unknown; mode?: unknown; ask?: unknown }): Promise<AgentProfilesView> => {
+		vscode.commands.registerCommand(AGENT_PROFILES_USE_COMMAND, async (request: { name?: unknown; mode?: unknown; ask?: unknown; chatKey?: unknown }): Promise<AgentProfilesView> => {
 			const name = typeof request?.name === 'string' ? request.name : undefined;
 			const mode = request?.mode === 'session' ? 'session' : 'default';
-			if (name !== undefined && await useProfile(profileDir, name, mode, request?.ask !== false) && mode === 'default' && editorProfileChoice() !== undefined) {
+			const chatKey = typeof request?.chatKey === 'string' ? request.chatKey : undefined;
+			const previousModel = frontChatModel(chatKey);
+			let selectedModel: string | null | undefined;
+			if (chatKey) {
+				try { selectedModel = await vscode.commands.executeCommand<string | null>('picode.chat.profile.selectedModel', chatKey); } catch { /* The chat may not exist yet. */ }
+			}
+			const useSucceeded = name !== undefined && await useProfile(profileDir, name, mode, request?.ask !== false, chatKey);
+			const currentModel = frontChatModel(chatKey);
+			if (useSucceeded && chatKey && selectedModel !== undefined && currentModel && (currentModel.provider !== previousModel?.provider || currentModel.id !== previousModel.id)) {
+				try {
+					const synced = await vscode.commands.executeCommand<string>('picode.chat.profile.syncModel', chatKey, `${currentModel.provider}/${currentModel.id}`, selectedModel);
+					if (synced === 'unavailable') {
+						void vscode.window.showWarningMessage(vscode.l10n.t('The profile was applied, but its model is unavailable in the chat selector.'));
+					}
+				} catch {
+					void vscode.window.showWarningMessage(vscode.l10n.t('The profile was applied, but its model could not be selected in this chat.'));
+				}
+			}
+			if (useSucceeded && mode === 'default' && editorProfileChoice() !== undefined) {
 				// This editor profile asks for a profile: the choice becomes its own, or the next switch back would undo it.
 				await vscode.workspace.getConfiguration().update(EDITOR_PROFILE_SETTING, name, vscode.ConfigurationTarget.Global);
 			}
 			profilesChanged();
-			return view(profileDir);
+			return { ...view(profileDir, chatKey), useSucceeded };
 		}),
 		...followEditorProfile(profileDir),
 	];

@@ -669,5 +669,7 @@
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 思考强度: **{0}**。可使用 `/thinking <level>` 选择: {1}。",
 	"Save this memory?": "保存这条记忆？",
 	"Name this session": "为此会话命名",
+	"The profile was applied, but its model is unavailable in the chat selector.": "配置文件已应用，但其模型在聊天选择器中不可用。",
+	"The profile was applied, but its model could not be selected in this chat.": "配置文件已应用，但无法在此聊天中选择其模型。",
 	"Tokens": "令牌"
 }
