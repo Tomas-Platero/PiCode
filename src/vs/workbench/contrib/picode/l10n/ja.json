@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "レビュー設定",
 	"picodeGentleReviewOptionsDesc": "このプロジェクトまたは PiCode 全体でレビューを有効にするか選べます。",
 	"picodeGentleCodeReview": "コードレビュー",
-	"picode.review.enabled": "PiCode のチャットで Gentle のコードレビューを利用できるようにします。"
+	"picode.review.enabled": "PiCode のチャットで Gentle のコードレビューを利用できるようにします。",
+	"picodeWhatsNew.agentActivity.title": "エージェントの活動をひと目で確認",
+	"picodeWhatsNew.agentActivity.summary": "最近の会話アクティビティとエージェントの進捗を確認できます。",
+	"picodeWhatsNew.agentActivity.point1": "Gentle AI による作業のレビュー方法を設定で選べます。"
 }

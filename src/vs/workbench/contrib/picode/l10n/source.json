@@ -2492,5 +2492,8 @@
 	"picodeGentleReviewOptions": "Review settings",
 	"picodeGentleReviewOptionsDesc": "Choose whether reviews are enabled for this project or across PiCode.",
 	"picodeGentleCodeReview": "Code review",
-	"picode.review.enabled": "Make Gentle code review available in PiCode chats."
+	"picode.review.enabled": "Make Gentle code review available in PiCode chats.",
+	"picodeWhatsNew.agentActivity.title": "Your agent activity at a glance",
+	"picodeWhatsNew.agentActivity.summary": "See recent conversation activity and follow agent progress.",
+	"picodeWhatsNew.agentActivity.point1": "Choose how Gentle AI reviews your work in Settings."
 }
