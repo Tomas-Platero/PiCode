@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "会話のアクティビティ · 過去30日間",
 	"picodeUsageHistoryUnavailable": "会話のアクティビティはまだ利用できません。",
 	"picodeUsageHistoryTokens": "{0} トークン",
-	"picodeUsageHistoryEmpty": "この期間の会話アクティビティはありません。"
+	"picodeUsageHistoryEmpty": "この期間の会話アクティビティはありません。",
+	"picodeGentleReviewOptions": "レビュー設定",
+	"picodeGentleReviewOptionsDesc": "このプロジェクトまたは PiCode 全体でレビューを有効にするか選べます。",
+	"picodeGentleCodeReview": "コードレビュー",
+	"picode.review.enabled": "PiCode のチャットで Gentle のコードレビューを利用できるようにします。"
 }

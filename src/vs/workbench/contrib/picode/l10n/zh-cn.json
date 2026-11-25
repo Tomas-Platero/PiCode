@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "对话活动 · 最近 30 天",
 	"picodeUsageHistoryUnavailable": "对话活动暂不可用。",
 	"picodeUsageHistoryTokens": "{0} 个令牌",
-	"picodeUsageHistoryEmpty": "此期间没有对话活动。"
+	"picodeUsageHistoryEmpty": "此期间没有对话活动。",
+	"picodeGentleReviewOptions": "审查设置",
+	"picodeGentleReviewOptionsDesc": "选择在当前项目中启用审查，还是在整个 PiCode 中启用审查。",
+	"picodeGentleCodeReview": "代码审查",
+	"picode.review.enabled": "在 PiCode 聊天中提供 Gentle 代码审查。"
 }
