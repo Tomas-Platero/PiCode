@@ -668,5 +668,6 @@
 	"🧠 Thinking set to **{0}**.": "🧠 Nachdenken auf **{0}** gesetzt.",
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Nachdenken: **{0}**. Wähle mit `/thinking <level>` eine: {1}.",
 	"Save this memory?": "Diese Erinnerung speichern?",
-	"Name this session": "Diese Sitzung benennen"
+	"Name this session": "Diese Sitzung benennen",
+	"Tokens": "Tokens"
 }

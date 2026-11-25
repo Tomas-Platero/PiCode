@@ -668,5 +668,6 @@
 	"🤖 Answers": "🤖 Answers",
 	"🧠 Model": "🧠 Model",
 	"🧠 Thinking set to **{0}**.": "🧠 Thinking set to **{0}**.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.",
+	"Tokens": "Tokens"
 }

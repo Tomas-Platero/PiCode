@@ -668,5 +668,6 @@
 	"🧠 Thinking set to **{0}**.": "🧠 Úroveň uvažování: **{0}**.",
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Úroveň uvažování: **{0}**. Vyberte ji přes `/thinking <level>`: {1}.",
 	"Save this memory?": "Uložit tuto vzpomínku?",
-	"Name this session": "Pojmenujte tuto relaci"
+	"Name this session": "Pojmenujte tuto relaci",
+	"Tokens": "Tokeny"
 }
