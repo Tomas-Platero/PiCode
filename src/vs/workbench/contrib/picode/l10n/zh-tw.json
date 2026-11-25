@@ -2484,5 +2484,9 @@
 	"picodeSyncChooseSettingProgress": "選擇要保留的值（{0}/{1}）",
 	"picodeSyncConflictChanged": "設定衝突已有變化。請重新開啟以查看最新版本。",
 	"picodeSyncSettingRemoved": "設定已移除",
-	"picode.profileChip.unknown": "代理程式設定檔"
+	"picode.profileChip.unknown": "代理程式設定檔",
+	"picodeUsageHistoryTitle": "對話活動 · 最近 30 天",
+	"picodeUsageHistoryUnavailable": "對話活動目前尚未提供。",
+	"picodeUsageHistoryTokens": "{0} 個權杖",
+	"picodeUsageHistoryEmpty": "此期間沒有對話活動。"
 }

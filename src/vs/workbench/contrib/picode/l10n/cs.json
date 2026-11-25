@@ -2484,5 +2484,9 @@
 	"picodeSyncChooseSettingProgress": "Vyberte hodnotu, kterou chcete ponechat ({0} z {1})",
 	"picodeSyncConflictChanged": "Konflikt nastavení se změnil. Otevřete jej znovu a zkontrolujte nejnovější verze.",
 	"picodeSyncSettingRemoved": "Nastavení odebráno",
-	"picode.profileChip.unknown": "Profil agenta"
+	"picode.profileChip.unknown": "Profil agenta",
+	"picodeUsageHistoryTitle": "Aktivita konverzací · posledních 30 dní",
+	"picodeUsageHistoryUnavailable": "Aktivita konverzací zatím není k dispozici.",
+	"picodeUsageHistoryTokens": "{0} tokenů",
+	"picodeUsageHistoryEmpty": "V tomto období žádná aktivita konverzací."
 }
