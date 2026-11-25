@@ -668,5 +668,8 @@
 	"🧠 Thinking set to **{0}**.": "🧠 Úroveň uvažování: **{0}**.",
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Úroveň uvažování: **{0}**. Vyberte ji přes `/thinking <level>`: {1}.",
 	"Save this memory?": "Uložit tuto vzpomínku?",
-	"Name this session": "Pojmenujte tuto relaci"
+	"Name this session": "Pojmenujte tuto relaci",
+	"The profile was applied, but its model is unavailable in the chat selector.": "Profil byl použit, ale jeho model není ve výběru chatu dostupný.",
+	"The profile was applied, but its model could not be selected in this chat.": "Profil byl použit, ale jeho model nelze v tomto chatu vybrat.",
+	"Tokens": "Tokeny"
 }

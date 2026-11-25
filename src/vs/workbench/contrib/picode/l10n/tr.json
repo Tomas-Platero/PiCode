@@ -2483,5 +2483,6 @@
 	"picodeSyncCloud": "Bulut",
 	"picodeSyncChooseSettingProgress": "Saklanacak değeri seçin ({0}/{1})",
 	"picodeSyncConflictChanged": "Ayar uyuşmazlığı değişti. Son sürümleri görmek için yeniden açın.",
-	"picodeSyncSettingRemoved": "Ayar kaldırıldı"
+	"picodeSyncSettingRemoved": "Ayar kaldırıldı",
+	"picode.profileChip.unknown": "Aracı profili"
 }

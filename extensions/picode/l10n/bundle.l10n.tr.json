@@ -668,5 +668,8 @@
 	"🧠 Thinking set to **{0}**.": "🧠 Düşünme **{0}** olarak ayarlandı.",
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Düşünme: **{0}**. `/thinking <düzey>` ile birini seçin: {1}.",
 	"Save this memory?": "Bu anı kaydedilsin mi?",
-	"Name this session": "Bu oturumu adlandırın"
+	"Name this session": "Bu oturumu adlandırın",
+	"The profile was applied, but its model is unavailable in the chat selector.": "Profil uygulandı ancak modeli sohbet seçicisinde kullanılamıyor.",
+	"The profile was applied, but its model could not be selected in this chat.": "Profil uygulandı ancak modeli bu sohbette seçilemedi.",
+	"Tokens": "Tokenlar"
 }

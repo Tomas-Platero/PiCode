@@ -668,5 +668,8 @@
 	"🧠 Thinking set to **{0}**.": "🧠 Уровень рассуждений: **{0}**.",
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Уровень рассуждений: **{0}**. Выберите командой `/thinking <level>`: {1}.",
 	"Save this memory?": "Сохранить это воспоминание?",
-	"Name this session": "Назовите этот сеанс"
+	"Name this session": "Назовите этот сеанс",
+	"The profile was applied, but its model is unavailable in the chat selector.": "Профиль применён, но его модель недоступна в списке моделей чата.",
+	"The profile was applied, but its model could not be selected in this chat.": "Профиль применён, но выбрать его модель в этом чате не удалось.",
+	"Tokens": "Токены"
 }
