@@ -109,16 +109,17 @@ if [[ -z "${FOUND}" ]]; then
   exit 1
 fi
 
+# MIT asks that the licence text travels with the program. Release archives may omit it or carry other licences.
+LICENSE_VERSION=$( node -p "require('./build/distribution/engram.json').licenseVersion || ''" )
+LICENSE_FILE="./build/distribution/LICENSE-engram.txt"
+if [[ "${LICENSE_VERSION}" != "${VERSION}" || ! -s "${LICENSE_FILE}" ]]; then
+  echo "error: no verified Engram licence is available for version ${VERSION}." >&2
+  exit 1
+fi
+
 echo "copying the memory engine into ${TARGET}"
 cp "${FOUND}" "${TARGET}/${BINARY}"
-
-# MIT asks that the licence text travels with the program; it is copied from the release archive.
-LICENSE_FILE=$( find "${UNPACKED}" -type f \( -iname 'LICENSE' -o -iname 'LICENSE.*' \) | head -n 1 )
-if [[ -n "${LICENSE_FILE}" ]]; then
-  cp "${LICENSE_FILE}" "${TARGET}/LICENSE-engram.txt"
-else
-  echo "warning: the engram archive has no licence file; add its text to ${TARGET}/LICENSE-engram.txt by hand." >&2
-fi
+cp "${LICENSE_FILE}" "${TARGET}/LICENSE-engram.txt"
 
 # The check that matters: the program is asked to start from where it now lives. A file that is
 # present but cannot run would put the failure in the owner's editor instead of in this build.
