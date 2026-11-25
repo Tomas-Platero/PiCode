@@ -252,6 +252,14 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * El borrado va **después** de publicar la nueva: si un run falla a mitad, el canal nunca se queda sin release.
 * El guard de "versión estrictamente más nueva" no depende de la lista de releases: lee la versión anterior del feed del canal en el árbol, así que sigue funcionando tras borrar.
 
+### Mantener limpias las ramas
+>
+> *"haz como norma revisar las ramas y que todo esté siempre limpio cuando sea el momento (ejemplo después de sacar una release)"* — 2026-11-25
+
+* **Al cerrar una release o un trabajo:** revisar las ramas y los worktrees locales y remotos, y retirar los temporales que ya no se necesiten. Al terminar la limpieza deben quedar los tres canales: `master`, `beta` y `experimental`.
+* **Sin perder trabajo:** antes de borrar, comprobar cambios pendientes, archivos ignorados, commits exclusivos y propuestas abiertas; conservar o respaldar lo necesario y no interrumpir trabajos activos. Las ramas temporales necesarias para un trabajo en curso permanecen hasta que termine.
+* **Código en desarrollo:** mantener los cambios de producto sobre `experimental` actualizado. Las operaciones remotas y destructivas siguen las autorizaciones vigentes de la sesión.
+
 ### La página de la release cuenta lo que cambió
 >
 > *"recuerda añadir tu siempre el texto de la release mejorado y con el changelog"* — 2026-10-16
