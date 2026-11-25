@@ -29,7 +29,7 @@ export interface AgentProfilesView extends AgentProfilesState {
 	/** A chat is running, so a choice reaches it at once. */
 	readonly live: boolean;
 	/** The profile the chat in front was moved to from the editor, when it was. */
-	readonly chat?: string;
+	readonly chat?: string | null;
 }
 
 function workspaceFolder(): string | undefined {
