@@ -52,6 +52,13 @@ test('elapsed time is the shortest true wording', () => {
 const agent = (id: string, status: AgentTaskRow['status'], extra: Partial<AgentTaskRow> = {}): AgentTaskRow =>
 	({ id, agent: 'review-risk', label: 'check the diff', status, startedAt: 1_000, endedAt: undefined, lastStep: 'read', turns: 1, toolCalls: 2, error: undefined, ...extra });
 
+test('an agent detail shows its live tool, model and usage when available', () => {
+	const facts = taskFacts({ kind: 'agent', agent: agent('a', 'running', { activeTool: 'read', model: 'openai/model', usedTokens: 120 }) }, 2_000);
+	assert.ok(facts.some(fact => fact.label === 'Now' && fact.detail === 'read'));
+	assert.ok(facts.some(fact => fact.label === 'Model' && fact.detail === 'openai/model'));
+	assert.ok(facts.some(fact => fact.label === 'Tokens' && fact.detail === '120'));
+});
+
 test('agents still going are running rows, after the jobs; the ones that ended are listed apart', () => {
 	const board = taskBoard([job('1', 'lint')], [agent('a', 'running'), agent('b', 'queued'), agent('c', 'waiting'), agent('d', 'completed', { endedAt: 4_000 }), agent('e', 'failed', { endedAt: 3_000 })]);
 	assert.deepEqual(board.running.map(row => row.kind === 'job' ? row.job.jobNumber : row.kind === 'agent' ? row.agent.id : ''), ['1', 'a', 'b', 'c']);
