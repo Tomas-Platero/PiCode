@@ -343,7 +343,7 @@
 	"Restore": "Geri yükle",
 	"Restore {0} pi session file from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "{0} pi oturum dosyası PiCode Cloud'dan geri yüklensin mi? Bu makinedekinden farklı dosyaların üzerine yazılacak.",
 	"Restore {0} pi session files from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "{0} pi oturum dosyası PiCode Cloud'dan geri yüklensin mi? Bu makinedekinden farklı dosyaların üzerine yazılacak.",
-	"Review mode needs the Gentle AI program, which PiCode does not include.": "İnceleme modu, PiCode'un içermediği Gentle AI programını gerektirir.",
+	"Review is unavailable in this session. Check that this PiCode build includes a compatible review runtime.": "Bu oturumda inceleme kullanılamıyor. Bu PiCode sürümünün uyumlu bir inceleme programı içerdiğini kontrol edin.",
 	"Review permissions are only available in pi’s terminal.": "İnceleme izinleri yalnızca pi'nin terminalinde kullanılabilir.",
 	"Revisions": "Revizyonlar",
 	"Running": "Çalışıyor",

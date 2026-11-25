@@ -343,7 +343,7 @@
 	"Restore": "還原",
 	"Restore {0} pi session file from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "要從 PiCode 雲端還原 {0} 個 pi 工作階段檔案嗎？與這部電腦現有內容不同的檔案將被覆寫。",
 	"Restore {0} pi session files from PiCode Cloud? Files that differ from what this machine holds will be overwritten.": "要從 PiCode 雲端還原 {0} 個 pi 工作階段檔案嗎？與這部電腦現有內容不同的檔案將被覆寫。",
-	"Review mode needs the Gentle AI program, which PiCode does not include.": "檢閱模式需要 Gentle AI 程式，PiCode 不包含它。",
+	"Review is unavailable in this session. Check that this PiCode build includes a compatible review runtime.": "此工作階段無法使用審查。請確認此版本的 PiCode 包含相容的審查程式。",
 	"Review permissions are only available in pi’s terminal.": "僅能在 pi 的終端機中設定檢閱權限。",
 	"Revisions": "修訂次數",
 	"Running": "執行中",

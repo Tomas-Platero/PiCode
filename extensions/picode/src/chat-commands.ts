@@ -60,10 +60,13 @@ export interface UnavailableCommand {
 
 /**
  * Commands that only exist in pi's terminal, measured one by one against the editor's chat (they
- * draw a terminal panel, need a keyboard session, or need the Gentle AI program the product does
- * not install). They are left out of the slash list and answered with a sentence instead of
+ * draw a terminal panel, need a keyboard session, or need an enabled Gentle AI runtime).
+ * They are left out of the slash list and answered with a sentence instead of
  * silence — or, for pi's own terminal commands, instead of reaching the model as a question.
  */
+const GENTLE_REVIEW_COMMANDS = new Set(['gentle:review-mode', 'gentle:rdd']);
+const REVIEW_UNAVAILABLE: UnavailableCommand = { message: l10n.t('Review is unavailable in this session. Check that this PiCode build includes a compatible review runtime.') };
+
 export const TERMINAL_ONLY_COMMANDS: ReadonlyMap<string, UnavailableCommand> = new Map<string, UnavailableCommand>([
 	// pi's own terminal commands.
 	['tree', { message: l10n.t('Moving between branches of a conversation is only available in pi’s terminal.') }],
@@ -82,14 +85,15 @@ export const TERMINAL_ONLY_COMMANDS: ReadonlyMap<string, UnavailableCommand> = n
 	['gentle:agents', { message: l10n.t('The agents panel is only available in pi’s terminal.'), action: 'agentModels' }],
 	['gentle:jobs', { message: l10n.t('The jobs panel is only available in pi’s terminal.'), action: 'tasks' }],
 	['gentle:review-session-permission', { message: l10n.t('Review permissions are only available in pi’s terminal.') }],
-	// Gentle commands that need the Gentle AI program, which PiCode does not install.
-	['gentle:review-mode', { message: l10n.t('Review mode needs the Gentle AI program, which PiCode does not include.') }],
+	// Only a session with the verified runtime can open Gentle's review controls.
+	...Array.from(GENTLE_REVIEW_COMMANDS, name => [name, REVIEW_UNAVAILABLE] as const),
 	['gentle:telemetry', { message: l10n.t('Gentle AI telemetry is off in PiCode.') }],
 	['gentle:dev-binary', { message: l10n.t('This command needs the Gentle AI program, which PiCode does not include.') }],
 ]);
 
 /** The names a request is resolved against: what the live session holds right now. */
 export interface SlashContext {
+	readonly gentleReviewAvailable?: boolean;
 	/** pi extension commands the session registered. */
 	readonly extensionCommands: ReadonlySet<string>;
 	/** Skills the session loaded. */
@@ -127,6 +131,9 @@ export function routeSlash(prompt: string, context: SlashContext): SlashRoute | 
 		return undefined;
 	}
 	const { name, args } = parsed;
+	if (GENTLE_REVIEW_COMMANDS.has(name) && context.gentleReviewAvailable && context.extensionCommands.has(name)) {
+		return { kind: 'pi', text: prompt.trim() };
+	}
 	const unavailable = TERMINAL_ONLY_COMMANDS.get(name);
 	if (unavailable !== undefined) {
 		return { kind: 'unavailable', name, command: unavailable };

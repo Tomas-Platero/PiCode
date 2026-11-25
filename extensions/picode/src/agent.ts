@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { agentProfilesExtension } from './agent-profiles-live';
+import { agentProgressExtension } from './agent-progress-live';
+import { GENTLE_REVIEW_SETTING, hasUnmanagedGentleRuntime, prepareGentleReview } from './gentle-review-runtime';
 import * as vscode from 'vscode';
 import { withContext } from './context';
 import { currentBranch, noteTurnBranch, renameRecordedBranch, updateSessionGitStore, withTitle } from './session-git';
@@ -1298,7 +1300,7 @@ function showSessionProblems(turn: TurnHolder, problems: readonly SessionProblem
 	}
 }
 
-function extensionUiContext(log: (line: string) => void, turn: TurnHolder): PiExtensionUiContext {
+function extensionUiContext(log: (line: string) => void, turn: TurnHolder, chatKey?: string): PiExtensionUiContext {
 	const noop = (): void => { /* the chat owns this surface */ };
 	return {
 		confirm: async (title: string, message: string): Promise<boolean> =>
@@ -1360,7 +1362,7 @@ function extensionUiContext(log: (line: string) => void, turn: TurnHolder): PiEx
 		setHiddenThinkingLabel: noop,
 		// gentle-pi publishes its subagents' live state here, and only here; the Tasks block draws it.
 		// Every other widget is the terminal's, and the chat owns that surface.
-		setWidget: (key: string, content?: unknown): void => gentleAgents.publish(key, content),
+		setWidget: (key: string, content?: unknown): void => gentleAgents.publish(key, content, chatKey),
 		setFooter: noop,
 		setHeader: noop,
 		setTitle: noop,
@@ -1456,7 +1458,7 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * interactive confirmation". `onError` is bound so a broken extension is said and the turn
  * still runs.
  */
-export async function bindSessionExtensions(session: PiSession, log: (line: string) => void, turn: TurnHolder = turnContext): Promise<void> {
+export async function bindSessionExtensions(session: PiSession, log: (line: string) => void, turn: TurnHolder = turnContext, chatKey?: string): Promise<void> {
 	watchAgentWork(session);
 	if (typeof session.bindExtensions !== 'function') {
 		return;
@@ -1474,7 +1476,7 @@ export async function bindSessionExtensions(session: PiSession, log: (line: stri
 				// extension here observes. pi's published type is generic (`custom<T>(): Promise<T>`);
 				// the carousel has no typed widget results beyond that, so this assertion states the
 				// contract it actually honours, not pi's generic.
-				uiContext: extensionUiContext(log, turn) as unknown as OfficialUiContext,
+				uiContext: extensionUiContext(log, turn, chatKey) as unknown as OfficialUiContext,
 				mode: 'rpc',
 				onError: error => log(`extension error (${error.extensionPath ?? 'unknown'}) on ${error.event ?? 'unknown'}: ${error.error ?? 'no message'}`),
 			}),
@@ -1500,7 +1502,7 @@ export async function bindSessionExtensions(session: PiSession, log: (line: stri
  * ------------------------------------------------------------------ */
 
 /** What the session can run by name right now: its extension commands and its skills. */
-function slashContextOf(session: PiSession): SlashContext {
+function slashContextOf(session: PiSession, gentleReviewAvailable?: boolean): SlashContext {
 	let skills: readonly { readonly name: string }[] = [];
 	try {
 		skills = session.resourceLoader?.getSkills?.().skills ?? [];
@@ -1509,6 +1511,7 @@ function slashContextOf(session: PiSession): SlashContext {
 	}
 	const commands = piCommandsOfRunner(session);
 	return {
+		gentleReviewAvailable,
 		extensionCommands: new Set(commands.map(command => command.name)),
 		skills: new Set(skills.map(skill => skill.name)),
 		learnedTerminalOnly: name => {
@@ -1970,6 +1973,8 @@ interface ChatPi {
 	sessionScopeKey?: string;
 	/** The profile the session was built against, so a runtime switch rebuilds it. */
 	sessionAgentDir?: string;
+	gentleReviewAvailable?: boolean;
+	gentleReviewEnabled?: boolean;
 	/** The MCP tool set the session was built with. */
 	mcpSignature: string;
 	/** The disabled tools the session was built with, so a change rebuilds it. */
@@ -2332,10 +2337,12 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			const scopeChanged = chat.sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== chat.mcpSignature;
 			const profileChanged = chat.sessionAgentDir !== agentDir;
+			const reviewEnabled = agentDir !== undefined && vscode.workspace.getConfiguration().get<boolean>(GENTLE_REVIEW_SETTING) === true;
+			const reviewChanged = chat.gentleReviewEnabled !== reviewEnabled;
 			// The disabled tools reshape the session like the MCP tools do: changing them rebuilds.
 			const disabledChanged = chat.disabledToolsKey !== settings.disabledTools.join('\u0000');
 			chat.disabledToolsKey = settings.disabledTools.join('\u0000');
-			if (chat.session === undefined || scopeChanged || toolsChanged || profileChanged || disabledChanged) {
+			if (chat.session === undefined || scopeChanged || toolsChanged || profileChanged || disabledChanged || reviewChanged) {
 				chat.session?.dispose();
 				// The agents the old session published are gone with it.
 				gentleAgents.clear();
@@ -2356,14 +2363,33 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// Before pi loads anything: the profile's declared-but-missing packages are installed here
 				// (hidden, one run for the whole list) so pi's loader finds every declaration on disk and
 				// never installs one itself — its per-package installs each flashed a console window.
-				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
+				const runtimeRoot = piRuntimeRoot(deps.distributionRoot);
+				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot, npmCli: locateNpmCli(), log: deps.log });
+				chat.gentleReviewAvailable = false;
+				let omitUnmanagedGentle = false;
+				if (agentDir !== undefined) {
+					try {
+						const prepared = prepareGentleReview(runtimeRoot, agentDir);
+						chat.gentleReviewAvailable = reviewEnabled && prepared;
+						omitUnmanagedGentle = !prepared && hasUnmanagedGentleRuntime(agentDir);
+					} catch (error) {
+						omitUnmanagedGentle = true;
+						deps.log(`Gentle AI review runtime could not be prepared: ${String(error)}`);
+					}
+				}
 				pinAgentDir(agentDir);
 				chat.services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					...settingsForFolder(loaded.sdk, cwd, agentDir),
 					resourceLoaderOptions: {
-						extensionFactories: [...loaded.builtins, permissionExtension(deps.log, chat.turn), usageHeadersExtension(), chatModelExtension(), agentProfilesExtension(chat.key) as unknown as PiInlineExtension],
+						...(omitUnmanagedGentle ? {
+							extensionsOverride: base => ({
+								...base,
+								extensions: base.extensions.filter(extension => !/[\\/]gentle-pi[\\/]extensions[\\/]gentle-ai\.ts$/i.test(extension.path)),
+							}),
+						} : {}),
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log, chat.turn), usageHeadersExtension(), chatModelExtension(), agentProfilesExtension(chat.key, agentDir) as unknown as PiInlineExtension, agentProgressExtension((agents, source) => gentleAgents.publishProgress(agents, chat.key, source), source => gentleAgents.beginProgress(chat.key, source), source => gentleAgents.endProgress(chat.key, source)) as unknown as PiInlineExtension],
 						// PiCode's own skills (`skills/`), next to the profile's; `out/` is one level down.
 						additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
 						// The editor has no terminal for git or npm to write to or ask a password in: their
@@ -2438,10 +2464,11 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// The session exists and its extensions are loaded; this is what starts them. Called
 				// before the first turn, because `session_start` is where they do their startup work.
 				watchLateTurns(chat.session, chat.key, deps.log);
-				await bindSessionExtensions(chat.session, deps.log, chat.turn);
+				await bindSessionExtensions(chat.session, deps.log, chat.turn, chat.key);
 				chat.sessionFolder = cwd;
 				chat.sessionScopeKey = scopeKey;
 				chat.sessionAgentDir = agentDir;
+				chat.gentleReviewEnabled = reviewEnabled;
 				chat.mcpSignature = signature;
 				rememberTranscript(chat.key, chat.sessionManager.getSessionFile());
 				trimLiveChats(chat);
@@ -2464,7 +2491,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// A slash command pi's session would not understand is answered here, or rewritten into the
 			// form pi does understand (a skill as `/skill:name`); see `chat-commands.ts`.
 			let prompt = request.prompt;
-			const route = isSlashCommand(prompt) ? routeSlash(prompt, slashContextOf(chat.session)) : undefined;
+			const route = isSlashCommand(prompt) ? routeSlash(prompt, slashContextOf(chat.session, chat.gentleReviewAvailable)) : undefined;
 			if (route?.kind === 'unavailable') {
 				answerUnavailable(stream, route.command);
 				return {};
