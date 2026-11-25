@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "Sohbet etkinliği · son 30 gün",
 	"picodeUsageHistoryUnavailable": "Sohbet etkinliği henüz kullanılamıyor.",
 	"picodeUsageHistoryTokens": "{0} token",
-	"picodeUsageHistoryEmpty": "Bu dönemde sohbet etkinliği yok."
+	"picodeUsageHistoryEmpty": "Bu dönemde sohbet etkinliği yok.",
+	"picodeGentleReviewOptions": "İnceleme ayarları",
+	"picodeGentleReviewOptionsDesc": "İncelemeleri bu projede mi yoksa PiCode genelinde mi etkinleştireceğinizi seçin.",
+	"picodeGentleCodeReview": "Kod incelemesi",
+	"picode.review.enabled": "PiCode sohbetlerinde Gentle ile kod incelemesini kullanılabilir yapın."
 }

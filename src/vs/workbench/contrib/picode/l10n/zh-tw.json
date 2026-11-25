@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "對話活動 · 最近 30 天",
 	"picodeUsageHistoryUnavailable": "對話活動目前尚未提供。",
 	"picodeUsageHistoryTokens": "{0} 個權杖",
-	"picodeUsageHistoryEmpty": "此期間沒有對話活動。"
+	"picodeUsageHistoryEmpty": "此期間沒有對話活動。",
+	"picodeGentleReviewOptions": "審查設定",
+	"picodeGentleReviewOptionsDesc": "選擇要在目前專案或整個 PiCode 中啟用審查。",
+	"picodeGentleCodeReview": "程式碼審查",
+	"picode.review.enabled": "在 PiCode 聊天中提供 Gentle 程式碼審查。"
 }

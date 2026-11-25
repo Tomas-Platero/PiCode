@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "Aktywność rozmów · ostatnie 30 dni",
 	"picodeUsageHistoryUnavailable": "Aktywność rozmów nie jest jeszcze dostępna.",
 	"picodeUsageHistoryTokens": "{0} tokenów",
-	"picodeUsageHistoryEmpty": "Brak aktywności rozmów w tym okresie."
+	"picodeUsageHistoryEmpty": "Brak aktywności rozmów w tym okresie.",
+	"picodeGentleReviewOptions": "Ustawienia przeglądu",
+	"picodeGentleReviewOptionsDesc": "Wybierz, czy włączyć przeglądy w tym projekcie, czy w całym PiCode.",
+	"picodeGentleCodeReview": "Przegląd kodu",
+	"picode.review.enabled": "Udostępnij przegląd kodu z Gentle w czatach PiCode."
 }

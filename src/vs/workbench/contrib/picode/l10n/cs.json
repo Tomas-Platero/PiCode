@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "Aktivita konverzací · posledních 30 dní",
 	"picodeUsageHistoryUnavailable": "Aktivita konverzací zatím není k dispozici.",
 	"picodeUsageHistoryTokens": "{0} tokenů",
-	"picodeUsageHistoryEmpty": "V tomto období žádná aktivita konverzací."
+	"picodeUsageHistoryEmpty": "V tomto období žádná aktivita konverzací.",
+	"picodeGentleReviewOptions": "Nastavení kontroly",
+	"picodeGentleReviewOptionsDesc": "Zvolte, zda kontroly povolit v tomto projektu nebo v celém PiCode.",
+	"picodeGentleCodeReview": "Kontrola kódu",
+	"picode.review.enabled": "Zpřístupnit kontrolu kódu pomocí Gentle v chatech PiCode."
 }

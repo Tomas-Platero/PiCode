@@ -84,6 +84,12 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 	id: 'picode',
 	title: 'PiCode',
 	properties: {
+		'picode.review.enabled': {
+			type: 'boolean',
+			default: false,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('picode.review.enabled', "Make Gentle code review available in PiCode chats."),
+		},
 		'picode.chat.confirmSend': {
 			type: 'boolean',
 			default: false,

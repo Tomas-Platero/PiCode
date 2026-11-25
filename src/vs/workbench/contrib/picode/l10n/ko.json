@@ -2488,5 +2488,9 @@
 	"picodeUsageHistoryTitle": "대화 활동 · 최근 30일",
 	"picodeUsageHistoryUnavailable": "대화 활동을 아직 사용할 수 없습니다.",
 	"picodeUsageHistoryTokens": "토큰 {0}개",
-	"picodeUsageHistoryEmpty": "이 기간의 대화 활동이 없습니다."
+	"picodeUsageHistoryEmpty": "이 기간의 대화 활동이 없습니다.",
+	"picodeGentleReviewOptions": "검토 설정",
+	"picodeGentleReviewOptionsDesc": "이 프로젝트 또는 PiCode 전체에서 검토를 사용할지 선택하세요.",
+	"picodeGentleCodeReview": "코드 검토",
+	"picode.review.enabled": "PiCode 채팅에서 Gentle 코드 검토를 사용할 수 있게 합니다."
 }
