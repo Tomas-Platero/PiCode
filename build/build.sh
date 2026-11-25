@@ -678,6 +678,16 @@ if [[ "${CHECK_ONLY}" == "yes" ]]; then
   exit 0
 fi
 
+require_tool go "Packaging Gentle AI requires Go 1.25.10 or newer. GitHub Actions installs it automatically."
+if ! go version | node -e '
+  const match = /^go version go(\d+)\.(\d+)\.(\d+)\s/.exec(require("node:fs").readFileSync(0, "utf8"));
+  const [major, minor, patch] = match?.slice(1).map(Number) ?? [];
+  process.exit(major > 1 || major === 1 && (minor > 25 || minor === 25 && patch >= 10) ? 0 : 1);
+'; then
+  echo "error: packaging Gentle AI requires Go 1.25.10 or newer." >&2
+  exit 2
+fi
+
 # The step that staged `extensions/picode-pi-chat` as a built-in extension was **removed on
 # 2026-09-24 by the owner's decision**: pi lives in the core, and the extension is being
 # migrated into it. Nothing compiled the directory, and on 2026-09-27 the owner deleted it
@@ -750,7 +760,7 @@ KEY_EXT=$( node build/build-helpers.mjs cache fingerprint extensions "${PICODE_C
 KEY_PACK=$( node build/build-helpers.mjs cache fingerprint pack "${PICODE_CACHE_ENV[@]}" )
 
 # What the early exit trusts is exactly what the verification at the end trusts: an editor
-# executable, the packaged out/ and pi.
+# executable, the packaged out/ and the agent runtimes.
 pack_intact() {
   [[ -d "${PACK_DIR}" ]] || return 1
   compgen -G "${PACK_DIR}/PiCode*.exe" > /dev/null || return 1
@@ -758,6 +768,7 @@ pack_intact() {
   local pi_entry
   pi_entry="${PACK_DIR}/resources/pi-runtime/node_modules/$( node -p "require('./build/distribution/runtime.json').package" )/dist/index.js"
   [[ -f "${pi_entry}" ]] || return 1
+  node build/verify-gentle-runtime.mjs "${PACK_DIR}/resources/gentle-ai" "${VSCODE_ARCH}"
 }
 
 if [[ "${PICODE_FULL_BUILD:-0}" != "1" ]] && pack_intact \
@@ -937,8 +948,8 @@ node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_mo
 # ---------------------------------------------------------------------------
 # pi, the memory engine, and the distribution layer
 # ---------------------------------------------------------------------------
-# pi and the memory engine are independent: none reads another's output, and
-# both only write into the pack. Running them in parallel shaves the longest off the build
+# pi, Gentle AI and the memory engine are independent: none reads another's output, and
+# they only write into the pack. Running them in parallel shaves the longest off the build
 # instead of adding them.
 picode_phase 5 "stage" "pi, the memory engine, and the distribution layer, onto ${PACK_DIR}"
 
@@ -946,14 +957,18 @@ bash build/pi-runtime.sh "${PACK_DIR}" &
 PI_PID=$!
 bash build/engram-runtime.sh "${PACK_DIR}" &
 ENGRAM_PID=$!
+bash build/gentle-runtime.sh "${PACK_DIR}" &
+GENTLE_PID=$!
 
 PI_OK=0
 ENGRAM_OK=0
+GENTLE_OK=0
 wait "${PI_PID}" && PI_OK=1 || PI_OK=0
 wait "${ENGRAM_PID}" && ENGRAM_OK=1 || ENGRAM_OK=0
+wait "${GENTLE_PID}" && GENTLE_OK=1 || GENTLE_OK=0
 
-if [[ "${PI_OK}" -ne 1 || "${ENGRAM_OK}" -ne 1 ]]; then
-  echo "error: pi or the memory engine failed to stage (pi=${PI_OK}, engram=${ENGRAM_OK})." >&2
+if [[ "${PI_OK}" -ne 1 || "${ENGRAM_OK}" -ne 1 || "${GENTLE_OK}" -ne 1 ]]; then
+  echo "error: a runtime failed to stage (pi=${PI_OK}, engram=${ENGRAM_OK}, gentle-ai=${GENTLE_OK})." >&2
   exit 1
 fi
 
@@ -1002,6 +1017,9 @@ fi
 ENGRAM_BINARY="${PACK_DIR}/resources/memory/$( node -p "require('./build/distribution/engram.json').binary" )"
 if [[ ! -f "${ENGRAM_BINARY}" ]]; then
   echo "  !! the memory engine is missing: ${ENGRAM_BINARY}" >&2; VERIFY_OK="no"
+fi
+if ! node build/verify-gentle-runtime.mjs "${PACK_DIR}/resources/gentle-ai" "${VSCODE_ARCH}"; then
+  VERIFY_OK="no"
 fi
 # Where the binary is part of what is being published, the pack is not complete without it.
 if [[ "${PICODE_REQUIRE_CLI:-0}" == "1" && ! -f "${PACK_DIR}/bin/picode-cli.exe" && ! -f "${PACK_DIR}/bin/picode-cli" ]]; then
