@@ -669,5 +669,7 @@
 	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 생각: **{0}**. `/thinking <level>`로 고를 수 있습니다: {1}.",
 	"Save this memory?": "이 기억을 저장할까요?",
 	"Name this session": "세션 이름 지정",
+	"The profile was applied, but its model is unavailable in the chat selector.": "프로필이 적용되었지만 해당 모델을 채팅 선택기에서 사용할 수 없습니다.",
+	"The profile was applied, but its model could not be selected in this chat.": "프로필이 적용되었지만 이 채팅에서 해당 모델을 선택하지 못했습니다.",
 	"Tokens": "토큰"
 }

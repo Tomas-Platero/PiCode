@@ -2483,5 +2483,6 @@
 	"picodeSyncCloud": "云端",
 	"picodeSyncChooseSettingProgress": "选择要保留的值（{0}/{1}）",
 	"picodeSyncConflictChanged": "设置冲突已有变化。请重新打开以查看最新版本。",
-	"picodeSyncSettingRemoved": "设置已移除"
+	"picodeSyncSettingRemoved": "设置已移除",
+	"picode.profileChip.unknown": "代理配置文件"
 }

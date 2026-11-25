@@ -2483,5 +2483,6 @@
 	"picodeSyncCloud": "Nuvem",
 	"picodeSyncChooseSettingProgress": "Escolha o valor a manter ({0} de {1})",
 	"picodeSyncConflictChanged": "O conflito de configurações mudou. Abra-o novamente para ver as versões mais recentes.",
-	"picodeSyncSettingRemoved": "Configuração removida"
+	"picodeSyncSettingRemoved": "Configuração removida",
+	"picode.profileChip.unknown": "Perfil do agente"
 }

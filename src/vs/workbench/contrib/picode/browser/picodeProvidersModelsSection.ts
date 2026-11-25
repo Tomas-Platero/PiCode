@@ -26,6 +26,7 @@ import {
 } from '../../chat/browser/aiCustomization/aiCustomizationManagementSectionRegistry.js';
 import { AICustomizationManagementSection } from '../../chat/common/aiCustomizationWorkspaceService.js';
 import { ILanguageModelsService } from '../../chat/common/languageModels.js';
+import { IChatWidgetService } from '../../chat/browser/chat.js';
 import { PICODE_PROVIDERS_SETTING } from './picodeConfiguration.js';
 import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
 
@@ -147,7 +148,8 @@ interface IAgentProfilesView {
 	readonly editorProfile?: string;
 	readonly live: boolean;
 	/** The profile the chat in front was moved to from the editor, when it was. */
-	readonly chat?: string;
+	readonly chat?: string | null;
+	readonly useSucceeded?: boolean;
 }
 
 /** Gentle's reserved name for the main agent inside a profile. */
@@ -224,6 +226,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
 		@IContextViewService private readonly contextViewService: IContextViewService,
 		@ICommandService private readonly commandService: ICommandService,
+		@IChatWidgetService private readonly chatWidgetService: IChatWidgetService,
 		@IQuickInputService private readonly quickInputService: IQuickInputService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IContextMenuService private readonly contextMenuService: IContextMenuService,
@@ -929,7 +932,8 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	/** Asks the connector for the agent profiles. */
 	private async loadAgents(): Promise<void> {
 		try {
-			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.state');
+			const chatKey = this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString() ?? '';
+			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.state', chatKey);
 		} catch {
 			this.profilesView = undefined;
 		}
@@ -964,8 +968,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	/** Uses a profile: by default (and in the chat in front), or only in the chat in front. */
 	private async useProfile(name: string, mode: 'default' | 'session'): Promise<void> {
 		try {
-			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.use', { name, mode });
-			this.agentNote = mode === 'session' ? localize('picodePm.profileUsedHere', "This chat now uses {0}.", name) : '';
+			const chatKey = this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString() ?? '';
+			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.use', { name, mode, chatKey });
+			this.agentNote = mode === 'session' && this.profilesView?.useSucceeded === true ? localize('picodePm.profileUsedHere', "This chat now uses {0}.", name) : '';
 			this.agentNoteIsError = false;
 		} catch {
 			// The connector said why in a notification.

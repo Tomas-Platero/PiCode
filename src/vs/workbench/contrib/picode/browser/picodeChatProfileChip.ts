@@ -30,6 +30,8 @@ import { ITelemetryService } from '../../../../platform/telemetry/common/telemet
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { IChatWidgetService } from '../../chat/browser/chat.js';
+import { ILanguageModelsService } from '../../chat/common/languageModels.js';
+import { URI } from '../../../../base/common/uri.js';
 import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { ChatAgentLocation } from '../../chat/common/constants.js';
 
@@ -45,7 +47,8 @@ interface IProfilesView {
 	readonly invalid: boolean;
 	readonly resolved: { readonly name?: string; readonly source: 'local' | 'repo' | 'default' };
 	readonly editorProfile?: string;
-	readonly chat?: string;
+	readonly chat?: string | null;
+	readonly live: boolean;
 }
 
 /** The profiles as the connector reads them; read again when the window or the chat in front changes. */
@@ -54,10 +57,11 @@ class ProfileChipModel extends Disposable {
 	readonly onDidChange = this._onDidChange.event;
 	view: IProfilesView | undefined;
 	private last = '';
+	private refreshSequence = 0;
 
 	constructor(
 		private readonly commandService: ICommandService,
-		chatWidgetService: IChatWidgetService,
+		private readonly chatWidgetService: IChatWidgetService,
 		hostService: IHostService,
 	) {
 		super();
@@ -67,11 +71,16 @@ class ProfileChipModel extends Disposable {
 	}
 
 	async refresh(): Promise<void> {
+		const sequence = ++this.refreshSequence;
+		const chatKey = this.focusedChatKey();
 		let view: IProfilesView | undefined;
 		try {
-			view = await this.commandService.executeCommand<IProfilesView>('picode.agentProfiles.state');
+			view = await this.commandService.executeCommand<IProfilesView>('picode.agentProfiles.state', chatKey);
 		} catch {
 			view = undefined;
+		}
+		if (sequence !== this.refreshSequence || chatKey !== this.focusedChatKey()) {
+			return;
 		}
 		const key = JSON.stringify(view ?? null);
 		if (key !== this.last) {
@@ -81,9 +90,13 @@ class ProfileChipModel extends Disposable {
 		}
 	}
 
+	focusedChatKey(): string {
+		return this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString() ?? '';
+	}
+
 	/** The profile this chat answers with, as far as the editor knows. */
 	current(): string | undefined {
-		return this.view?.chat ?? this.view?.resolved.name ?? this.view?.active;
+		return this.view?.live ? this.view.chat ?? undefined : this.view?.resolved.name ?? this.view?.active;
 	}
 }
 
@@ -105,7 +118,7 @@ class ProfileChipActionViewItem extends ActionWidgetDropdownActionViewItem {
 		@ITelemetryService telemetryService: ITelemetryService,
 	) {
 		const use = (name: string, mode: 'default' | 'session') => async () => {
-			await commandService.executeCommand('picode.agentProfiles.use', { name, mode, ask: false });
+			await commandService.executeCommand('picode.agentProfiles.use', { name, mode, ask: false, chatKey: model.focusedChatKey() });
 			await model.refresh();
 		};
 		const actionProvider: IActionWidgetDropdownActionProvider = {
@@ -167,7 +180,7 @@ class ProfileChipActionViewItem extends ActionWidgetDropdownActionViewItem {
 
 	protected override renderLabel(element: HTMLElement): IDisposable | null {
 		this.setAriaLabelAttributes(element);
-		const name = this.model.current() ?? '';
+		const name = this.model.current() ?? localize('picode.profileChip.unknown', "Agent profile");
 		reset(element, ...renderLabelWithIcons(`$(${Codicon.robot.id})`), $('span.chat-input-picker-label', undefined, name));
 		const view = this.model.view;
 		const hint = view === undefined ? name : `${origin(view)}: ${name}`;
@@ -179,7 +192,10 @@ class ProfileChipActionViewItem extends ActionWidgetDropdownActionViewItem {
 
 /** Where the profile in use comes from, in a few words. */
 function origin(view: IProfilesView): string {
-	if (view.chat !== undefined && view.chat !== view.resolved.name) {
+	if (view.live && typeof view.chat !== 'string') {
+		return localize('picode.profileChip.unknown', "Agent profile");
+	}
+	if (typeof view.chat === 'string' && view.chat !== view.resolved.name) {
 		return localize('picode.profileChip.fromChat', "Agent profile · chosen for this chat");
 	}
 	switch (view.resolved.source) {
@@ -222,6 +238,7 @@ class PicodeProfileChipContribution extends Disposable implements IWorkbenchCont
 	constructor(
 		@ICommandService commandService: ICommandService,
 		@IChatWidgetService chatWidgetService: IChatWidgetService,
+		@ILanguageModelsService languageModelsService: ILanguageModelsService,
 		@IHostService hostService: IHostService,
 		@IActionViewItemService actionViewItemService: IActionViewItemService,
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -229,6 +246,21 @@ class PicodeProfileChipContribution extends Disposable implements IWorkbenchCont
 		super();
 		const model = this._register(new ProfileChipModel(commandService, chatWidgetService, hostService));
 		this._register(CommandsRegistry.registerCommand(PROFILE_CHIP_REFRESH_COMMAND, () => model.refresh()));
+		this._register(CommandsRegistry.registerCommand('picode.chat.profile.selectedModel', (_accessor, chatKey: string) => {
+			const widget = chatKey ? chatWidgetService.getWidgetBySessionResource(URI.parse(chatKey)) : undefined;
+			return widget ? widget.input.selectedLanguageModel.get()?.identifier ?? null : undefined;
+		}));
+		this._register(CommandsRegistry.registerCommand('picode.chat.profile.syncModel', async (_accessor, chatKey: string, modelId: string, expected: string | null) => {
+			const widget = chatKey ? chatWidgetService.getWidgetBySessionResource(URI.parse(chatKey)) : undefined;
+			if (!widget || (widget.input.selectedLanguageModel.get()?.identifier ?? null) !== expected) { return 'changed'; }
+			const ids = await languageModelsService.selectLanguageModels({ vendor: 'picode', id: modelId });
+			if ((widget.input.selectedLanguageModel.get()?.identifier ?? null) !== expected) { return 'changed'; }
+			const id = ids[0];
+			const metadata = id ? languageModelsService.lookupLanguageModel(id) : undefined;
+			if (!id || !metadata) { return 'unavailable'; }
+			widget.input.setCurrentLanguageModel({ metadata, identifier: id }, false, false);
+			return 'synced';
+		}));
 		this._register(actionViewItemService.register(MenuId.ChatInput, PROFILE_CHIP_COMMAND, action => instantiationService.createInstance(ProfileChipActionViewItem, action, model)));
 	}
 }
