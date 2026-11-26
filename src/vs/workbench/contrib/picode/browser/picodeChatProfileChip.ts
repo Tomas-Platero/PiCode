@@ -34,6 +34,8 @@ import { ILanguageModelsService } from '../../chat/common/languageModels.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { ChatAgentLocation } from '../../chat/common/constants.js';
+import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
+import { PROFILE_ICONS_KEY, profileIcon } from './picodeAgentProfileIcons.js';
 
 const PROFILE_CHIP_COMMAND = 'picode.chat.profileChip';
 /** Run by the connector after a profile changes, so the chip shows it at once. */
@@ -41,7 +43,7 @@ const PROFILE_CHIP_REFRESH_COMMAND = 'picode.chat.profileChip.refresh';
 
 /** The part of `picode.agentProfiles.state` the chip reads. */
 interface IProfilesView {
-	readonly profiles: readonly { readonly name: string }[];
+	readonly profiles: readonly { readonly name: string; readonly mode?: string }[];
 	readonly active?: string;
 	readonly unsaved: boolean;
 	readonly invalid: boolean;
@@ -116,6 +118,7 @@ class ProfileChipActionViewItem extends ActionWidgetDropdownActionViewItem {
 		@IKeybindingService keybindingService: IKeybindingService,
 		@IContextKeyService contextKeyService: IContextKeyService,
 		@ITelemetryService telemetryService: ITelemetryService,
+		@IStorageService private readonly storageService: IStorageService,
 	) {
 		const use = (name: string, mode: 'default' | 'session') => async () => {
 			await commandService.executeCommand('picode.agentProfiles.use', { name, mode, ask: false, chatKey: model.focusedChatKey() });
@@ -157,6 +160,7 @@ class ProfileChipActionViewItem extends ActionWidgetDropdownActionViewItem {
 			listOptions: { minWidth: 220 },
 		}, actionWidgetService, keybindingService, contextKeyService, telemetryService);
 		this._register(model.onDidChange(() => this.paint()));
+		this._register(storageService.onDidChangeValue(StorageScope.PROFILE, PROFILE_ICONS_KEY, this._store)(() => this.paint()));
 	}
 
 	override render(container: HTMLElement): void {
@@ -181,7 +185,9 @@ class ProfileChipActionViewItem extends ActionWidgetDropdownActionViewItem {
 	protected override renderLabel(element: HTMLElement): IDisposable | null {
 		this.setAriaLabelAttributes(element);
 		const name = this.model.current() ?? localize('picode.profileChip.unknown', "Agent profile");
-		reset(element, ...renderLabelWithIcons(`$(${Codicon.robot.id})`), $('span.chat-input-picker-label', undefined, name));
+		const mode = this.model.view?.profiles.find(profile => profile.name === this.model.current())?.mode;
+		const icon = profileIcon(this.storageService, this.model.current(), mode);
+		reset(element, ...renderLabelWithIcons(`$(${icon.id})`), $('span.chat-input-picker-label', undefined, name));
 		const view = this.model.view;
 		const hint = view === undefined ? name : `${origin(view)}: ${name}`;
 		element.setAttribute('aria-label', localize('picode.profileChip.hint', "Agent profile: {0}. Click to switch.", name));

@@ -29,7 +29,7 @@ import { ILanguageFeaturesService } from '../../../../../../../editor/common/ser
 import { IOutlineModelService } from '../../../../../../../editor/contrib/documentSymbols/browser/outlineModel.js';
 import { localize } from '../../../../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../../../../platform/actions/common/actions.js';
-import { CommandsRegistry } from '../../../../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../../../../platform/configuration/common/configuration.js';
 import { FileKind, IFileService } from '../../../../../../../platform/files/common/files.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../../platform/instantiation/common/instantiation.js';
@@ -343,6 +343,7 @@ Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench).regi
 
 class AgentCompletions extends Disposable {
 	constructor(
+		@ICommandService private readonly commandService: ICommandService,
 		@ILanguageFeaturesService private readonly languageFeaturesService: ILanguageFeaturesService,
 		@IChatWidgetService private readonly chatWidgetService: IChatWidgetService,
 		@IChatAgentService private readonly chatAgentService: IChatAgentService,
@@ -350,6 +351,27 @@ class AgentCompletions extends Disposable {
 		@IChatSessionsService private readonly chatSessionsService: IChatSessionsService,
 	) {
 		super();
+		this._register(this.languageFeaturesService.completionProvider.register({ scheme: Schemas.vscodeChatInput, hasAccessToAllModels: true }, {
+			_debugDisplayName: 'picodeCommandArguments',
+			triggerCharacters: [' '],
+			provideCompletionItems: async (model, position, _context, token) => {
+				const widget = this.chatWidgetService.getWidgetByInputUri(model.uri);
+				if (!widget?.viewModel || position.lineNumber !== 1) { return; }
+				const line = model.getValueInRange(new Range(1, 1, 1, position.column));
+				const match = /^(\/([\w:.-]+)\s+)(.*)$/.exec(line);
+				if (!match) { return; }
+				const session = widget.viewModel.model.sessionResource.toString();
+				let items: Array<{ value: string; label: string; description?: string }> | undefined;
+				try {
+					items = await this.commandService.executeCommand('picode.chat.commandArguments', session, match[2], match[3]);
+				} catch {
+					return;
+				}
+				if (token.isCancellationRequested || !Array.isArray(items)) { return; }
+				const range = new Range(1, match[1].length + 1, 1, position.column);
+				return { suggestions: items.map(item => ({ label: item.label, detail: item.description, filterText: match[3], insertText: item.value, range, kind: CompletionItemKind.Text })) };
+			}
+		}));
 
 
 		const subCommandProvider: CompletionItemProvider = {

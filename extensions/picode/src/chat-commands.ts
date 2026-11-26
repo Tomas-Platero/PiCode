@@ -35,19 +35,59 @@ export interface ChatSlashCommand {
 export const EDITOR_COMMANDS: readonly ChatSlashCommand[] = [
 	{ name: 'compact', description: l10n.t('Summarize the conversation so far to free up context'), argumentHint: l10n.t('[what to keep]') },
 	{ name: 'new', description: l10n.t('Start a new chat') },
-	{ name: 'model', description: l10n.t('Choose the model') },
+	{ name: 'model', description: l10n.t('Choose the model'), argumentHint: '<provider/model>' },
 	{ name: 'thinking', description: l10n.t('Set how hard the model thinks'), argumentHint: '[off | minimal | low | medium | high | xhigh | max]' },
 	{ name: 'name', description: l10n.t('Rename this conversation'), argumentHint: '<name>' },
 	{ name: 'session', description: l10n.t('Show this conversation’s messages, tokens and cost') },
-	{ name: 'export', description: l10n.t('Save this conversation as a web page') },
+	{ name: 'export', description: l10n.t('Export this conversation'), argumentHint: '[file.html | file.jsonl]' },
 	{ name: 'copy', description: l10n.t('Copy the last answer') },
 	{ name: 'reload', description: l10n.t('Reload extensions, skills and prompts') },
 	{ name: 'resume', description: l10n.t('Open an earlier conversation') },
-	{ name: 'login', description: l10n.t('Connect a provider') },
+	{ name: 'login', description: l10n.t('Connect a provider'), argumentHint: '[provider]' },
 	{ name: 'logout', description: l10n.t('Disconnect a provider') },
 	{ name: 'settings', description: l10n.t('Open PiCode’s settings') },
+	{ name: 'trust', description: l10n.t('Manage workspace trust') },
+	{ name: 'hotkeys', description: l10n.t('Open keyboard shortcuts') },
+	{ name: 'mcp', description: l10n.t('Manage MCP servers') },
+	{ name: 'gentle:agents', description: l10n.t('Manage agents and profiles') },
+	{ name: 'gentle:jobs', description: l10n.t('Show tasks') },
 	{ name: 'gentle:models', description: l10n.t('Choose the model of each Gentle agent') },
 ];
+
+/** Native destinations for commands that open PiCode settings. */
+export function editorCommandDestination(name: string, args = ''): { readonly command: string; readonly args: readonly string[] } | undefined {
+	if (name === 'login' || name === 'logout') {
+		return { command: 'picode.providersModels.open', args: args ? ['providers', args] : ['providers'] };
+	}
+	if (name === 'model') {
+		return { command: 'picode.providersModels.open', args: ['models'] };
+	}
+	if (name === 'settings') {
+		return { command: 'aiCustomization.openManagementEditor', args: ['general'] };
+	}
+	if (args.length === 0) {
+		if (name === 'mcp') {
+			return { command: 'aiCustomization.openManagementEditor', args: ['mcpServers'] };
+		}
+		if (name === 'gentle:agents') {
+			return { command: 'picode.providersModels.open', args: ['agents'] };
+		}
+		if (name === 'gentle:jobs') {
+			return { command: 'picode.status.show', args: [] };
+		}
+		if (name === 'trust') {
+			return { command: 'workbench.trust.manage', args: [] };
+		}
+		if (name === 'hotkeys') {
+			return { command: 'aiCustomization.openManagementEditor', args: ['keyboard'] };
+		}
+	}
+	return undefined;
+}
+
+export function conversationExportFormat(target: string): 'html' | 'jsonl' {
+	return target.toLowerCase().endsWith('.jsonl') ? 'jsonl' : 'html';
+}
 
 /** Where the chat sends someone for a command that has no answer in the editor. */
 export type UnavailableAction = 'tasks' | 'agentModels' | 'sessions';
@@ -76,14 +116,10 @@ export const TERMINAL_ONLY_COMMANDS: ReadonlyMap<string, UnavailableCommand> = n
 	['scoped-models', { message: l10n.t('Model cycling is a terminal shortcut; choose the model from the chat’s model picker.') }],
 	['share', { message: l10n.t('Sharing a conversation is only available in pi’s terminal. Use /export to save it as a web page.') }],
 	['bug', { message: l10n.t('Reporting a bug to pi’s developers is only available in pi’s terminal.') }],
-	['trust', { message: l10n.t('Project trust is managed by the editor’s workspace trust.') }],
 	['changelog', { message: l10n.t('pi’s changelog is only shown in its terminal. Updates are listed under Updates.') }],
-	['hotkeys', { message: l10n.t('These are pi’s terminal shortcuts; the editor has its own keyboard shortcuts.') }],
 	['quit', { message: l10n.t('Close the chat or the window to quit.') }],
 	// Extension commands that draw a terminal panel.
 	['intercom', { message: l10n.t('The intercom panel is only available in pi’s terminal. Use /intercom-pool, /alias or /handover here.') }],
-	['gentle:agents', { message: l10n.t('The agents panel is only available in pi’s terminal.'), action: 'agentModels' }],
-	['gentle:jobs', { message: l10n.t('The jobs panel is only available in pi’s terminal.'), action: 'tasks' }],
 	['gentle:review-session-permission', { message: l10n.t('Review permissions are only available in pi’s terminal.') }],
 	// Only a session with the verified runtime can open Gentle's review controls.
 	...Array.from(GENTLE_REVIEW_COMMANDS, name => [name, REVIEW_UNAVAILABLE] as const),
@@ -131,6 +167,12 @@ export function routeSlash(prompt: string, context: SlashContext): SlashRoute | 
 		return undefined;
 	}
 	const { name, args } = parsed;
+	if (editorCommandDestination(name, args)) {
+		return { kind: 'editor', name, args };
+	}
+	if (args.length > 0 && (name === 'gentle:agents' || name === 'gentle:jobs' || name === 'trust' || name === 'hotkeys')) {
+		return { kind: 'unavailable', name, command: { message: l10n.t('This command does not accept arguments here.') } };
+	}
 	if (GENTLE_REVIEW_COMMANDS.has(name) && context.gentleReviewAvailable && context.extensionCommands.has(name)) {
 		return { kind: 'pi', text: prompt.trim() };
 	}
@@ -145,7 +187,7 @@ export function routeSlash(prompt: string, context: SlashContext): SlashRoute | 
 	if (context.extensionCommands.has(name)) {
 		return { kind: 'pi', text: prompt.trim() };
 	}
-	if (EDITOR_COMMAND_NAMES.has(name)) {
+	if (EDITOR_COMMAND_NAMES.has(name) && name !== 'mcp') {
 		return { kind: 'editor', name, args };
 	}
 	if (context.skills.has(name)) {
@@ -155,7 +197,10 @@ export function routeSlash(prompt: string, context: SlashContext): SlashRoute | 
 }
 
 /** Whether a command belongs in the chat's slash list. */
-export function isListedCommand(name: string): boolean {
+export function isListedCommand(name: string, gentleReviewAvailable = false): boolean {
+	if (GENTLE_REVIEW_COMMANDS.has(name)) {
+		return gentleReviewAvailable;
+	}
 	return !TERMINAL_ONLY_COMMANDS.has(name);
 }
 

@@ -41,6 +41,29 @@ function recordOf(value: unknown): Record<string, unknown> | undefined {
 	return typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined;
 }
 
+/** Resolve the live command's argument suggestions for the prefix being typed. */
+export async function piArgumentCompletionsOf(session: unknown, name: string, prefix: string): Promise<Array<{ value: string; label: string; description?: string }>> {
+	try {
+		const runner = recordOf(recordOf(session)?.['extensionRunner']);
+		const getCommands = runner?.['getRegisteredCommands'];
+		if (typeof getCommands !== 'function') { return []; }
+		const commands: unknown = getCommands.call(runner);
+		if (!Array.isArray(commands)) { return []; }
+		const command = commands.map(recordOf).find(item => (item?.['invocationName'] ?? item?.['name']) === name);
+		const complete = command?.['getArgumentCompletions'];
+		if (typeof complete !== 'function') { return []; }
+		const results: unknown = await complete.call(command, prefix);
+		if (!Array.isArray(results)) { return []; }
+		return results.slice(0, 100).flatMap(item => {
+			const value = recordOf(item);
+			if (typeof value?.['value'] !== 'string' || !value['value']) { return []; }
+			return [{ value: value['value'], label: typeof value['label'] === 'string' ? value['label'] : value['value'], ...(typeof value['description'] === 'string' ? { description: value['description'] } : {}) }];
+		});
+	} catch {
+		return [];
+	}
+}
+
 /**
  * The top-level argument options of one registered command, read from its own
  * `getArgumentCompletions` with the empty prefix — the first completion round the TUI
@@ -111,9 +134,9 @@ export function piCommandsOfRunner(piSession: unknown): readonly PiCommand[] {
 		}
 		return registered.flatMap(command => {
 			const record = recordOf(command);
-			const name = typeof record?.['name'] === 'string' && record['name'].length > 0
-				? record['name']
-				: typeof record?.['invocationName'] === 'string' && record['invocationName'].length > 0 ? record['invocationName'] : undefined;
+			const name = typeof record?.['invocationName'] === 'string' && record['invocationName'].length > 0
+				? record['invocationName']
+				: typeof record?.['name'] === 'string' && record['name'].length > 0 ? record['name'] : undefined;
 			if (name === undefined) {
 				return [];
 			}

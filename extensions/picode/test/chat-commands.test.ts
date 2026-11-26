@@ -13,6 +13,35 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { conversationExportFormat, editorCommandDestination } from '../src/chat-commands.ts';
+
+test('provider and model commands open their matching PiCode settings', () => {
+	assert.deepEqual(editorCommandDestination('login'), { command: 'picode.providersModels.open', args: ['providers'] });
+	assert.deepEqual(editorCommandDestination('logout'), { command: 'picode.providersModels.open', args: ['providers'] });
+	assert.deepEqual(editorCommandDestination('model'), { command: 'picode.providersModels.open', args: ['models'] });
+	assert.deepEqual(editorCommandDestination('settings'), { command: 'aiCustomization.openManagementEditor', args: ['general'] });
+	assert.deepEqual(editorCommandDestination('mcp'), { command: 'aiCustomization.openManagementEditor', args: ['mcpServers'] });
+	assert.equal(editorCommandDestination('mcp', 'login example'), undefined);
+	assert.deepEqual(routeSlash('/mcp login example', { extensionCommands: new Set(['mcp']), skills: new Set() }), { kind: 'pi', text: '/mcp login example' });
+	assert.deepEqual(routeSlash('/mcp login example', { extensionCommands: new Set(), skills: new Set() }), { kind: 'pi', text: '/mcp login example' });
+	for (const name of ['gentle:agents', 'gentle:jobs', 'trust', 'hotkeys']) {
+		assert.equal(routeSlash(`/${name} extra`, { extensionCommands: new Set(), skills: new Set() })?.kind, 'unavailable');
+	}
+	assert.deepEqual(editorCommandDestination('gentle:agents'), { command: 'picode.providersModels.open', args: ['agents'] });
+	assert.deepEqual(editorCommandDestination('gentle:jobs'), { command: 'picode.status.show', args: [] });
+	assert.deepEqual(editorCommandDestination('trust'), { command: 'workbench.trust.manage', args: [] });
+	assert.deepEqual(editorCommandDestination('hotkeys'), { command: 'aiCustomization.openManagementEditor', args: ['keyboard'] });
+	assert.equal(editorCommandDestination('compact'), undefined);
+	for (const name of ['model', 'login', 'logout']) {
+		assert.deepEqual(routeSlash(`/${name}`, { extensionCommands: new Set([name]), skills: new Set() }), { kind: 'editor', name, args: '' });
+	}
+});
+
+test('export chooses JSONL for a JSONL filename and HTML otherwise', () => {
+	assert.equal(conversationExportFormat('chat.JSONL'), 'jsonl');
+	assert.equal(conversationExportFormat('chat.html'), 'html');
+	assert.equal(conversationExportFormat(''), 'html');
+});
 import { EDITOR_COMMANDS, isListedCommand, panelText, parseSlash, routeSlash, sessionStatsMarkdown, TERMINAL_ONLY_COMMANDS } from '../src/chat-commands.ts';
 import { chatSlashCommandsOf, piPromptTemplatesOf } from '../src/command-registry.ts';
 
@@ -41,6 +70,8 @@ test('review mode is routed only to a session with a compatible runtime and comm
 		assert.equal(routeSlash(command, registered)?.kind, 'unavailable');
 		assert.equal(routeSlash(command, { ...context, gentleReviewAvailable: true })?.kind, 'unavailable');
 		assert.deepEqual(routeSlash(command, { ...registered, gentleReviewAvailable: true }), { kind: 'pi', text: command });
+		assert.equal(isListedCommand(name), false);
+		assert.equal(isListedCommand(name, true), true);
 	}
 });
 
@@ -67,10 +98,7 @@ test('an extension command of the same name wins over the editor’s answer', ()
 test('a terminal-only command is said plainly, never sent to the model', () => {
 	const tree = routeSlash('/tree', context);
 	assert.equal(tree?.kind, 'unavailable');
-	// Even when an extension registered it: it would draw a panel nobody sees.
-	const jobs = routeSlash('/gentle:jobs', context);
-	assert.equal(jobs?.kind, 'unavailable');
-	assert.equal(jobs?.kind === 'unavailable' ? jobs.command.action : undefined, 'tasks');
+	assert.deepEqual(routeSlash('/gentle:jobs', context), { kind: 'editor', name: 'gentle:jobs', args: '' });
 });
 
 test('an unknown slash text still reaches pi (a prompt template, or a path the model reads)', () => {
@@ -91,8 +119,8 @@ test('the slash list holds commands, templates and the editor’s answers, witho
 		promptTemplates: [{ name: 'skill-creation', description: 'Create a skill', argumentHint: '<topic>' }, { name: 'gentle:status' }],
 	};
 	const listed = chatSlashCommandsOf(session, [{ name: 'compact', description: 'Compact' }], isListedCommand);
-	assert.deepEqual(listed.map(command => command.name), ['gentle:status', 'skill-creation', 'compact']);
-	assert.deepEqual(listed[1], { name: 'skill-creation', description: 'Create a skill', argumentHint: '<topic>' });
+	assert.deepEqual(listed.map(command => command.name), ['gentle:status', 'gentle:jobs', 'skill-creation', 'compact']);
+	assert.deepEqual(listed[2], { name: 'skill-creation', description: 'Create a skill', argumentHint: '<topic>' });
 });
 
 test('templates are read defensively', () => {

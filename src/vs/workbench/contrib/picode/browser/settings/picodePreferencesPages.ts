@@ -451,6 +451,11 @@ registerPage({
 			read: stored => stored !== 'hide',
 			write: on => on ? 'show' : 'hide',
 		});
+		page.group(localize('picodePiNotices', "Notices"));
+		page.switchRow({ key: 'picode.pi.notices.cacheMisses', name: localize('picodePiNoticeCacheMisses', "Cache misses"), description: localize('picodePiNoticeCacheMissesDesc', "Notify when a request cannot reuse much of the prompt cache.") });
+		page.switchRow({ key: 'picode.pi.notices.cacheWarming', name: localize('picodePiNoticeCacheWarming', "Cache refreshes"), description: localize('picodePiNoticeCacheWarmingDesc', "Show the cost when the prompt cache is refreshed.") });
+		page.switchRow({ key: 'picode.pi.notices.compactionCosts', name: localize('picodePiNoticeCompactionCosts', "Compaction costs"), description: localize('picodePiNoticeCompactionCostsDesc', "Show the cost when a conversation is compacted.") });
+		page.switchRow({ key: 'picode.pi.notices.reasoningDrops', name: localize('picodePiNoticeReasoningDrops', "Omitted reasoning"), description: localize('picodePiNoticeReasoningDropsDesc', "Notify when a provider omits earlier reasoning.") });
 
 		page.group(localize('picodeSetContext', "Context"));
 		page.numberRow({ key: 'chat.fontSize', name: localize('picodeExtraChatFont', "Chat text size"), min: 8, max: 40 });

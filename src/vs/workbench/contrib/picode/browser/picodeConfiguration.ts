@@ -223,6 +223,22 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			order: 4,
 			markdownDescription: localize('picode.pi.reasoning', "Whether the model's thinking is written into the chat. It is long, and the answer is usually what is wanted."),
 		},
+		'picode.pi.notices.cacheMisses': {
+			type: 'boolean', default: false,
+			description: localize('picode.pi.notices.cacheMisses', "Notify when a request cannot reuse much of the prompt cache."),
+		},
+		'picode.pi.notices.cacheWarming': {
+			type: 'boolean', default: false,
+			description: localize('picode.pi.notices.cacheWarming', "Notify when the prompt cache is refreshed and show its cost."),
+		},
+		'picode.pi.notices.compactionCosts': {
+			type: 'boolean', default: false,
+			description: localize('picode.pi.notices.compactionCosts', "Notify about the cost of compacting the conversation."),
+		},
+		'picode.pi.notices.reasoningDrops': {
+			type: 'boolean', default: false,
+			description: localize('picode.pi.notices.reasoningDrops', "Notify when a provider omits earlier reasoning."),
+		},
 		[PICODE_DISABLED_TOOLS_SETTING]: {
 			type: 'array',
 			items: { type: 'string' },

@@ -40,6 +40,7 @@ import {
 } from './permissions';
 import { editorTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
+import { piNotice, type PiNotices } from './pi-notices';
 import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
 import { LateTurnCollector, type LateTurnEvent } from './late-turn';
 import { TODO_TOOL_NAME, TodoTracker, todoFromResult, type TodoBoard } from './agent-todo';
@@ -73,7 +74,7 @@ import { settingsForFolder } from './folder-trust';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
-import { chatSlashCommandsOf, piCommandsOfRunner, type PiCommand } from './command-registry';
+import { chatSlashCommandsOf, piArgumentCompletionsOf, piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 import { gentleAgents } from './gentle-agents-store';
@@ -82,7 +83,7 @@ import { isAgentModelsCommand } from './gentle-models';
 import { isExpectedHelperNotice, isStartupHousekeepingNotice } from './extension-notices';
 import { recordUsageHeaders } from './subscription-usage';
 import { CHAT_MODEL_ENV } from './subagent-model-fallback';
-import { displayedCustomText, EDITOR_COMMANDS, isListedCommand, LEARNED_TERMINAL_ONLY, panelText, parseSlash, routeSlash, sessionStatsMarkdown, type SlashContext, type UnavailableCommand } from './chat-commands';
+import { conversationExportFormat, displayedCustomText, EDITOR_COMMANDS, editorCommandDestination, isListedCommand, LEARNED_TERMINAL_ONLY, panelText, parseSlash, routeSlash, sessionStatsMarkdown, type SlashContext, type UnavailableCommand } from './chat-commands';
 import { LearnedCommands, terminalOnlyVerdict } from './learned-commands';
 import { summariseSessionUsage, type SessionUsage } from './session-usage';
 export type { SessionUsage };
@@ -217,6 +218,7 @@ export interface PiSession {
 	readonly sessionId: string;
 	readonly isStreaming: boolean;
 	readonly model?: PiModel;
+	readonly sessionManager?: { getEntries(): readonly unknown[]; getBranch?(): readonly unknown[] };
 	readonly thinkingLevel?: string;
 	/**
 	 * Send a prompt. While {@link isStreaming}, pi **requires** the queueing choice and refuses the
@@ -260,6 +262,7 @@ export interface PiSession {
 	compact?(customInstructions?: string): Promise<unknown>;
 	getSessionStats?(): PiSessionStats;
 	exportToHtml?(outputPath?: string): Promise<string>;
+	exportToJsonl?(outputPath?: string): string;
 	getLastAssistantText?(): string | undefined;
 	readonly promptTemplates?: ReadonlyArray<{ readonly name: string; readonly description?: string; readonly argumentHint?: string }>;
 	readonly resourceLoader?: { getSkills?(): { readonly skills: ReadonlyArray<{ readonly name: string }> } };
@@ -1565,6 +1568,11 @@ function answerUnavailable(stream: vscode.ChatResponseStream, command: Unavailab
  */
 async function runEditorCommand(name: string, args: string, session: PiSession, stream: vscode.ChatResponseStream, deps: AgentDeps, cwd: string): Promise<boolean> {
 	const run = (command: string, ...commandArgs: unknown[]): Thenable<unknown> => vscode.commands.executeCommand(command, ...commandArgs);
+	const destination = editorCommandDestination(name, args);
+	if (destination !== undefined) {
+		await run(destination.command, ...destination.args);
+		return false;
+	}
 	switch (name) {
 		case 'compact': {
 			if (typeof session.compact !== 'function') {
@@ -1578,9 +1586,6 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 		}
 		case 'new':
 			await run('workbench.action.chat.newChat');
-			return false;
-		case 'model':
-			await run('workbench.action.chat.openModelPicker');
 			return false;
 		case 'thinking': {
 			const level = args.toLowerCase();
@@ -1626,8 +1631,9 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 			return false;
 		}
 		case 'export': {
-			if (typeof session.exportToHtml !== 'function') {
-				stream.markdown(vscode.l10n.t('This pi cannot save a conversation as a web page.'));
+			const jsonl = conversationExportFormat(args) === 'jsonl';
+			if (jsonl ? typeof session.exportToJsonl !== 'function' : typeof session.exportToHtml !== 'function') {
+				stream.markdown(jsonl ? vscode.l10n.t('This pi cannot export a conversation as JSONL.') : vscode.l10n.t('This pi cannot save a conversation as a web page.'));
 				return false;
 			}
 			stream.progress(vscode.l10n.t('Saving the conversation…'));
@@ -1637,10 +1643,29 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 			const target = args.length === 0
 				? `pi-session-${new Date().toISOString().replace(/[:.]/g, '-')}.html`
 				: args;
-			const file = await session.exportToHtml(path.resolve(cwd, target));
-			stream.markdown(vscode.l10n.t('📄 Conversation saved as a web page.'));
+			let file: string;
+			if (jsonl) {
+				const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'picode-export-'));
+				try {
+					const source = session.exportToJsonl!(path.join(temporary, 'session.jsonl'));
+					file = path.resolve(cwd, target);
+					fs.mkdirSync(path.dirname(file), { recursive: true });
+					fs.copyFileSync(source, file, fs.constants.COPYFILE_EXCL);
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== 'EEXIST') { throw error; }
+					stream.markdown(vscode.l10n.t('A file with that name already exists. Choose another name.'));
+					return false;
+				} finally {
+					fs.rmSync(temporary, { recursive: true, force: true });
+				}
+			} else {
+				file = await session.exportToHtml!(path.resolve(cwd, target));
+			}
+			stream.markdown(jsonl ? vscode.l10n.t('📄 Conversation saved as a JSONL file.') : vscode.l10n.t('📄 Conversation saved as a web page.'));
 			// In the editor's own browser, to read it as a page — not as a text file to edit.
-			stream.button({ command: 'workbench.action.browser.openFile', title: vscode.l10n.t('Open it'), arguments: [vscode.Uri.file(file)] });
+			if (!jsonl) {
+				stream.button({ command: 'workbench.action.browser.openFile', title: vscode.l10n.t('Open it'), arguments: [vscode.Uri.file(file)] });
+			}
 			stream.button({ command: 'revealFileInOS', title: vscode.l10n.t('Show the file'), arguments: [vscode.Uri.file(file)] });
 			return false;
 		}
@@ -1659,13 +1684,6 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 			return true;
 		case 'resume':
 			await run('agentSessions.showAgentSessionsSidebar');
-			return false;
-		case 'login':
-		case 'logout':
-			await run('workbench.action.openSettings', 'picode.providers');
-			return false;
-		case 'settings':
-			await run('workbench.action.openSettings', 'picode');
 			return false;
 		case 'gentle:models':
 			stream.markdown(await deps.chooseAgentModels?.() ?? vscode.l10n.t('No change to the agents’ models.'));
@@ -2082,7 +2100,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		}
 		// The key is the session's identity: a rebuilt session reads again instead of
 		// serving another session's registry.
-		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: chatSlashCommandsOf(session, EDITOR_COMMANDS, isListedCommand) };
+		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: chatSlashCommandsOf(session, EDITOR_COMMANDS, name => isListedCommand(name, active?.gentleReviewAvailable === true)) };
 	};
 	sessionMcpProvider = () => {
 		const session = active?.session;
@@ -2113,6 +2131,25 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	 * the manager, not in the session.
 	 */
 	const chats = new Map<string, ChatPi>();
+	context.subscriptions.push(vscode.commands.registerCommand('picode.chat.commandArguments', async (chatKey: unknown, command: unknown, prefix: unknown) => {
+		if (typeof chatKey !== 'string' || typeof command !== 'string' || typeof prefix !== 'string' || prefix.length > 4096) {
+			return [];
+		}
+		const chat = chats.get(chatKey);
+		const session = chat?.session;
+		if (!session) { return []; }
+		const runtime = chat?.services?.modelRuntime;
+		if (runtime && command === 'model') {
+			const needle = prefix.trim().toLowerCase();
+			return runtime.getModels().filter(model => runtime.hasConfiguredAuth(model.provider) && `${model.provider}/${model.id}`.toLowerCase().includes(needle)).slice(0, 100).map(model => ({ value: `${model.provider}/${model.id}`, label: model.name ?? model.id, description: model.provider }));
+		}
+		if (runtime && (command === 'login' || command === 'logout')) {
+			const needle = prefix.trim().toLowerCase();
+			return runtime.getProviders().filter(provider => `${provider.id} ${provider.name}`.toLowerCase().includes(needle)).slice(0, 100).map(provider => ({ value: provider.id, label: provider.name, description: provider.id }));
+		}
+		const results = await piArgumentCompletionsOf(session, command, prefix);
+		return chats.get(chatKey)?.session === session ? results : [];
+	}));
 	/** The chat that spoke last: what the status view, the slash list and the MCP list read. */
 	let active: ChatPi | undefined;
 	/** Which transcript each chat writes, so a chat the editor restores goes on where it was. */
@@ -2286,6 +2323,24 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		// the command with its own pickers.
 		if (deps.chooseAgentModels !== undefined && isAgentModelsCommand(request.prompt)) {
 			stream.markdown(await deps.chooseAgentModels() ?? vscode.l10n.t('No change to the agents’ models.'));
+			return {};
+		}
+		const parsedCommand = parseSlash(request.prompt);
+		if (parsedCommand?.name === 'model' && parsedCommand.args) {
+			const previous = await vscode.commands.executeCommand<string | null | undefined>('picode.chat.profile.selectedModel', chat.key);
+			const result = previous === undefined ? 'unavailable' : await vscode.commands.executeCommand<string>('picode.chat.profile.syncModel', chat.key, parsedCommand.args, previous);
+			if (result === 'synced') {
+				stream.markdown(vscode.l10n.t('Model changed to {0}.', parsedCommand.args));
+			} else if (result === 'changed') {
+				stream.markdown(vscode.l10n.t('The selected model changed. Try again.'));
+			} else {
+				await vscode.commands.executeCommand('picode.providersModels.open', 'models', parsedCommand.args);
+			}
+			return {};
+		}
+		const native = parsedCommand && editorCommandDestination(parsedCommand.name, parsedCommand.args);
+		if (native) {
+			await vscode.commands.executeCommand(native.command, ...native.args);
 			return {};
 		}
 		const loaded = await loadSdk(deps.distributionRoot, deps.log);
@@ -2464,6 +2519,31 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// The session exists and its extensions are loaded; this is what starts them. Called
 				// before the first turn, because `session_start` is where they do their startup work.
 				watchLateTurns(chat.session, chat.key, deps.log);
+				// Cache maintenance can occur between chat turns, so this listener lives with the session.
+				const noticeSession = chat.session;
+				noticeSession.subscribe(event => {
+					const keys: readonly (keyof PiNotices)[] = event.type === 'entry_appended' ? ['cacheWarming']
+						: event.type === 'compaction_end' ? ['compactionCosts']
+							: event.type === 'message_end' && event.message?.role === 'assistant' ? ['cacheMisses', 'reasoningDrops'] : [];
+					if (keys.length === 0) {
+						return;
+					}
+					const config = vscode.workspace.getConfiguration('picode');
+					const manager = noticeSession.sessionManager;
+					for (const key of keys) {
+						if (config.get<boolean>(`pi.notices.${key}`, false)) {
+							const entries = key === 'reasoningDrops' ? manager?.getBranch?.() ?? manager?.getEntries()
+								: key === 'cacheMisses' ? manager?.getEntries() : undefined;
+							const notice = piNotice(event, { [key]: true }, entries ?? []);
+							if (notice) {
+								const title = noticeSession.sessionName?.trim();
+								const message = title && title.length <= 80 && !/[\\/:]/.test(title)
+									? vscode.l10n.t('{0}: {1}', title, notice) : notice;
+								void vscode.window.showInformationMessage(message);
+							}
+						}
+					}
+				});
 				await bindSessionExtensions(chat.session, deps.log, chat.turn, chat.key);
 				chat.sessionFolder = cwd;
 				chat.sessionScopeKey = scopeKey;
