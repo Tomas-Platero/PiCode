@@ -151,6 +151,7 @@ import { NativeWebContentExtractorService } from '../../platform/webContentExtra
 import { AgentNetworkFilterService, IAgentNetworkFilterService } from '../../platform/networkFilter/common/networkFilterService.js';
 import { ITerminalSandboxService, NullTerminalSandboxService } from '../../platform/sandbox/common/terminalSandboxService.js';
 import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetry.js';
+import { PicodeAgentBridge } from './picodeAgentBridge.js';
 import { stopPicodeEngineOnQuit } from '../../platform/update/electron-main/picodeMemoryEngine.js';
 import { dataFolderOf, stopIntercomBrokers, systemBrokerProcesses } from '../../platform/update/electron-main/picodeIntercomBroker.js';
 
@@ -836,6 +837,13 @@ export class CodeApplication extends Disposable {
 
 		// Post Open Windows Tasks
 		this.afterWindowOpen(appInstantiationService);
+
+		// PiCode: the local agent bridge, for apps on this computer that start pi chats. Off by
+		// default; it watches its own setting and starts or stops with it.
+		if (isWindows) {
+			appInstantiationService.invokeFunction(accessor => this._register(new PicodeAgentBridge(
+				accessor.get(IConfigurationService), accessor.get(IWindowsMainService), this.environmentMainService, this.logService)));
+		}
 
 		// Set lifecycle phase to `Eventually` after a short delay and when idle (min 2.5sec, max 5sec)
 		const eventuallyPhaseScheduler = this._register(new RunOnceScheduler(() => {

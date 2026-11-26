@@ -6,7 +6,7 @@
 
 ## 📊 Status
 
-- **19** folders documented · **21** without a README.
+- **24** folders documented · **21** without a README.
 - Root files described: 13.
 
 ## 🌳 Tree
@@ -69,6 +69,8 @@
 │   │   └── upload.ts
 │   ├── distribution/ — Operator guide for build/distribution/. The strategy behind these files is in docs/DISTRIBUTION.md; this file is the short runbook.
 │   │   ├── engram.json
+│   │   ├── gentle-ai.json
+│   │   ├── LICENSE-engram.txt
 │   │   ├── picode-icon.svg
 │   │   ├── picode.ico
 │   │   ├── picode.svg
@@ -306,6 +308,7 @@
 │   ├── branding.mjs
 │   ├── build-builder.cmd
 │   ├── build-cli.sh
+│   ├── build-cli.test.mjs
 │   ├── build-connector.sh
 │   ├── build-fast.sh
 │   ├── build-helpers.mjs
@@ -325,6 +328,7 @@
 │   ├── docs.mjs
 │   ├── engram-runtime.sh
 │   ├── filters.ts
+│   ├── gentle-runtime.sh
 │   ├── gulpfile.cli.ts
 │   ├── gulpfile.compile.ts
 │   ├── gulpfile.editor.ts
@@ -349,8 +353,9 @@
 │   ├── setup-npm-registry.ts
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
-│   └── tsconfig.json
-│   └── … 47 files in total
+│   ├── tsconfig.json
+│   └── verify-gentle-runtime.mjs
+│   └── … 50 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
 │   ├── AGENT-PROFILES.md
@@ -400,6 +405,12 @@
 │   │   │   ├── picode-status.svg
 │   │   │   └── picode.svg
 │   │   ├── skills/ — Skills that PiCode gives pi on top of the ones in its profile, one folder each with its SKILL.md. They travel inside the editor and pi loads them for…
+│   │   │   ├── go-testing/
+│   │   │   │   ├── references/
+│   │   │   │   │   └── examples.md
+│   │   │   │   └── SKILL.md
+│   │   │   ├── systemic-issue-triage/
+│   │   │   │   └── SKILL.md
 │   │   │   ├── web-preview/
 │   │   │   │   └── SKILL.md
 │   │   │   └── README.md
@@ -407,6 +418,7 @@
 │   │   │   ├── agent-profiles-live.ts
 │   │   │   ├── agent-profiles-ui.ts
 │   │   │   ├── agent-profiles.ts
+│   │   │   ├── agent-progress-live.ts
 │   │   │   ├── agent-todo.ts
 │   │   │   ├── agent-transcript-panel.ts
 │   │   │   ├── agent-transcript.ts
@@ -438,9 +450,11 @@
 │   │   │   ├── extension.ts
 │   │   │   ├── fetch-retry.ts
 │   │   │   ├── folder-trust.ts
+│   │   │   ├── generated-images.ts
 │   │   │   ├── gentle-agents-store.ts
 │   │   │   ├── gentle-models-ui.ts
 │   │   │   ├── gentle-models.ts
+│   │   │   ├── gentle-review-runtime.ts
 │   │   │   ├── gentle-settings.ts
 │   │   │   ├── import-catalog.ts
 │   │   │   ├── import-extensions.ts
@@ -479,10 +493,12 @@
 │   │   │   ├── past-conversations.ts
 │   │   │   ├── perf-timings.ts
 │   │   │   ├── permissions.ts
+│   │   │   ├── pi-notices.ts
 │   │   │   ├── piConfig.ts
 │   │   │   ├── piLocate.ts
 │   │   │   ├── piSdk.ts
 │   │   │   ├── product-env.ts
+│   │   │   ├── product-mcp.ts
 │   │   │   ├── product-packages.ts
 │   │   │   ├── profile-import.ts
 │   │   │   ├── progress.ts
@@ -498,6 +514,7 @@
 │   │   │   ├── session-cwd.ts
 │   │   │   ├── session-folder.ts
 │   │   │   ├── session-git.ts
+│   │   │   ├── session-problems.ts
 │   │   │   ├── session-transcript.ts
 │   │   │   ├── session-usage.ts
 │   │   │   ├── session-worktree.ts
@@ -519,6 +536,7 @@
 │   │   │   ├── theme-types.ts
 │   │   │   ├── updates-check.ts
 │   │   │   ├── usage-data.ts
+│   │   │   ├── usage-history.ts
 │   │   │   ├── user-data-path.ts
 │   │   │   ├── voice-controller.ts
 │   │   │   ├── voice-engine.ts
@@ -528,10 +546,11 @@
 │   │   │   ├── voice-worker.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 124 files in total
+│   │   │   └── … 131 files in total
 │   │   ├── test/
 │   │   │   ├── agent-profiles-live.test.ts
 │   │   │   ├── agent-profiles.test.ts
+│   │   │   ├── agent-progress-live.test.ts
 │   │   │   ├── agent-todo.test.ts
 │   │   │   ├── agent-transcript.test.ts
 │   │   │   ├── agents.test.ts
@@ -559,6 +578,7 @@
 │   │   │   ├── extension-notices.test.ts
 │   │   │   ├── gentle-agents-store.test.ts
 │   │   │   ├── gentle-models.test.ts
+│   │   │   ├── gentle-review-runtime.test.ts
 │   │   │   ├── gentle-settings.test.ts
 │   │   │   ├── import-catalog.test.ts
 │   │   │   ├── intercom-config.test.ts
@@ -588,6 +608,7 @@
 │   │   │   ├── perf-timings.test.ts
 │   │   │   ├── permissions.test.ts
 │   │   │   ├── pi-locate.test.ts
+│   │   │   ├── pi-notices.test.ts
 │   │   │   ├── pi-sdk-builtins.test.ts
 │   │   │   ├── picode-auth-callback.test.ts
 │   │   │   ├── picode-connector-auth.test.ts
@@ -595,15 +616,19 @@
 │   │   │   ├── picode-issue-prompt.test.ts
 │   │   │   ├── picode-issue-sources.test.ts
 │   │   │   ├── pin-sync.test.ts
+│   │   │   ├── product-mcp.test.ts
 │   │   │   ├── product-packages.test.ts
 │   │   │   ├── progress.test.ts
 │   │   │   ├── project-trust.test.ts
+│   │   │   ├── provider-auth-status.test.ts
+│   │   │   ├── provider-gallery.test.ts
 │   │   │   ├── provider-stream.test.ts
 │   │   │   ├── providers-list.test.ts
 │   │   │   ├── session-cwd.test.ts
 │   │   │   ├── session-folder.test.ts
 │   │   │   ├── session-git.test.ts
 │   │   │   ├── session-listing.test.ts
+│   │   │   ├── session-problems.test.ts
 │   │   │   ├── session-transcript.test.ts
 │   │   │   ├── session-usage.test.ts
 │   │   │   ├── session-worktree.test.ts
@@ -621,6 +646,7 @@
 │   │   │   ├── update-memory-engine.test.ts
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
+│   │   │   ├── usage-history.test.ts
 │   │   │   ├── usage-sharing-env.test.ts
 │   │   │   ├── user-data-path.test.ts
 │   │   │   ├── voice-controller.test.ts
@@ -628,7 +654,7 @@
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 98 files in total
+│   │   │   └── … 106 files in total
 │   │   ├── package.json
 │   │   ├── package.nls.cs.json
 │   │   ├── package.nls.de.json
@@ -695,6 +721,7 @@
 │   │   │   │   ├── connect-renewal.test.ts
 │   │   │   │   ├── connect.test.ts
 │   │   │   │   ├── crypto.test.ts
+│   │   │   │   ├── manifest.test.ts
 │   │   │   │   ├── plans.test.ts
 │   │   │   │   ├── retention.test.ts
 │   │   │   │   └── usage.test.ts
@@ -712,6 +739,34 @@
 │   │   ├── README.md
 │   │   └── stable.json
 │   └── README.md
+├── marketing/ — Materiales para presentar PiCode en distintos canales.
+│   ├── linkedin/ — Publicaciones e imágenes de PiCode para LinkedIn; src/ contiene los diseños originales.
+│   │   ├── src/ — Archivos HTML y estilos usados para generar las imágenes de la publicación.
+│   │   │   ├── 01-hero-es.html
+│   │   │   ├── 01-hero.html
+│   │   │   ├── 02-benefits-es.html
+│   │   │   ├── 02-benefits.html
+│   │   │   ├── 03-status-es.html
+│   │   │   ├── 03-status.html
+│   │   │   ├── README.md
+│   │   │   └── style.css
+│   │   ├── 01-hero-es.png
+│   │   ├── 01-hero.png
+│   │   ├── 02-benefits-es.png
+│   │   ├── 02-benefits.png
+│   │   ├── 03-status-es.png
+│   │   ├── 03-status.png
+│   │   ├── mensajes.md
+│   │   ├── post.md
+│   │   └── README.md
+│   └── README.md
+├── odd/ — Seguimiento de los cambios de PiCode que requieren varias fases.
+│   ├── tasks/ — Cada documento recoge las peticiones, los cambios y las comprobaciones de una mejora.
+│   │   ├── cloud-sync-improvements.md
+│   │   ├── cloud-sync-performance.md
+│   │   ├── gentle-5-integration.md
+│   │   └── README.md
+│   └── README.md
 ├── remote/ · ⬆️ upstream, no breakdown
 ├── resources/
 │   ├── picode/ — Las imágenes del propio repositorio (no las del producto): lo que se ve en el README público y en la cabecera de GitHub.
@@ -723,6 +778,7 @@
 │   │   │   ├── layout-agent.png
 │   │   │   ├── layout-editor.png
 │   │   │   ├── README.md
+│   │   │   ├── settings.png
 │   │   │   └── status.png
 │   │   ├── banner.py
 │   │   ├── divider.svg
@@ -751,6 +807,7 @@
 ├── CODE_OF_CONDUCT.md — 🤝 The repository's code of conduct.
 ├── CONTRIBUTING.md — 🤝 How to contribute and how the tree of our own is published.
 ├── gulpfile.mjs
+├── HANDOFF-2.3.0.md
 ├── LICENSE — The product's MIT license.
 ├── package-lock.json
 ├── package.json

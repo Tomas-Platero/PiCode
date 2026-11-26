@@ -412,6 +412,7 @@ registerPage({
 		page.switchRow({ key: 'picode.chat.confirmSend', name: localize('picodeChatConfirmSetting', "Confirm before sending") });
 		page.switchRow({ key: 'picode.chat.enterToSend', name: localize('picodeChatEnterSetting', "Send with Enter"), description: localize('picodeChatEnterSettingDesc', "Turn off to use Ctrl+Enter or Cmd+Enter to send.") });
 		page.switchRow({ key: 'picode.chat.confirmClose', name: localize('picodeChatConfirmCloseSetting', "Confirm before closing an active chat"), description: localize('picodeChatConfirmCloseDescription', "Ask before closing a window while a chat is responding.") });
+		page.switchRow({ key: 'picode.agentBridge.enabled', name: localize('picodeAgentBridgeSetting', "Let other apps start chats"), description: localize('picodeAgentBridgeSettingDesc', "Apps you run on this computer can open a project and start a chat with pi. Only your Windows account on this computer can connect.") });
 		page.switchRow({ key: 'picode.sessions.autoName', name: localize('picodeSessionAutoNameSetting', "Name sessions automatically"), description: localize('picodeSessionAutoNameDescription', "Name new sessions from their first message. Turn off to choose a name.") });
 		const runtime = page.segmentedRow({
 			key: 'picode.pi.runtime',
@@ -451,6 +452,11 @@ registerPage({
 			read: stored => stored !== 'hide',
 			write: on => on ? 'show' : 'hide',
 		});
+		page.group(localize('picodePiNotices', "Notices"));
+		page.switchRow({ key: 'picode.pi.notices.cacheMisses', name: localize('picodePiNoticeCacheMisses', "Cache misses"), description: localize('picodePiNoticeCacheMissesDesc', "Notify when a request cannot reuse much of the prompt cache.") });
+		page.switchRow({ key: 'picode.pi.notices.cacheWarming', name: localize('picodePiNoticeCacheWarming', "Cache refreshes"), description: localize('picodePiNoticeCacheWarmingDesc', "Show the cost when the prompt cache is refreshed.") });
+		page.switchRow({ key: 'picode.pi.notices.compactionCosts', name: localize('picodePiNoticeCompactionCosts', "Compaction costs"), description: localize('picodePiNoticeCompactionCostsDesc', "Show the cost when a conversation is compacted.") });
+		page.switchRow({ key: 'picode.pi.notices.reasoningDrops', name: localize('picodePiNoticeReasoningDrops', "Omitted reasoning"), description: localize('picodePiNoticeReasoningDropsDesc', "Notify when a provider omits earlier reasoning.") });
 
 		page.group(localize('picodeSetContext', "Context"));
 		page.numberRow({ key: 'chat.fontSize', name: localize('picodeExtraChatFont', "Chat text size"), min: 8, max: 40 });
@@ -830,8 +836,8 @@ registerPage({
 	label: localize('picodeGentlePage', "Gentle AI"),
 	icon: Codicon.sparkle,
 	description: localize('picodeGentlePageDesc', "How your agents talk to you, what they may do on their own, and the work they can leave running."),
-	keywords: ['gentle', 'persona', 'gentleman', 'neutral', 'permissions', 'yolo', 'background', 'jobs', 'subagents'],
-	build: (page, { commandService }) => {
+	keywords: ['gentle', 'persona', 'gentleman', 'neutral', 'permissions', 'yolo', 'background', 'jobs', 'subagents', 'review'],
+	build: (page, { commandService, configurationService }) => {
 		let state: IGentleSettings = { persona: 'gentleman', permissions: 'normal', permissionsBroken: false, background: false };
 		const repaint: Array<() => void> = [];
 		// Each change is written by the connector into PiCode's own profile, where Gentle reads it.
@@ -873,6 +879,30 @@ registerPage({
 			(on, saved) => void save('background', on ? 'on' : 'off', saved),
 			[],
 		));
+		page.switchRow({
+			key: 'picode.review.enabled',
+			name: localize('picodeGentleCodeReview', "Code review"),
+			description: localize('picode.review.enabled', "Make Gentle code review available in PiCode chats."),
+			keywords: 'review code rdd',
+		});
+		const reviewOptions = page.buttonRow(
+			{
+				name: localize('picodeGentleReviewOptions', "Review settings"),
+				description: localize('picodeGentleReviewOptionsDesc', "Choose whether reviews are enabled for this project or across PiCode."),
+				keywords: 'review project scope',
+			},
+			localize('picodePrefManage', "Manage"),
+			async () => {
+				await commandService.executeCommand('workbench.action.closeModalEditor');
+				await commandService.executeCommand('workbench.action.chat.open', { query: '@picode /gentle:rdd', preserveInput: true, mode: 'agent' });
+			},
+			{ icon: Codicon.settingsGear },
+		);
+		const updateReviewOptions = () => {
+			reviewOptions.disabled = configurationService.getValue<boolean>('picode.review.enabled') !== true;
+		};
+		updateReviewOptions();
+		page.onSettingChange('picode.review.enabled', updateReviewOptions);
 		void commandService.executeCommand<IGentleSettings>('picode.gentle.settings').then(read => {
 			if (read) {
 				state = read;

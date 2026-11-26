@@ -32,6 +32,10 @@ fn main() {
 	for file in identity_files() {
 		println!("cargo:rerun-if-changed={}", file.display());
 	}
+	println!("cargo:rerun-if-env-changed=PICODE_CLI_IDENTITY_HASH");
+	println!("cargo:rerun-if-env-changed=VSCODE_CLI_PRODUCT_JSON");
+	println!("cargo:rerun-if-env-changed=VSCODE_CLI_COMMIT");
+	println!("cargo:rerun-if-env-changed=VSCODE_CLI_QUALITY");
 
 	ensure_file_headers(&files).expect("expected to ensure file headers");
 	apply_build_environment_variables();
@@ -45,10 +49,11 @@ fn identity_files() -> Vec<PathBuf> {
 	let mut files = vec![repo_dir.join("package.json")];
 	match env::var("VSCODE_CLI_PRODUCT_JSON") {
 		Ok(configured) => files.push(PathBuf::from(configured)),
-		Err(_) => {
+		Err(_) if env::var("PICODE_CLI_IDENTITY_HASH").map_or(true, |hash| hash.is_empty()) => {
 			files.push(repo_dir.join("product.json"));
 			files.push(repo_dir.join("product.overrides.json"));
 		}
+		Err(_) => {}
 	}
 	files
 }

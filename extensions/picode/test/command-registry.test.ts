@@ -22,6 +22,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
+import { piArgumentCompletionsOf } from '../src/command-registry.ts';
+
+test('argument completions use the requested session and full typed prefix', async () => {
+	const session = { extensionRunner: { getRegisteredCommands: () => [{ name: 'mcp', getArgumentCompletions: async (prefix: string) => [{ value: `${prefix} server`, label: 'server' }] }] } };
+	assert.deepEqual(await piArgumentCompletionsOf(session, 'mcp', 'login'), [{ value: 'login server', label: 'server' }]);
+	assert.deepEqual(await piArgumentCompletionsOf(undefined, 'mcp', 'login'), []);
+	const duplicate = { extensionRunner: { getRegisteredCommands: () => [{ name: 'mcp', invocationName: 'mcp:2', getArgumentCompletions: () => [{ value: 'other', label: 'Other' }] }] } };
+	assert.deepEqual(await piArgumentCompletionsOf(duplicate, 'mcp:2', ''), [{ value: 'other', label: 'Other' }]);
+});
 import {
 	COMMAND_ARGUMENT_HINT_LIMIT,
 	fileNameOf,

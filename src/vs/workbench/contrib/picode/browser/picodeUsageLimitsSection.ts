@@ -32,6 +32,7 @@ import { alertsOf, parseAlertPercent } from './picodeUsageAlertsData.js';
  */
 
 const STATUS_DATA_COMMAND = 'picode.setup.status';
+const USAGE_HISTORY_COMMAND = 'picode.usage.history';
 const OPEN_PROVIDERS_COMMAND = 'picode.providersModels.open';
 const NAN_DASHBOARD = 'https://cloud.nan.builders';
 /** The connector caches each network read for a minute; reading it more often costs nothing. */
@@ -57,6 +58,12 @@ interface IMeter {
 interface IStatusSlice {
 	readonly subscription?: IMeter;
 	readonly subscriptions?: readonly IMeter[];
+}
+
+interface IUsageHistory {
+	readonly totals: { readonly totalTokens: number };
+	readonly byDay: readonly { readonly day: string; readonly tokens: number }[];
+	readonly byProvider: readonly { readonly provider: string; readonly tokens: number }[];
 }
 
 type Tone = 'ok' | 'warn' | 'danger';
@@ -134,6 +141,7 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 	private readonly root: HTMLElement;
 	private readonly summary: HTMLElement;
 	private readonly body: HTMLElement;
+	private readonly history: HTMLElement;
 	private readonly updatedLabel: HTMLElement;
 	private readonly refreshButton: Button;
 	private readonly renderDisposables = this._register(new DisposableStore());
@@ -170,10 +178,11 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 		this.refreshButton = this._register(new Button(head, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: localize('picodeUsageLimitsRefreshTitle', "Read the limits again") }));
 		this.refreshButton.label = `$(${Codicon.refresh.id}) ${localize('picodeUsageLimitsRefresh', "Refresh")}`;
 		this.refreshButton.element.classList.add('picode-limits-btn');
-		this._register(this.refreshButton.onDidClick(() => void this.refresh(true)));
+		this._register(this.refreshButton.onDidClick(() => { void this.refresh(true); void this.refreshHistory(); }));
 
 		this.summary = DOM.append(this.root, $('.picode-limits-summary'));
 		this.body = DOM.append(this.root, $('.picode-limits-body'));
+		this.history = DOM.append(this.root, $('.picode-limits-history'));
 		DOM.append(this.body, $('.picode-limits-empty')).textContent = localize('picodeUsageLimitsLoading', "Reading your limits…");
 
 		// Live while the page is open; a hidden page does not read.
@@ -189,6 +198,43 @@ export class PicodeUsageLimitsSection extends Disposable implements IAICustomiza
 		this._register(storageService.onDidChangeValue(StorageScope.APPLICATION, USAGE_ALERTS_STORAGE_KEY, this._store)(() => this.paintAllAlerts()));
 
 		void this.refresh();
+		void this.refreshHistory();
+	}
+
+	private async refreshHistory(): Promise<void> {
+		let history: IUsageHistory | undefined;
+		try {
+			history = await this.commandService.executeCommand<IUsageHistory>(USAGE_HISTORY_COMMAND);
+		} catch {
+			return;
+		}
+		DOM.clearNode(this.history);
+		const title = DOM.append(this.history, $('h3'));
+		title.appendChild(renderIcon(Codicon.graph));
+		DOM.append(title, $('span')).textContent = localize('picodeUsageHistoryTitle', "Conversation activity · last 30 days");
+		if (!history || !Array.isArray(history.byDay) || !Array.isArray(history.byProvider) || !history.totals || typeof history.totals.totalTokens !== 'number') {
+			DOM.append(this.history, $('.picode-limits-empty')).textContent = localize('picodeUsageHistoryUnavailable', "Conversation activity is not available yet.");
+			return;
+		}
+		DOM.append(this.history, $('.picode-limits-history-total')).textContent = localize('picodeUsageHistoryTokens', "{0} tokens", tokens(history.totals.totalTokens));
+		if (history.byProvider.length === 0) {
+			DOM.append(this.history, $('.picode-limits-empty')).textContent = localize('picodeUsageHistoryEmpty', "No conversation activity in this period.");
+			return;
+		}
+		const providers = DOM.append(this.history, $('.picode-limits-history-list'));
+		for (const provider of history.byProvider) {
+			const row = DOM.append(providers, $('.picode-limits-history-row'));
+			row.appendChild(renderIcon(Codicon.account));
+			DOM.append(row, $('span')).textContent = providerName(provider.provider);
+			DOM.append(row, $('strong')).textContent = tokens(provider.tokens);
+		}
+		const days = DOM.append(this.history, $('.picode-limits-history-days'));
+		for (const day of [...history.byDay].reverse()) {
+			const row = DOM.append(days, $('.picode-limits-history-row'));
+			row.appendChild(renderIcon(Codicon.calendar));
+			DOM.append(row, $('span')).textContent = day.day;
+			DOM.append(row, $('strong')).textContent = tokens(day.tokens);
+		}
 	}
 
 	layout(_dimension: DOM.Dimension): void {

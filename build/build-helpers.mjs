@@ -1106,6 +1106,8 @@ export function resolvePack(repoRoot) {
 			'build/build-connector.sh',
 			'build/build-cli.sh',
 			'build/pi-runtime.sh',
+			'build/gentle-runtime.sh',
+			'build/verify-gentle-runtime.mjs',
 			'build/stage-distribution.sh',
 			'build/data-hold.sh',
 			'build/checks.mjs',
@@ -1121,6 +1123,8 @@ export function resolvePack(repoRoot) {
 			'cli/Cargo.toml',
 			'cli/Cargo.lock',
 			'product.json',
+			// Cargo embeds these overrides in the CLI when present.
+			'product.overrides.json',
 			'package.json',
 			'package-lock.json',
 			'.nvmrc',

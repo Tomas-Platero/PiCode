@@ -10,9 +10,96 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { agentProfilesExtension, applyAgentProfile, applyConfirmed, deferDefault, hasLiveSession, resetLiveProfiles, type ProfilesPi } from '../src/agent-profiles-live.ts';
+import { agentProfilesExtension, applyAgentProfile, applyConfirmed, deferDefault, frontChatModel, hasLiveSession, readKnownSessionProfile, refreshLiveCredentials, resetLiveProfiles, type ProfilesPi } from '../src/agent-profiles-live.ts';
 
 afterEach(() => resetLiveProfiles());
+
+test('reads the actual model of the requested live chat', () => {
+	const handlers = new Map<string, (...args: unknown[]) => void>();
+	const pi = { on: (event: string, handler: (...args: unknown[]) => void) => handlers.set(event, handler) } as unknown as ProfilesPi;
+	agentProfilesExtension('chat-a').factory(pi);
+	const context = { model: { provider: 'provider', id: 'model' } };
+	handlers.get('session_start')?.({}, context);
+	assert.deepEqual(frontChatModel('chat-a'), { provider: 'provider', id: 'model' });
+	assert.equal(frontChatModel('chat-b'), undefined);
+	context.model = { provider: 'provider', id: 'new-model' };
+	assert.deepEqual(frontChatModel('chat-a'), { provider: 'provider', id: 'new-model' });
+});
+
+test('an expired session context does not fail a profile operation', () => {
+	const handlers = new Map<string, (...args: unknown[]) => void>();
+	const pi = { on: (event: string, handler: (...args: unknown[]) => void) => handlers.set(event, handler) } as unknown as ProfilesPi;
+	agentProfilesExtension('chat-a').factory(pi);
+	handlers.get('session_start')?.({}, { get model() { throw new Error('session closed'); } });
+	assert.equal(frontChatModel('chat-a'), undefined);
+});
+
+test('reads session profiles without changing Gentle state and distinguishes no profile from unknown', () => {
+	const bindings = new Map([['bound', { name: 'chosen', origin: 'user' }]]);
+	const frozen = new Map([['bound', { profile: { name: 'old' } }], ['empty', { profile: { name: 'old' } }], ['inherited', { profile: { name: 'team' } }], ['none', { profile: undefined }]]);
+	const startupNone = new Set(['bound', 'empty']);
+	const state = { bindings, frozen, startupNone };
+	assert.equal(readKnownSessionProfile('bound', state), 'chosen');
+	assert.equal(readKnownSessionProfile('empty', state), null);
+	assert.equal(readKnownSessionProfile('inherited', state), 'team');
+	assert.equal(readKnownSessionProfile('none', state), null);
+	assert.equal(readKnownSessionProfile('missing', state), undefined);
+	assert.equal(readKnownSessionProfile('empty', state, false), undefined);
+	assert.equal(readKnownSessionProfile('bound', state, false), 'chosen');
+	assert.equal(bindings.size, 1);
+	assert.equal(frozen.size, 4);
+	assert.equal(startupNone.size, 2);
+});
+
+test('the live chat follows Gentle state when a binding is cleared', async () => {
+	const globals = globalThis as Record<symbol, unknown>;
+	const bindingKey = Symbol.for('gentle-pi:session-profile-bindings');
+	const noneKey = Symbol.for('gentle-pi:session-profile-startup-none');
+	const freezeKey = Symbol.for('gentle-pi:session-profile-freeze');
+	const original = [globals[bindingKey], globals[noneKey], globals[freezeKey]];
+	const bindings = new Map([['session', { name: 'work', origin: 'user' }]]);
+	const startupNone = new Set<string>();
+	try {
+		globals[bindingKey] = bindings;
+		globals[noneKey] = startupNone;
+		globals[freezeKey] = { frozen: new Map([['session', { profile: { name: 'old' } }]]) };
+		const handlers = new Map<string, (...args: unknown[]) => void>();
+		const pi = { on: (event: string, handler: (...args: unknown[]) => void) => { handlers.set(event, handler); } } as ProfilesPi;
+		agentProfilesExtension('chat').factory(pi);
+		handlers.get('session_start')?.({}, { sessionManager: { getSessionId: () => 'session' } });
+		const { frontChatProfile } = await import('../src/agent-profiles-live.ts');
+		assert.equal(frontChatProfile(), 'work');
+		bindings.delete('session');
+		startupNone.add('session');
+		assert.equal(frontChatProfile(), null);
+	} finally {
+		for (const [index, key] of [bindingKey, noneKey, freezeKey].entries()) {
+			if (original[index] === undefined) { delete globals[key]; } else { globals[key] = original[index]; }
+		}
+	}
+});
+
+test('credential changes refresh only internal live sessions without network and deduplicate registries', async () => {
+	const calls: unknown[] = [];
+	const registry = { refresh: async (options: unknown) => { calls.push(options); return { aborted: false, errors: new Map() }; } };
+	const external = { refresh: async () => { throw new Error('external profile was accessed'); } };
+	for (const [key, profile] of [['one', 'internal'], ['two', 'internal'], ['other', 'external']]) {
+		const handlers = new Map<string, (...args: unknown[]) => void>();
+		const pi = { on: (event: string, handler: (...args: unknown[]) => void) => { handlers.set(event, handler); } } as ProfilesPi;
+		agentProfilesExtension(key, profile).factory(pi);
+		handlers.get('session_start')?.({}, { modelRegistry: profile === 'internal' ? registry : external });
+	}
+	assert.equal(await refreshLiveCredentials('internal'), true);
+	assert.deepEqual(calls, [{ allowNetwork: false }]);
+});
+
+test('a failed credential refresh is reported without exposing the error', async () => {
+	const handlers = new Map<string, (...args: unknown[]) => void>();
+	const pi = { on: (event: string, handler: (...args: unknown[]) => void) => { handlers.set(event, handler); } } as ProfilesPi;
+	agentProfilesExtension('one', 'internal').factory(pi);
+	handlers.get('session_start')?.({}, { modelRegistry: { refresh: () => { throw new Error('private credential'); } } });
+	assert.equal(await refreshLiveCredentials('internal'), false);
+});
 
 interface FakeSession {
 	readonly pi: ProfilesPi;
@@ -89,6 +176,18 @@ test('it applies in the chat used last', async () => {
 	first.turn();
 	await applyAgentProfile('work', 'session');
 	assert.deepEqual(first.applied.map(call => call.context), [{ chat: 'a' }]);
+	assert.equal(second.applied.length, 0);
+});
+
+test('a specified chat stays the target even when another chat was used more recently', async () => {
+	const first = fakeSession('a', { asks: false });
+	const second = fakeSession('b', { asks: false });
+	first.start();
+	second.start();
+	assert.equal((await applyAgentProfile('work', 'session', undefined, 'a')).status, 'applied');
+	assert.equal(first.applied.length, 1);
+	assert.equal(second.applied.length, 0);
+	assert.equal((await applyAgentProfile('work', 'session', undefined, 'missing')).status, 'unavailable');
 	assert.equal(second.applied.length, 0);
 });
 
