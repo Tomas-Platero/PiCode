@@ -4,6 +4,17 @@
 
 El chat indica cuándo se está generando una imagen y muestra el resultado de las herramientas compatibles. Las vistas previas se guardan en una ubicación temporal, se retiran al cerrar PiCode o tras 24 horas y permiten abrir la imagen desde el chat.
 
+> *"Quiero que cualquier generación de imagen sea con el diseño que hicimos"* — 2026-11-26
+
+**Cualquier herramienta que genere imágenes usa ese diseño**, sin depender del proveedor, del modelo ni del nombre de la herramienta (`extensions/picode/src/generated-images.ts`):
+
+- **Imagen dentro de la respuesta**: vale para cualquier herramienta, también el modo código de pi (`codemode`) y los MCP desconocidos.
+- **Fichero guardado** nombrado en el texto, aunque lleve palabras alrededor (NaN: «Image saved to C:\…\x.jpg (source URL: …)»), en una lista, con espacios en el nombre o como `file://`.
+- **Enlace**: se descarga solo por `https`, con un máximo de 20 s y 8 MB, y solo si es una imagen de verdad. Si la herramienta guardó también el fichero, se usa el fichero.
+- Para ficheros y enlaces, la herramienta tiene que ser de crear imágenes: por su nombre (`generate_image`, `flux`, `dall-e`, `text_to_image`, `imagen`…), o porque junta algo de imagen con algo de crear.
+- **No** tienen vista previa las herramientas que miran imágenes que ya existían: leer un fichero, capturas del navegador, listados o búsquedas.
+- La misma imagen devuelta dos veces sale una vez, y como mucho cuatro por herramienta.
+
 El asistente ofrece los proveedores desde el principio y prepara Pi en segundo plano. Si se elige Agent, el primer arranque muestra la marca mientras se prepara esa vista. Al cambiar entre Agent y Editor, la vista actual permanece visible hasta que la nueva está preparada y ambas se funden. La opción de reducir movimiento elimina el fundido.
 
 > Cómo ha de ser el producto, hasta donde sabemos hoy. Las frases del dueño viven en
