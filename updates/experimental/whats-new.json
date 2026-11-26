@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.14-experimental",
+			"notes": "### ✨ New\n\n- **Start pi chats from your other apps.** Turn on *Let other apps start chats* in Settings › Chat and agent, and an app you run on this computer can open a project, hand pi a task and learn which chat is working on it. Only your Windows account on this computer can connect, and each task starts just once.\n- **pi's commands take you to the right place.** `/login`, `/model` and other pi commands open their page in Settings, suggest their options as you type, and `/export` can also save a conversation as `.jsonl`.\n- **pi's notices, in the chat.** Cache, compaction and reasoning notices appear once in the chat, each with its own switch in Settings.\n\n### ⬆️ Updated\n\n- **pi 1.6.1**: decision models in code mode, a new default Mistral model, and a clear message when long command output could not be saved.\n\n### 🐛 Fixed\n\n- The new chat command texts are translated into all 13 languages."
+		},
+		{
 			"version": "2.4.13-experimental",
 			"notes": "### ✨ New\n\n- expose Gentle review controls\n- show recent conversation activity\n- connect progress and review sessions\n- isolate bundled Gentle review runtime\n- track live subagent progress\n- add local conversation history reader\n- package Gentle AI 5 runtime\n\n### 🐛 Fixed\n\n- synchronize focused chat profile controls\n- allow chats without an active profile\n- isolate live profile state per chat\n- include agent token labels\n- include verified Engram license"
 		},
@@ -115,10 +119,6 @@
 		{
 			"version": "2.0.3-experimental",
 			"notes": "### 🐛 Fixed\n\n- **What's New now speaks your language.** The list of fixes is translated into all 13 languages, and the window keeps the news of the 2.0 line together with every fix since, so nothing disappears when you update between fixes."
-		},
-		{
-			"version": "2.0.2-experimental",
-			"notes": "### 🐛 Fixed\n\n- **The What's New window lists fixes under \"Bugs fixed\".** When an update only brings fixes, the window still opens and shows them in their own page, and it no longer appears blank when a version has no pages of its own.\n- **Updating no longer stops at \"Access denied\".** The memory engine that PiCode carries is now closed right before the update replaces its folder, so it can no longer keep files open. An engine installed by another program is left alone."
 		}
 	]
 }
