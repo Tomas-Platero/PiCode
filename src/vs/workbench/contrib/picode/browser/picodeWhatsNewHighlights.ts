@@ -37,6 +37,34 @@ export interface IWhatsNewHighlight {
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
 		{
+			id: 'agentBridge',
+			since: '2.4.14',
+			plan: 'free',
+			icon: Codicon.plug,
+			title: localize('picodeWhatsNew.agentBridge.title', "Start pi chats from your other apps"),
+			summary: localize('picodeWhatsNew.agentBridge.summary', "Your own tools on this computer can open a project and hand pi a task. PiCode tells them which chat is working on it."),
+			points: [
+				localize('picodeWhatsNew.agentBridge.point1', "Turn it on in Settings, under Chat and agent: Let other apps start chats."),
+				localize('picodeWhatsNew.agentBridge.point2', "Only your Windows account on this computer can connect, and each task starts just once."),
+			],
+			preview: 'settings',
+			action: 'openSettings',
+		},
+		{
+			id: 'chatCommands',
+			since: '2.4.14',
+			plan: 'free',
+			icon: Codicon.terminal,
+			title: localize('picodeWhatsNew.chatCommands.title', "pi's commands take you to the right place"),
+			summary: localize('picodeWhatsNew.chatCommands.summary', "Type /login, /model or another pi command in the chat and the matching page in Settings opens for you."),
+			points: [
+				localize('picodeWhatsNew.chatCommands.point1', "Commands suggest their options as you type."),
+				localize('picodeWhatsNew.chatCommands.point2', "If pi has something to tell you while it gets a chat ready, you see it once, right in the chat."),
+			],
+			preview: 'chatPreferences',
+			action: 'openSettings',
+		},
+		{
 			id: 'agentActivity',
 			since: '2.4.13',
 			plan: 'free',
