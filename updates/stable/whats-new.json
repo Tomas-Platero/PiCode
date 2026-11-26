@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.12",
+			"notes": "### ✨ New\n\n- release PiCode 2.4.12 (#317)"
+		},
+		{
 			"version": "2.4.11",
 			"notes": "### ✨ New\n\n- improve recovery and account settings\n\n### ⚡ Faster\n\n- reduce manifest reads and guard legacy upgrades"
 		},
