@@ -2072,3 +2072,39 @@ usuario; la App da lectura de issues y solo en los repos que el usuario elija al
 **Consecuencias.**
 - Las opciones `chat.*` pensadas para Copilot siguen en *All settings*: ocultarlas exige comprobar una a una que pi no las lee.
 - Una página nueva de PiCode se añade registrándola (`aiCustomizationManagementSectionRegistry`) y, si es de filas, con `PicodeSettingsPage`.
+
+## ADR-047 — Entrada local para que otras apps arranquen chats de pi
+
+> *"quiero poder pulsar Arrancar en su ficha y que Pi se ponga a trabajar en el repositorio correspondiente"* — 2026-11-26 (OmPm)
+>
+> *"Para probarlo me basta un ejemplo desde PowerShell, en el mismo equipo y con mi cuenta de Windows, sin exponer nada a la red."*
+
+**Punto de partida.** `picode chat "encargo"` ya abría una carpeta y le mandaba un encargo a pi, pero no devolvía nada. No había forma de saber qué sesión de pi correspondía a cada tarea de otra app.
+
+**Qué se decide.**
+- **Una *named pipe* en el proceso principal**, apagada de serie (`picode.agentBridge.enabled`, *Settings › Chat and agent › Let other apps start chats*). Una línea JSON por mensaje. Un solo método, `session.start`, que devuelve `sessionId` y `taskId`, nunca rutas.
+- **Solo este equipo y esta cuenta, comprobado**, no supuesto:
+  - Una pipe de Node acepta `\localhost\pipe\…` y `\<equipo>\pipe\…` (medido).
+  - Una regla que deniega *NETWORK* no basta, porque el bucle local reutiliza tu sesión (medido).
+  - Por eso la pipe la crea un ayudante en Windows PowerShell con `PIPE_REJECT_REMOTE_CLIENTS`, permisos solo para tu cuenta y *NETWORK* denegado, y `FILE_FLAG_FIRST_PIPE_INSTANCE` sobre un nombre con parte aleatoria.
+  - El token de `agent-bridge.json` va además de todo esto.
+- **Una tarea, una sola vez** (`agent-bridge-tasks.json`):
+  - El estado pasa a `pending` antes de entregar el encargo, y a `started` cuando consta que pi lo tiene en el historial.
+  - El mismo `taskId` con otra carpeta u otro encargo da `task_conflict`.
+  - Lo que no se puede confirmar da `outcome_uncertain` y no se reenvía; reenviar es decisión explícita de quien llama (`resendUncertain`).
+- **La marca de la tarea vive dentro de la sesión** (entrada `custom` `picode.task`), no en el título.
+  - pi escribe el fichero solo con el primer mensaje del usuario y lo escribe entero, así que en disco la marca llega junto con el encargo (probado contra pi 1.6.1).
+  - Aun así, «recibido» exige el mensaje del usuario detrás de la marca.
+- **La ventana crea su propio chat** (`IChatService.startNewLocalSession`) y envía a ese recurso: el id nunca sale del chat que esté a la vista.
+
+**Alternativas descartadas.**
+- **`picode://` con respuesta:** un enlace no devuelve nada a quien lo abre, y cualquier página web puede abrirlo.
+- **Servidor HTTP en `127.0.0.1`:** cualquier cuenta del equipo llega a un puerto local; habría que añadir aparte lo que la pipe da por permisos de Windows.
+- **Pipe de Node con token:** no rechaza clientes de la red (medido). El token solo no es barrera.
+- **Reconocer la sesión por su título:** se puede renombrar.
+
+**Consecuencias.**
+- Solo Windows por ahora.
+- OmPm como servicio de *Sistema local* no entra (no es tu cuenta). Queda pendiente un ayudante que corra con tu cuenta.
+- La prueba desde otro equipo y desde otra cuenta del mismo Windows queda por hacer a mano ([`ENTRADA-LOCAL.md`](ENTRADA-LOCAL.md)).
+- El ayudante compila su parte en C# al arrancar (≈ 0,25 s, medido), en segundo plano.

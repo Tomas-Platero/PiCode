@@ -223,6 +223,15 @@ export function taskFacts(row: TaskRow, now: number, explainFailure?: (id: strin
 	if (agent.agent.length > 0) {
 		facts.push({ label: l10n.t('Agent'), detail: agent.agent, icon: 'person' });
 	}
+	if (agent.activeTool !== undefined) {
+		facts.push({ label: l10n.t('Now'), detail: agent.activeTool, icon: 'pulse' });
+	}
+	if (agent.model !== undefined) {
+		facts.push({ label: l10n.t('Model'), detail: agent.model, icon: 'hubot' });
+	}
+	if (agent.usedTokens !== undefined) {
+		facts.push({ label: l10n.t('Tokens'), detail: String(agent.usedTokens), icon: 'symbol-number' });
+	}
 	if (agent.startedAt !== undefined) {
 		facts.push({ label: agent.endedAt === undefined ? l10n.t('Running for') : l10n.t('Took'), detail: elapsedLabel(agent.startedAt, agent.endedAt ?? now), icon: 'watch' });
 	}

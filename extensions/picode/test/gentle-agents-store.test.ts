@@ -83,6 +83,50 @@ test('the store holds the last push and tells its listeners', () => {
 	assert.equal(fired, 2, 'a stopped listener hears nothing');
 });
 
+test('live progress enriches only known agents and rejects unsafe values', () => {
+	const store = new GentleAgentsStore();
+	store.publish(GENTLE_AGENTS_WIDGET_KEY, [line([task('1', 'running')])]);
+	store.publishProgress([{ id: '1', model: 'openai/model', activeTool: 'read', usage: { total: 124 } }, { id: 'foreign', model: 'secret' }]);
+	assert.equal(store.current()[0]?.model, 'openai/model');
+	assert.equal(store.current()[0]?.activeTool, 'read');
+	assert.equal(store.current()[0]?.usedTokens, 124);
+	assert.equal(store.current().length, 1);
+	store.publishProgress([{ id: '1', model: 'C:\\secret file', activeTool: 'read /secret', usage: { total: -1 } }]);
+	assert.equal(store.current()[0]?.model, undefined);
+	assert.equal(store.current()[0]?.activeTool, undefined);
+	assert.equal(store.current()[0]?.usedTokens, undefined);
+});
+
+test('a different chat cannot change the displayed agents even when ids coincide', () => {
+	const store = new GentleAgentsStore();
+	store.publish(GENTLE_AGENTS_WIDGET_KEY, [line([task('1', 'running')])], 'first');
+	store.publishProgress([{ id: '1', model: 'other/model' }], 'second');
+	assert.equal(store.current()[0]?.model, undefined);
+	store.publishProgress([{ id: '1', model: 'first/model' }], 'first');
+	assert.equal(store.current()[0]?.model, 'first/model');
+});
+
+test('progress arriving before its widget is retained per session and removed at shutdown', () => {
+	const store = new GentleAgentsStore();
+	const first = {};
+	const replacement = {};
+	store.beginProgress('first', first);
+	store.publishProgress([{ id: '1', model: 'first/model', usage: { total: 32 } }], 'first', first);
+	store.publish(GENTLE_AGENTS_WIDGET_KEY, [line([task('1', 'running')])], 'second');
+	assert.equal(store.current()[0]?.model, undefined);
+	store.publish(GENTLE_AGENTS_WIDGET_KEY, [line([task('1', 'running')])], 'first');
+	assert.equal(store.current()[0]?.model, 'first/model');
+	store.beginProgress('first', replacement);
+	store.publishProgress([{ id: '1', model: 'new/model' }], 'first', replacement);
+	store.endProgress('first', first);
+	store.publishProgress([{ id: '1', model: 'stale/model' }], 'first', first);
+	store.publish(GENTLE_AGENTS_WIDGET_KEY, [line([task('1', 'running')])], 'first');
+	assert.equal(store.current()[0]?.model, 'new/model');
+	store.endProgress('first', replacement);
+	store.publish(GENTLE_AGENTS_WIDGET_KEY, [line([task('1', 'running')])], 'first');
+	assert.equal(store.current()[0]?.model, undefined);
+});
+
 test('other widgets, other shapes and broken pushes leave what was known untouched', () => {
 	const store = new GentleAgentsStore();
 	store.publish(GENTLE_AGENTS_WIDGET_KEY, [line([task('1', 'running')])]);

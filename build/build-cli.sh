@@ -102,6 +102,28 @@ if [[ -n "${QUALITY_VALUE:-}" ]]; then
   export VSCODE_CLI_QUALITY="${QUALITY_VALUE}"
 fi
 
+# Channel sealing temporarily rewrites product.json on every build. Cargo watches file timestamps,
+# so watching that file directly recompiles the CLI even when the sealed identity is unchanged.
+# Track the contents of both identity files instead; when hashing fails, build.rs safely falls back
+# to Cargo's ordinary file watches. A caller-provided product override keeps its original behavior.
+unset PICODE_CLI_IDENTITY_HASH
+if [[ -z "${VSCODE_CLI_PRODUCT_JSON:-}" ]]; then
+  if PICODE_CLI_IDENTITY_HASH=$(node -e '
+    const fs = require("node:fs"), crypto = require("node:crypto");
+    const hash = crypto.createHash("sha256");
+    for (const file of ["product.json", "product.overrides.json"]) {
+      hash.update(`${file}\0`);
+      if (fs.existsSync(file)) { hash.update("present\0"); hash.update(fs.readFileSync(file)); }
+      else { hash.update("missing\0"); }
+    }
+    process.stdout.write(hash.digest("hex"));
+  '); then
+    export PICODE_CLI_IDENTITY_HASH
+  else
+    unset PICODE_CLI_IDENTITY_HASH
+  fi
+fi
+
 echo "cli: building the Rust CLI (release)..."
 if ! ( cd "${CLI_DIR}" && cargo build --release ); then
   give_up "cargo build failed; the pack keeps the shell shim only."

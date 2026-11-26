@@ -787,6 +787,10 @@ input.picode-set-input.picode-set-keys-search {
 }
 
 /* The Agents page: Profiles (which model each agent uses) and Your agents, as two tabs. */
+.ai-customization-management-editor .prompts-content-container.picode-agents-page {
+	background: var(--vscode-editor-background);
+}
+
 .picode-agents-head {
 	padding: 4px 12px 0;
 }

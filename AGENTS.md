@@ -252,6 +252,14 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * El borrado va **después** de publicar la nueva: si un run falla a mitad, el canal nunca se queda sin release.
 * El guard de "versión estrictamente más nueva" no depende de la lista de releases: lee la versión anterior del feed del canal en el árbol, así que sigue funcionando tras borrar.
 
+### Mantener limpias las ramas
+>
+> *"haz como norma revisar las ramas y que todo esté siempre limpio cuando sea el momento (ejemplo después de sacar una release)"* — 2026-11-25
+
+* **Al cerrar una release o un trabajo:** revisar las ramas y los worktrees locales y remotos, y retirar los temporales que ya no se necesiten. Al terminar la limpieza deben quedar los tres canales: `master`, `beta` y `experimental`.
+* **Sin perder trabajo:** antes de borrar, comprobar cambios pendientes, archivos ignorados, commits exclusivos y propuestas abiertas; conservar o respaldar lo necesario y no interrumpir trabajos activos. Las ramas temporales necesarias para un trabajo en curso permanecen hasta que termine.
+* **Código en desarrollo:** mantener los cambios de producto sobre `experimental` actualizado. Las operaciones remotas y destructivas siguen las autorizaciones vigentes de la sesión.
+
 ### La página de la release cuenta lo que cambió
 >
 > *"recuerda añadir tu siempre el texto de la release mejorado y con el changelog"* — 2026-10-16
@@ -578,3 +586,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-11-21** · Release 2.4.7 en experimental («Saca nueva release»): pi-web-access de serie (el explorador vuelve a buscar en internet), Context7 en los MCP del perfil, las skills `go-testing` y `systemic-issue-triage`, y fuera `pi-deepseek-search` al actualizar. README sin cambios (no nombra paquetes); la wiki y `docs/DISTRIBUTION.md` ya los citan.
 * **2026-11-22** · Release 2.4.8 en experimental («pq me dice de iniciar sesión en context 7?», «se»): Context7 funciona sin cuenta, pero la fila de *Status* pedía «Iniciar sesión» porque el editor lo pide a cualquier servidor remoto sin sesión ni clave, y la 2.4.7 lo había escrito con un bloque de acceso que no hacía falta. Ahora se escribe limpio y el editor sabe que ese servidor va sin cuenta (ADR-031, adenda 6).
 * **2026-11-22** · Release 2.4.8 en beta y stable («asacala para beta y estable»): llegan desde la 2.4.6 con todo lo de la 2.4.7 y la 2.4.8 (el explorador vuelve a buscar en internet, Context7 sin pedir cuenta, las skills de Go y de triaje de incidencias, y fuera el paquete de búsqueda de DeepSeek), con un solo texto de *What changed*.
+* **2026-11-26** · Otras apps pueden arrancar chats de pi («quiero poder pulsar Arrancar en su ficha y que Pi se ponga a trabajar», OmPm): con *Let other apps start chats* encendido, una app del mismo equipo y con tu cuenta abre un proyecto, arranca un chat con un encargo y recibe el identificador de la sesión. Solo tu cuenta en este equipo puede conectarse (medido: la red queda fuera); una tarea nunca llega dos veces a pi, y si no se puede confirmar, se dice y no se reenvía. Detalle: [`docs/ENTRADA-LOCAL.md`](docs/ENTRADA-LOCAL.md) · ADR-047.
