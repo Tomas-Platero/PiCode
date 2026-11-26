@@ -412,6 +412,7 @@ registerPage({
 		page.switchRow({ key: 'picode.chat.confirmSend', name: localize('picodeChatConfirmSetting', "Confirm before sending") });
 		page.switchRow({ key: 'picode.chat.enterToSend', name: localize('picodeChatEnterSetting', "Send with Enter"), description: localize('picodeChatEnterSettingDesc', "Turn off to use Ctrl+Enter or Cmd+Enter to send.") });
 		page.switchRow({ key: 'picode.chat.confirmClose', name: localize('picodeChatConfirmCloseSetting', "Confirm before closing an active chat"), description: localize('picodeChatConfirmCloseDescription', "Ask before closing a window while a chat is responding.") });
+		page.switchRow({ key: 'picode.agentBridge.enabled', name: localize('picodeAgentBridgeSetting', "Let other apps start chats"), description: localize('picodeAgentBridgeSettingDesc', "Apps you run on this computer can open a project and start a chat with pi. Only your Windows account on this computer can connect.") });
 		page.switchRow({ key: 'picode.sessions.autoName', name: localize('picodeSessionAutoNameSetting', "Name sessions automatically"), description: localize('picodeSessionAutoNameDescription', "Name new sessions from their first message. Turn off to choose a name.") });
 		const runtime = page.segmentedRow({
 			key: 'picode.pi.runtime',

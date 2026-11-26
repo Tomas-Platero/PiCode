@@ -100,6 +100,14 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			default: true,
 			description: localize('picode.chat.enterToSend', "Send chat messages with Enter. When off, use Ctrl+Enter or Cmd+Enter."),
 		},
+		// Read by the main process (`code/electron-main/picodeAgentBridge.ts`). Machine scope: each
+		// computer decides for itself, Settings Sync never turns it on elsewhere.
+		'picode.agentBridge.enabled': {
+			type: 'boolean',
+			default: false,
+			scope: ConfigurationScope.MACHINE,
+			description: localize('picode.agentBridge.enabled', "Let apps you run on this computer open a project and start a pi chat. Only your Windows account on this computer can connect."),
+		},
 		'picode.sessions.autoName': {
 			type: 'boolean',
 			default: true,

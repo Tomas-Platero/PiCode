@@ -17,7 +17,7 @@ import { generatedImagesOf, isImageCreationTool } from './generated-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
 import { compareModels, MAX_COMPARED_MODELS, MIN_COMPARED_MODELS, renderComparison } from './compare-models';
 import { listModels } from './wizard-models';
-import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, piRuntimeRoot, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
@@ -73,7 +73,8 @@ import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } fr
 import { settingsForFolder } from './folder-trust';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
-import { piProjectSlug } from './sessions-provider';
+import { areaFamilySlugs, listProjectSessionFiles, piProjectSlug } from './sessions-provider';
+import { findTaskSession, TASK_ENTRY_TYPE, taskStatus, type SessionEntryLike, type TaskMark } from './agent-bridge-task';
 import { chatSlashCommandsOf, piArgumentCompletionsOf, piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
@@ -2131,6 +2132,57 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	 * the manager, not in the session.
 	 */
 	const chats = new Map<string, ChatPi>();
+	/** Chats another app started through the local agent bridge, by chat resource, until their session exists. */
+	const taskBindings = new Map<string, TaskMark & { readonly title: string }>();
+	// The local agent bridge (`src/vs/code/electron-main/picodeAgentBridge.ts`): the window binds a task
+	// to the chat it creates, then asks when pi has the assignment, or looks a task up after a crash.
+	context.subscriptions.push(vscode.commands.registerCommand('picode.agent.bindTask', (resource: unknown, binding: unknown) => {
+		const value = binding as Partial<TaskMark & { title: string }> | undefined;
+		if (typeof resource !== 'string' || typeof value?.taskId !== 'string' || typeof value.promptHash !== 'string') {
+			return false;
+		}
+		taskBindings.set(resource, { taskId: value.taskId, promptHash: value.promptHash, title: typeof value.title === 'string' ? value.title : value.taskId });
+		// A chat that never got its first message (the window gave up) does not keep its binding.
+		setTimeout(() => taskBindings.delete(resource), 15 * 60_000).unref?.();
+		return true;
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('picode.agent.sessionFor', async (resource: unknown, waitMs: unknown) => {
+		if (typeof resource !== 'string') {
+			return { received: false };
+		}
+		const deadline = Date.now() + (typeof waitMs === 'number' && waitMs > 0 ? Math.min(waitMs, 600_000) : 60_000);
+		for (; ;) {
+			const manager = chats.get(resource)?.sessionManager;
+			if (manager !== undefined) {
+				const entries = manager.getEntries() as readonly SessionEntryLike[];
+				const mark = entries.find(entry => entry.type === 'custom' && entry.customType === TASK_ENTRY_TYPE)?.data as TaskMark | undefined;
+				if (mark !== undefined && taskStatus(entries, mark).received) {
+					return { sessionId: manager.getSessionId(), received: true };
+				}
+			}
+			if (Date.now() >= deadline) {
+				return { sessionId: manager?.getSessionId(), received: false };
+			}
+			await new Promise(resolve => setTimeout(resolve, 200));
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('picode.agent.findTaskSession', (_folder: unknown, taskId: unknown, promptHash: unknown) => {
+		const agentDir = chatAgentDir(deps.distributionRoot);
+		if (agentDir === undefined || typeof taskId !== 'string' || typeof promptHash !== 'string') {
+			return undefined;
+		}
+		const sessionsDir = path.join(agentDir, 'sessions');
+		const areaSlug = resolveProjectScope().area?.slug;
+		const slugs = [...projectSlugsOfWindow(), ...(areaSlug === undefined ? [] : areaFamilySlugs(sessionsDir, areaSlug))];
+		const files = listProjectSessionFiles(sessionsDir, slugs);
+		return findTaskSession(files, { taskId, promptHash }, file => {
+			try {
+				return fs.readFileSync(file, 'utf8');
+			} catch {
+				return undefined;
+			}
+		});
+	}));
 	context.subscriptions.push(vscode.commands.registerCommand('picode.chat.commandArguments', async (chatKey: unknown, command: unknown, prefix: unknown) => {
 		if (typeof chatKey !== 'string' || typeof command !== 'string' || typeof prefix !== 'string' || prefix.length > 4096) {
 			return [];
@@ -2480,7 +2532,22 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					chat.sessionManager = reopen
 						? loaded.sdk.SessionManager.open(known, sessionDir, cwd)
 						: loaded.sdk.SessionManager.create(cwd, sessionDir);
-					if (!reopen && !vscode.workspace.getConfiguration('picode.sessions').get<boolean>('autoName', true)) {
+					// A chat another app started (the local agent bridge) carries its task mark in
+					// the session itself, before the assignment: pi writes the file only with the
+					// first user message, so on disk the mark and the assignment arrive together.
+					const task = reopen ? undefined : taskBindings.get(chat.key);
+					if (task !== undefined) {
+						taskBindings.delete(chat.key);
+						chat.sessionManager.appendCustomEntry(TASK_ENTRY_TYPE, { taskId: task.taskId, promptHash: task.promptHash });
+						const taskSessionId = chat.sessionManager.getSessionId();
+						await updateSessionGitStore(store => withTitle(store, taskSessionId, task.title));
+						// Test-only stop between the mark and the assignment, so the end-to-end test can
+						// close PiCode exactly there (docs/ENTRADA-LOCAL.md). Never set outside that test.
+						if (process.env['PICODE_AGENT_BRIDGE_TEST_HALT_TASK'] === task.taskId) {
+							fs.writeFileSync(path.join(os.tmpdir(), `picode-bridge-halted-${task.taskId}`), taskSessionId);
+							await new Promise<never>(() => { /* held until PiCode is closed */ });
+						}
+					} else if (!reopen && !vscode.workspace.getConfiguration('picode.sessions').get<boolean>('autoName', true)) {
 						const name = await vscode.window.showInputBox({ title: vscode.l10n.t('Name this session'), prompt: vscode.l10n.t('Leave it empty to name it after its first message again.') });
 						if (name?.trim()) {
 							await updateSessionGitStore(store => withTitle(store, chat.sessionManager!.getSessionId(), name));
