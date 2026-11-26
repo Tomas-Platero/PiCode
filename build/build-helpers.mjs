@@ -1123,6 +1123,8 @@ export function resolvePack(repoRoot) {
 			'cli/Cargo.toml',
 			'cli/Cargo.lock',
 			'product.json',
+			// Cargo embeds these overrides in the CLI when present.
+			'product.overrides.json',
 			'package.json',
 			'package-lock.json',
 			'.nvmrc',

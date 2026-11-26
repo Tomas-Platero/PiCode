@@ -96,13 +96,20 @@ jobs:
       # The pack fetches the electron binary through
       # @vscode/gulp-electron's cache (ELECTRON_SKIP_BINARY_DOWNLOAD
       # keeps it out of node_modules).
+      - name: Read Electron version
+        id: electron-version
+        shell: bash
+        run: |
+          node -e "const m = require('fs').readFileSync('.npmrc', 'utf8').match(/^target=\"?([^\"\s]+)/m); if (!m) process.exit(1); console.log('version=' + m[1])" >> "$GITHUB_OUTPUT"
+
       - name: Cache electron binary
         uses: actions/cache@v6
-        env:
-          LOCK: ${{ hashFiles('package-lock.json') }}
         with:
           path: ~\AppData\Local\electron\Cache
-          key: picode-electron-${{ runner.os }}-${{ env.LOCK }}
+          key: picode-electron-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-version.outputs.version }}-${{ hashFiles('.npmrc') }}
+          restore-keys: |
+            picode-electron-v2-${{ runner.os }}-${{ runner.arch }}-
+            picode-electron-${{ runner.os }}-
 
       # preinstall.ts looks for Visual Studio only under fixed Program Files
       # layouts. The runner image ships it in another edition, so locate it
@@ -192,13 +199,16 @@ jobs:
       - name: Release tests
         run: node --test build/release.test.mjs
 
+      - name: Build cache and CLI tests
+        shell: bash
+        run: node --test build/build-cli.test.mjs
+
       - name: Connector tests
         shell: bash
         working-directory: extensions/picode
-        run: |
-          for f in test/*.test.ts; do
-            node --experimental-strip-types --test "$f" || exit 1
-          done
+        # Node isolates each file in its own process; limit concurrency to avoid
+        # exhausting the shared Windows runner while allowing independent suites to overlap.
+        run: node --experimental-strip-types --test --test-concurrency=2 test/*.test.ts
 
       # The suites' own types. They run here, but nothing typechecked them
       # before this config existed, and a test calling a function with the wrong

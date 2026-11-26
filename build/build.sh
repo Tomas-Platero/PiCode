@@ -754,10 +754,12 @@ PICODE_CACHE_ENV=(
   "pack=$( basename "${PACK_DIR}" )"
   "fast=${PICODE_FAST:-0}"
   "cli=${PICODE_REQUIRE_CLI:-0}"
+  "minify=${PICODE_MINIFY}"
 )
 KEY_APP=$( node build/build-helpers.mjs cache fingerprint app "${PICODE_CACHE_ENV[@]}" )
 KEY_EXT=$( node build/build-helpers.mjs cache fingerprint extensions "${PICODE_CACHE_ENV[@]}" )
-KEY_PACK=$( node build/build-helpers.mjs cache fingerprint pack "${PICODE_CACHE_ENV[@]}" )
+# Only the pack holds the CLI, so building it or not changes only the pack key.
+KEY_PACK=$( node build/build-helpers.mjs cache fingerprint pack "${PICODE_CACHE_ENV[@]}" "build-cli=${PICODE_BUILD_CLI:-yes}" "commit=${BUILD_SOURCEVERSION}" )
 
 # What the early exit trusts is exactly what the verification at the end trusts: an editor
 # executable, the packaged out/ and the agent runtimes.
@@ -768,10 +770,17 @@ pack_intact() {
   local pi_entry
   pi_entry="${PACK_DIR}/resources/pi-runtime/node_modules/$( node -p "require('./build/distribution/runtime.json').package" )/dist/index.js"
   [[ -f "${pi_entry}" ]] || return 1
+  local memory_binary
+  memory_binary=$( node -p "require('./build/distribution/engram.json').binary" ) || return 1
+  [[ -n "${memory_binary}" && -f "${PACK_DIR}/resources/memory/${memory_binary}" ]] || return 1
+  if [[ "${PICODE_REQUIRE_CLI:-0}" == "1" ]] && [[ ! -f "${PACK_DIR}/bin/picode-cli.exe" && ! -f "${PACK_DIR}/bin/picode-cli" ]]; then
+    return 1
+  fi
   node build/verify-gentle-runtime.mjs "${PACK_DIR}/resources/gentle-ai" "${VSCODE_ARCH}"
 }
 
-if [[ "${PICODE_FULL_BUILD:-0}" != "1" ]] && pack_intact \
+# The cached pack is only the portable: a requested installer still has to be built.
+if [[ "${PICODE_FULL_BUILD:-0}" != "1" && "${PICODE_SKIP_INSTALLER:-yes}" == "yes" ]] && pack_intact \
   && node build/build-helpers.mjs cache matches pack "${KEY_PACK}"; then
   echo ""
   echo "== nothing changed since the last successful build: $( basename "${PACK_DIR}" ) already is that build"
