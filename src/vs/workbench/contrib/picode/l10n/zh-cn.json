@@ -1342,6 +1342,7 @@
 	"picodeWhatsNew.fix.editorStatus.warm": "**编辑器布局也能看到状态了。** 一切一目了然：无论你喜欢哪种布局，都是同一个面板。",
 	"picodeWhatsNew.fix.engineOrphan": "**记忆引擎随 PiCode 一起关闭。** 快速打开又关闭 PiCode 时，记忆引擎可能会独自继续运行并占用文件。现在最后一个关闭的窗口总会停止 PiCode 启动的引擎，PiCode 退出时也会这样做。",
 	"picodeWhatsNew.fix.fasterStart": "**pi 启动快多了。** 以前打开窗口时，pi 最多要准备三次，期间整个界面都会卡住。现在只准备一次，模型列表和 / 命令马上就能用。",
+	"picodeWhatsNew.fix.generatedImages": "**生成的每张图片都会显示在聊天中。** 无论由哪个工具或模型生成，即使工具只保存了文件或返回了链接，图片也会连同预览直接出现在聊天里。",
 	"picodeWhatsNew.fix.gentlePage": "**Gentle AI 有了自己的页面。** 在设置中“智能体”的正下方：智能体如何与你交谈、哪些事可以不问就做，以及一个新开关，让它们在你聊天时继续完成耗时的工作。",
 	"picodeWhatsNew.fix.jira": "**连接 Jira 不再依赖你的浏览器。** 有些浏览器在你于 Atlassian 页面同意后，再也不会重新打开 PiCode。现在 PiCode 页面会显示连接到哪个账户，你在那里确认，编辑器会自动发现。",
 	"picodeWhatsNew.fix.jobCards": "**后台任务结束后又能正常显示了。** 任务结束时，聊天中会显示它的卡片，包含结果和最后几行输出，不再有终端颜色留下的奇怪方块。",

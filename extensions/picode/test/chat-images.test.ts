@@ -30,8 +30,9 @@ test('generated image bytes and an image tool path are copied to the temporary p
 			{ type: 'image', data: Buffer.from(png()).toString('base64') },
 			{ type: 'text', text: 'Generated: `' + source + '`' },
 		];
+		// The same picture inside the result and as the saved file shows once.
 		const previews = await generatedImagesOf('mcp_generate_image', { content }, root);
-		assert.equal(previews.length, 2);
+		assert.equal(previews.length, 1);
 		for (const preview of previews) {
 			assert.equal(preview.mimeType, 'image/png');
 			assert.notEqual(preview.path, source);
