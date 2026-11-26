@@ -24,6 +24,10 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.4.15',
+			text: localize('picodeWhatsNew.fix.generatedImages', "**Every generated image shows up in the chat.** Whatever tool or model makes it, the picture appears right in the chat with its preview, also when the tool only saves a file or hands back a link."),
+		},
+		{
 			since: '2.4.6',
 			text: localize('picodeWhatsNew.fix.gentlePage', "**Gentle AI has a page of its own.** In Settings, right under Agents: how your agents talk to you, what they may do without asking, and a new switch to let them keep long jobs running while you chat."),
 		},
