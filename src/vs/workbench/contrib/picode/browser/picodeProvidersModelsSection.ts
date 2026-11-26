@@ -12,6 +12,7 @@ import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '..
 import { Emitter } from '../../../../base/common/event.js';
 import { localize } from '../../../../nls.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
 import { defaultButtonStyles, defaultInputBoxStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
@@ -26,8 +27,10 @@ import {
 } from '../../chat/browser/aiCustomization/aiCustomizationManagementSectionRegistry.js';
 import { AICustomizationManagementSection } from '../../chat/common/aiCustomizationWorkspaceService.js';
 import { ILanguageModelsService } from '../../chat/common/languageModels.js';
+import { IChatWidgetService } from '../../chat/browser/chat.js';
 import { PICODE_PROVIDERS_SETTING } from './picodeConfiguration.js';
 import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
+import { PROFILE_ICONS, PROFILE_ICONS_KEY, profileIcon, readProfileIcons } from './picodeAgentProfileIcons.js';
 
 /**
  * Providers & Models, as PiCode's own panel inside Chat Settings.
@@ -73,6 +76,7 @@ interface ICatalogEntry {
 	readonly oauth: boolean;
 	readonly apiKey: boolean;
 	readonly connected?: 'subscription' | 'key';
+	readonly needsAttention?: boolean;
 }
 
 type ICatalogAnswer = { readonly entries: readonly ICatalogEntry[] } | { readonly unavailable: string };
@@ -147,7 +151,8 @@ interface IAgentProfilesView {
 	readonly editorProfile?: string;
 	readonly live: boolean;
 	/** The profile the chat in front was moved to from the editor, when it was. */
-	readonly chat?: string;
+	readonly chat?: string | null;
+	readonly useSucceeded?: boolean;
 }
 
 /** Gentle's reserved name for the main agent inside a profile. */
@@ -161,21 +166,21 @@ const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'ma
  * Chat Settings keeps one panel alive once it was shown, so asking for a tab has two halves: a
  * panel that already exists switches through the event, and one created afterwards starts on it.
  */
-const tabRequests = new Emitter<PanelTab>();
-let pendingTab: PanelTab | undefined;
+const tabRequests = new Emitter<{ tab: PanelTab; query?: string }>();
+let pendingTab: { tab: PanelTab; query?: string } | undefined;
 
 /** Opens Chat Settings on Providers & Models, on the tab asked for (Providers by default). */
 export const OPEN_PROVIDERS_MODELS_COMMAND = 'picode.providersModels.open';
 
-CommandsRegistry.registerCommand(OPEN_PROVIDERS_MODELS_COMMAND, async (accessor, tab?: PanelTab) => {
+CommandsRegistry.registerCommand(OPEN_PROVIDERS_MODELS_COMMAND, async (accessor, tab?: PanelTab, query?: string) => {
 	// The agent profiles live on the Agents page now, as its first tab.
 	if (tab === 'agents') {
 		await accessor.get(ICommandService).executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.Agents);
 		return;
 	}
 	const target: PanelTab = tab === 'models' ? tab : 'providers';
-	pendingTab = target;
-	tabRequests.fire(target);
+	pendingTab = { tab: target, query: typeof query === 'string' ? query : undefined };
+	tabRequests.fire(pendingTab);
 	await accessor.get(ICommandService).executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.ProvidersModels);
 });
 
@@ -209,6 +214,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	private catalogLoading = false;
 	private catalogProblem: string | undefined;
 	private providerQuery = '';
+	private modelQuery = '';
 	/** The sign-in running in this panel, as last read from the connector. */
 	private authState: IAuthRunState | undefined;
 	/** The provider that just moved to Connected, highlighted once. */
@@ -221,9 +227,11 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		/** `profiles`: only the agent profiles, as the Agents page's first tab (no header, no tabs). */
 		private readonly mode: 'all' | 'profiles',
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IStorageService private readonly storageService: IStorageService,
 		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
 		@IContextViewService private readonly contextViewService: IContextViewService,
 		@ICommandService private readonly commandService: ICommandService,
+		@IChatWidgetService private readonly chatWidgetService: IChatWidgetService,
 		@IQuickInputService private readonly quickInputService: IQuickInputService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IContextMenuService private readonly contextMenuService: IContextMenuService,
@@ -248,7 +256,12 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			header.remove();
 			this.tab = 'agents';
 		} else if (pendingTab !== undefined) {
-			this.tab = pendingTab;
+			this.tab = pendingTab.tab;
+			if (this.tab === 'models') {
+				this.modelQuery = pendingTab.query ?? '';
+			} else {
+				this.providerQuery = pendingTab.query ?? '';
+			}
 			pendingTab = undefined;
 		}
 		if (this.tab === 'agents') {
@@ -256,9 +269,18 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		}
 		this.render();
 		void this.loadProfileProviders();
-		this.store.add(tabRequests.event(tab => {
+		this.store.add(tabRequests.event(request => {
 			pendingTab = undefined;
-			this.selectTab(tab);
+			if (request.tab === 'models') {
+				this.modelQuery = request.query ?? '';
+			} else {
+				this.providerQuery = request.query ?? '';
+			}
+			if (this.tab === request.tab) {
+				this.render();
+			} else {
+				this.selectTab(request.tab);
+			}
 		}));
 
 		this.store.add(this.configurationService.onDidChangeConfiguration(event => {
@@ -435,8 +457,11 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		const active = this.authState;
 		const activeId = active !== undefined && active.phase !== 'cancelled' ? active.providerId : undefined;
 
+		const attentionIds = new Set(catalog.filter(entry => entry.needsAttention).map(entry => entry.id));
+		const attention = catalog.filter(entry => attentionIds.has(entry.id) && entry.id !== activeId && matches(entry.id, entry.name, entry.note));
 		const connected = [...connectedIds]
 			.filter(id => id !== activeId)
+			.filter(id => !attentionIds.has(id))
 			.map(id => ({ id, entry: catalog.find(candidate => candidate.id === id) }))
 			.filter(({ id, entry }) => matches(id, entry?.name, entry?.note))
 			.sort((left, right) => (left.entry?.name ?? left.id).localeCompare(right.entry?.name ?? right.id));
@@ -444,6 +469,14 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		if (!this.profileLoaded && this.catalog === undefined) {
 			this.paintSkeleton(list);
 			return;
+		}
+
+		if (attention.length > 0) {
+			this.paintSectionTitle(list, localize('picodePv.needsAttention', "Needs attention"), attention.length, Codicon.warning);
+			const grid = append(list, $('.picode-pv-grid'));
+			for (const entry of attention) {
+				this.paintTile(grid, entry, entry.oauth ? 'oauth' : 'api_key');
+			}
 		}
 
 		if (connected.length > 0) {
@@ -463,7 +496,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			return;
 		}
 
-		const available = catalog.filter(entry => (!connectedIds.has(entry.id) || entry.id === activeId) && matches(entry.id, entry.name, entry.note));
+		const available = catalog.filter(entry => (!attentionIds.has(entry.id) || entry.id === activeId) && (!connectedIds.has(entry.id) || entry.id === activeId) && matches(entry.id, entry.name, entry.note));
 		const accounts = available.filter(entry => entry.oauth);
 		const keys = available.filter(entry => !entry.oauth && entry.apiKey);
 
@@ -481,7 +514,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 				this.paintTile(grid, entry, 'api_key');
 			}
 		}
-		if (connected.length === 0 && accounts.length === 0 && keys.length === 0) {
+		if (attention.length === 0 && connected.length === 0 && accounts.length === 0 && keys.length === 0) {
 			append(list, $('p.picode-pm-empty')).textContent = localize('picodePv.noMatch', "No provider matches \"{0}\".", this.providerQuery.trim());
 		}
 
@@ -600,11 +633,13 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		mark.appendChild(createServiceLogo(entry.id));
 		const text = append(tile, $('.picode-pv-text'));
 		append(text, $('span.picode-pv-name')).textContent = entry.name;
-		append(text, $('span.picode-pv-sub')).textContent = method === 'oauth'
+		append(text, $('span.picode-pv-sub')).textContent = entry.needsAttention
+			? localize('picodePv.credentialUnavailable', "Saved credential could not be used")
+			: method === 'oauth'
 			? (entry.note ?? localize('picodePv.yourAccount', "Your account"))
 			: localize('picodePv.apiKey', "API key");
 		const go = append(tile, $('span.picode-pv-go'));
-		go.textContent = method === 'oauth' ? localize('picodePv.signIn', "Sign in") : localize('picodePv.addKey', "Add key");
+		go.textContent = entry.needsAttention ? localize('picodePv.reconnectCredential', "Reconnect") : method === 'oauth' ? localize('picodePv.signIn', "Sign in") : localize('picodePv.addKey', "Add key");
 		tile.title = method === 'oauth'
 			? localize('picodePv.signInTooltip', "Sign in to {0} in your browser", entry.name)
 			: localize('picodePv.addKeyTooltip', "Paste your {0} API key", entry.name);
@@ -619,6 +654,13 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			this.listStore.add(addDisposableListener(alt, 'click', event => {
 				event.stopPropagation();
 				void this.startAuth(entry.id, 'api_key');
+			}));
+			this.listStore.add(addDisposableListener(alt, 'keydown', event => {
+				if (event.key === 'Enter' || event.key === ' ') {
+					event.preventDefault();
+					event.stopPropagation();
+					void this.startAuth(entry.id, 'api_key');
+				}
 			}));
 		}
 	}
@@ -929,7 +971,8 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	/** Asks the connector for the agent profiles. */
 	private async loadAgents(): Promise<void> {
 		try {
-			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.state');
+			const chatKey = this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString() ?? '';
+			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.state', chatKey);
 		} catch {
 			this.profilesView = undefined;
 		}
@@ -964,8 +1007,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	/** Uses a profile: by default (and in the chat in front), or only in the chat in front. */
 	private async useProfile(name: string, mode: 'default' | 'session'): Promise<void> {
 		try {
-			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.use', { name, mode });
-			this.agentNote = mode === 'session' ? localize('picodePm.profileUsedHere', "This chat now uses {0}.", name) : '';
+			const chatKey = this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString() ?? '';
+			this.profilesView = await this.commandService.executeCommand<IAgentProfilesView>('picode.agentProfiles.use', { name, mode, chatKey });
+			this.agentNote = mode === 'session' && this.profilesView?.useSucceeded === true ? localize('picodePm.profileUsedHere', "This chat now uses {0}.", name) : '';
 			this.agentNoteIsError = false;
 		} catch {
 			// The connector said why in a notification.
@@ -1035,6 +1079,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		this.store.add(addDisposableListener(add, 'click', async () => {
 			const name = await this.askProfileName(localize('picodePm.newProfile', "New agent profile"), '');
 			if (name !== undefined && await this.editProfiles({ type: 'create', name, ...(selected === undefined ? {} : { from: selected.name }) })) {
+				if (selected !== undefined) {
+					this.moveProfileIcon(selected.name, name, true);
+				}
 				this.selectedProfile = name;
 				this.render();
 			}
@@ -1046,7 +1093,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			item.classList.toggle('selected', profile.name === selected?.name);
 			item.setAttribute('aria-pressed', profile.name === selected?.name ? 'true' : 'false');
 			const title = append(item, $('.picode-ap-item-title'));
-			append(title, $('span' + ThemeIcon.asCSSSelector(profile.mode === 'full-delegation' ? Codicon.organization : Codicon.robot)));
+			append(title, $('span.picode-ap-profile-icon' + ThemeIcon.asCSSSelector(this.profileIcon(profile))));
 			append(title, $('span.picode-ap-item-name')).textContent = profile.name;
 			const marks = append(item, $('.picode-ap-marks'));
 			const mark = (text: string, kind: string, tooltip?: string) => {
@@ -1080,8 +1127,22 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	private renderProfile(detail: HTMLElement, view: IAgentProfilesView, profile: IAgentProfile): void {
 		const head = append(detail, $('.picode-ap-head'));
 		const name = append(head, $('h3.picode-ap-name'));
-		append(name, $('span' + ThemeIcon.asCSSSelector(Codicon.robot)));
-		append(name, $('span')).textContent = profile.name;
+		const icon = append(name, $<HTMLButtonElement>('button.picode-ap-choose-icon' + ThemeIcon.asCSSSelector(this.profileIcon(profile))));
+		icon.type = 'button';
+		icon.title = localize('picodePm.changeProfileIcon', "Change profile icon");
+		icon.setAttribute('aria-label', icon.title);
+		this.store.add(addDisposableListener(icon, 'click', () => void this.chooseProfileIcon(profile)));
+		if (view.unsaved) {
+			append(name, $('span')).textContent = profile.name;
+		} else {
+			const rename = append(name, $<HTMLButtonElement>('button.picode-ap-rename'));
+			rename.type = 'button';
+			rename.title = localize('picodePm.renameProfile', "Rename profile");
+			rename.setAttribute('aria-label', localize('picodePm.renameProfileNamed', "Rename {0}", profile.name));
+			append(rename, $('span')).textContent = profile.name;
+			append(rename, $('span.picode-ap-rename-icon' + ThemeIcon.asCSSSelector(Codicon.edit)));
+			this.store.add(addDisposableListener(rename, 'click', () => this.renameProfileInline(rename, profile)));
+		}
 		const actions = append(head, $('.picode-ap-actions'));
 		if (profile.name !== view.active) {
 			const makeDefault = this.store.add(new Button(actions, { ...defaultButtonStyles }));
@@ -1225,6 +1286,87 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		}
 	}
 
+	private profileIcons(): Record<string, string> {
+		return readProfileIcons(this.storageService);
+	}
+
+	private renameProfileInline(button: HTMLButtonElement, profile: IAgentProfile): void {
+		const input = $<HTMLInputElement>('input.picode-ap-name-input');
+		input.value = profile.name;
+		input.maxLength = 64;
+		input.setAttribute('aria-label', localize('picodePm.profileName', "Profile name"));
+		button.replaceWith(input);
+		input.focus();
+		input.select();
+		let finished = false;
+		const finish = async (save: boolean, restoreFocus = false) => {
+			if (finished) {
+				return;
+			}
+			const value = input.value.trim();
+			if (save && value !== profile.name) {
+				const invalid = !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value) || ['__proto__', 'constructor', 'prototype'].includes(value);
+				const taken = this.profilesView?.profiles.some(item => item.name === value);
+				if (invalid || taken) {
+					input.setCustomValidity(invalid ? localize('picodePm.profileNameRule', "Use letters, numbers, dots, dashes or underscores, up to 64, starting with a letter or number.") : localize('picodePm.profileNameTaken', "A profile called {0} already exists.", value));
+					input.reportValidity();
+					return;
+				}
+				finished = true;
+				if (await this.editProfiles({ type: 'rename', name: profile.name, to: value })) {
+					this.moveProfileIcon(profile.name, value);
+					this.selectedProfile = value;
+					this.render();
+				}
+			} else {
+				finished = true;
+				input.replaceWith(button);
+				if (restoreFocus) {
+					button.focus();
+				}
+			}
+		};
+		this.store.add(addDisposableListener(input, 'input', () => input.setCustomValidity('')));
+		this.store.add(addDisposableListener(input, 'keydown', event => {
+			if (event.key === 'Enter' || event.key === 'Escape') {
+				event.preventDefault();
+				void finish(event.key === 'Enter', true);
+			}
+		}));
+		this.store.add(addDisposableListener(input, 'blur', () => void finish(true)));
+	}
+
+	private profileIcon(profile: IAgentProfile): ThemeIcon {
+		return profileIcon(this.storageService, profile.name, profile.mode);
+	}
+
+	private async chooseProfileIcon(profile: IAgentProfile): Promise<void> {
+		const current = this.profileIcon(profile);
+		const choices = PROFILE_ICONS.map(icon => ({ label: `$(${icon.id}) ${icon.id}`, icon }));
+		const choice = await this.quickInputService.pick(choices, { placeHolder: localize('picodePm.chooseProfileIcon', "Choose an icon for {0}", profile.name), activeItem: choices.find(item => item.icon.id === current.id) });
+		if (choice) {
+			const icons = this.profileIcons();
+			icons[profile.name] = choice.icon.id;
+			this.storageService.store(PROFILE_ICONS_KEY, JSON.stringify(icons), StorageScope.PROFILE, StorageTarget.USER);
+			this.render();
+		}
+	}
+
+	private moveProfileIcon(from: string, to?: string, copy = false): void {
+		const icons = this.profileIcons();
+		if (to !== undefined) {
+			if (icons[from] !== undefined) {
+				icons[to] = icons[from];
+			} else {
+				delete icons[to];
+			}
+		}
+		if (!copy) {
+			delete icons[from];
+		}
+		this.storageService.store(PROFILE_ICONS_KEY, JSON.stringify(icons), StorageScope.PROFILE, StorageTarget.USER);
+	}
+
 	/**
 	 * The backup models of one agent, in the order they are tried: each can move up or go, and
 	 * "Add a backup model" appends one from the models the editor can reach.
@@ -1306,6 +1448,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		run('picode.profile.rename', localize('picodePm.rename', "Rename..."), !view.unsaved, async () => {
 			const to = await this.askProfileName(localize('picodePm.renameTitle', "Rename {0}", profile.name), profile.name);
 			if (to !== undefined && await this.editProfiles({ type: 'rename', name: profile.name, to })) {
+				this.moveProfileIcon(profile.name, to);
 				this.selectedProfile = to;
 				this.render();
 			}
@@ -1313,6 +1456,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		run('picode.profile.duplicate', localize('picodePm.duplicate', "Duplicate..."), true, async () => {
 			const name = await this.askProfileName(localize('picodePm.duplicateTitle', "Copy of {0}", profile.name), '');
 			if (name !== undefined && await this.editProfiles({ type: 'create', name, from: profile.name })) {
+				this.moveProfileIcon(profile.name, name, true);
 				this.selectedProfile = name;
 				this.render();
 			}
@@ -1339,6 +1483,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 					primaryButton: localize('picodePm.deleteButton', "Delete"),
 				});
 				if (confirmed && await this.editProfiles({ type: 'delete', name: profile.name })) {
+					this.moveProfileIcon(profile.name);
 					this.selectedProfile = undefined;
 					this.render();
 				}
@@ -1359,6 +1504,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			placeholder: localize('picodePm.searchModels', "Search models by name or id..."),
 		}));
 		search.element.classList.add('picode-pm-search');
+		search.value = this.modelQuery;
 
 		const providerSelect = document.createElement('select');
 		providerSelect.className = 'picode-pm-select';

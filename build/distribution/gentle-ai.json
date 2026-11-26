@@ -1,0 +1,6 @@
+{
+  "gentlePiVersion": "5.0.0",
+  "gentleAiVersion": "5.0.0",
+  "goModule": "github.com/gentleman-programming/gentle-ai/v5",
+  "goModuleChecksum": "h1:8NBGfEMu/LsR/lJxALGNAsvK9+5SA2htPNueWKXIW24="
+}

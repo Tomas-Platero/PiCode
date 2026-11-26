@@ -89,11 +89,18 @@ export interface PiModelRuntime {
 	isUsingOAuth(providerId: string): boolean;
 	isUsingSubscription(providerId: string): boolean;
 	hasConfiguredAuth(providerId: string): boolean;
+	getProviderAuthStatus?(providerId: string): { readonly configured: boolean; readonly source?: string };
 	login?(providerId: string, type: PiAuthType, interaction: PiAuthInteraction): Promise<unknown>;
 	/** Removes the stored credential (a sign-in or a key) for a provider. */
 	logout?(providerId: string): Promise<void>;
 	/** The models that can run right now: their provider has a credential or needs none. */
 	getAvailable?(providerId?: string): Promise<readonly { readonly id: string; readonly provider: string }[]>;
+}
+
+/** A stored credential can exist while the command that resolves it fails. */
+export function providerCredentialNeedsAttention(runtime: Pick<PiModelRuntime, 'getProviderAuthStatus'>, providerId: string): boolean {
+	const status = runtime.getProviderAuthStatus?.(providerId);
+	return status?.source === 'stored' && status.configured === false;
 }
 
 /** The SDK slice: the one step that builds a runtime over PiCode's own profile. */

@@ -359,6 +359,7 @@ async function auditEngram(from, to, release) {
 		`Both Windows archives were downloaded and match the release's \`checksums.txt\`.`,
 		`Release notes: ${release.html_url}`,
 		`The \`note\` in \`build/distribution/engram.json\` still describes ${from}; rewrite it before merging.`,
+		`Verify the upstream licence for ${to}, update \`build/distribution/LICENSE-engram.txt\` if needed, and set \`licenseVersion\` to ${to} before merging.`,
 	];
 	return { review, notes, pin };
 }

@@ -14,6 +14,13 @@ import assert from 'assert';
 import { test } from 'node:test';
 import { toolInputText, toolOutputText, toolProgress } from '../src/progress.ts';
 
+test('a shell output card explains when full output could not be saved', () => {
+	const output = toolOutputText({ content: [{ text: 'partial output' }], details: { fullOutputError: 'disk full' } });
+	assert.match(output, /partial output/);
+	assert.match(output, /full output/i);
+	assert.match(output, /disk full/);
+});
+
 test('the progress line names the work, and the bare tool when there is nothing to name', () => {
 	assert.strictEqual(toolProgress('read', { path: 'src/app.ts' }), 'read src/app.ts');
 	assert.strictEqual(toolProgress('bash', { command: 'npm test' }), 'bash npm test');
