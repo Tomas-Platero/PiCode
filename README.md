@@ -87,6 +87,8 @@
 
 Ask for a review or a refactor and PiCode can hand it to a specialist agent. You see every step it takes — and you can keep chatting in the meantime.
 
+**🔌 From your other apps, too.** Turn on *Let other apps start chats* and a tool you run on your computer — a task board, a script — can open a project, hand pi a task and learn which chat took it. Only your Windows account on that computer can connect, and each task starts just once.
+
 <img src="./resources/picode/screenshots/chat.png" alt="A specialist agent reviewing code while the chat carries on" width="100%" />
 
 ### 🌐 It checks its own work
