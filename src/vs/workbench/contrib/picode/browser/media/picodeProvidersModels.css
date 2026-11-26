@@ -1132,11 +1132,16 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 .picode-ap {
 	display: grid;
 	grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
-	gap: 16px;
+	align-content: start;
+	gap: 24px;
+	width: 100%;
+	max-width: 1100px;
+	min-height: 0;
+	overflow-y: auto;
 	margin: 0 0 16px;
 }
 
-@container (max-width: 560px) {
+@container (max-width: 700px) {
 	.picode-ap {
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -1147,6 +1152,10 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 	flex-direction: column;
 	gap: 4px;
 	min-width: 0;
+	padding: 12px;
+	border: 1px solid var(--vscode-widget-border, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--vscode-foreground) 3%, var(--vscode-editor-background));
 }
 
 .picode-ap-list-head,
@@ -1243,6 +1252,10 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 
 .picode-ap-detail {
 	min-width: 0;
+	padding: 16px;
+	border: 1px solid var(--vscode-widget-border, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--vscode-foreground) 3%, var(--vscode-editor-background));
 }
 
 .picode-ap-name {
@@ -1252,6 +1265,69 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 	margin: 0;
 	font-size: 15px;
 	font-weight: 600;
+}
+
+.picode-ap-choose-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border: 1px solid var(--vscode-widget-border, transparent);
+	border-radius: 9px;
+	background: var(--vscode-list-hoverBackground);
+	color: var(--vscode-textLink-foreground);
+	cursor: pointer;
+}
+
+.picode-ap-choose-icon:hover {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-ap-rename {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	padding: 5px 6px;
+	border: 1px solid transparent;
+	border-radius: 5px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: text;
+}
+
+.picode-ap-rename:hover,
+.picode-ap-rename:focus-visible {
+	background: var(--vscode-list-hoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-ap-rename-icon {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-ap-name-input {
+	width: min(220px, 100%);
+	min-width: 0;
+	padding: 5px 6px;
+	border: 1px solid var(--vscode-focusBorder);
+	border-radius: 5px;
+	outline: none;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font: inherit;
+}
+
+.picode-ap-choose-icon:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+.picode-ap-profile-icon {
+	color: var(--vscode-textLink-foreground);
 }
 
 .picode-ap-actions {
@@ -1268,7 +1344,52 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 .picode-ap-modes {
 	display: flex;
 	gap: 6px;
-	margin: 0 0 10px;
+	margin: 0 0 16px;
+}
+
+.picode-ap .picode-pm-models {
+	overflow: visible;
+	scrollbar-gutter: auto;
+	gap: 3px;
+}
+
+.picode-ap .picode-pm-agent {
+	display: grid;
+	grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) minmax(120px, 0.8fr) auto 40px;
+	gap: 8px;
+	min-height: 42px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+	background: color-mix(in srgb, var(--vscode-foreground) 2%, var(--vscode-editor-background));
+}
+
+.picode-ap .picode-pm-agent:hover,
+.picode-ap .picode-pm-agent:focus-within {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-ap .picode-pm-agent-select,
+.picode-ap .picode-ap-thinking {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+	min-height: 28px;
+}
+
+.picode-ap-item:focus-visible,
+.picode-ap-icon-button:focus-visible,
+.picode-ap-backups:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+@container (max-width: 1050px) {
+	.picode-ap .picode-pm-agent {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto 40px;
+	}
+
+	.picode-ap .picode-pm-agent-name {
+		grid-column: 1 / -1;
+	}
 }
 
 .picode-ap-thinking {

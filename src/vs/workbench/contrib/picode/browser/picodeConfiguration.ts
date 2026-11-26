@@ -84,6 +84,12 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 	id: 'picode',
 	title: 'PiCode',
 	properties: {
+		'picode.review.enabled': {
+			type: 'boolean',
+			default: false,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('picode.review.enabled', "Make Gentle code review available in PiCode chats."),
+		},
 		'picode.chat.confirmSend': {
 			type: 'boolean',
 			default: false,
@@ -93,6 +99,14 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'boolean',
 			default: true,
 			description: localize('picode.chat.enterToSend', "Send chat messages with Enter. When off, use Ctrl+Enter or Cmd+Enter."),
+		},
+		// Read by the main process (`code/electron-main/picodeAgentBridge.ts`). Machine scope: each
+		// computer decides for itself, Settings Sync never turns it on elsewhere.
+		'picode.agentBridge.enabled': {
+			type: 'boolean',
+			default: false,
+			scope: ConfigurationScope.MACHINE,
+			description: localize('picode.agentBridge.enabled', "Let apps you run on this computer open a project and start a pi chat. Only your Windows account on this computer can connect."),
 		},
 		'picode.sessions.autoName': {
 			type: 'boolean',
@@ -216,6 +230,22 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			default: 'show',
 			order: 4,
 			markdownDescription: localize('picode.pi.reasoning', "Whether the model's thinking is written into the chat. It is long, and the answer is usually what is wanted."),
+		},
+		'picode.pi.notices.cacheMisses': {
+			type: 'boolean', default: false,
+			description: localize('picode.pi.notices.cacheMisses', "Notify when a request cannot reuse much of the prompt cache."),
+		},
+		'picode.pi.notices.cacheWarming': {
+			type: 'boolean', default: false,
+			description: localize('picode.pi.notices.cacheWarming', "Notify when the prompt cache is refreshed and show its cost."),
+		},
+		'picode.pi.notices.compactionCosts': {
+			type: 'boolean', default: false,
+			description: localize('picode.pi.notices.compactionCosts', "Notify about the cost of compacting the conversation."),
+		},
+		'picode.pi.notices.reasoningDrops': {
+			type: 'boolean', default: false,
+			description: localize('picode.pi.notices.reasoningDrops', "Notify when a provider omits earlier reasoning."),
 		},
 		[PICODE_DISABLED_TOOLS_SETTING]: {
 			type: 'array',

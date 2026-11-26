@@ -11,6 +11,7 @@ import {
 	LoginCancelled,
 	defaultOptionOf,
 	rankOf,
+	providerCredentialNeedsAttention,
 	type PiAuthEvent,
 	type PiAuthInteraction,
 	type PiAuthPrompt,
@@ -55,6 +56,8 @@ export interface CatalogEntry {
 	readonly apiKey: boolean;
 	/** How it is connected now, if it is. */
 	readonly connected?: 'subscription' | 'key';
+	/** The stored credential exists but could not be resolved. */
+	readonly needsAttention?: boolean;
 	/** Position in its group: featured first, then by name. */
 	readonly rank: number;
 }
@@ -312,7 +315,8 @@ function catalogOf(runtime: PiModelRuntime): CatalogEntry[] {
 		if (!oauth && !apiKey) {
 			continue;
 		}
-		const subscription = oauth && runtime.isUsingOAuth(provider.id);
+		const needsAttention = providerCredentialNeedsAttention(runtime, provider.id);
+		const subscription = !needsAttention && oauth && runtime.isUsingOAuth(provider.id);
 		const configured = runtime.hasConfiguredAuth(provider.id);
 		const note = FEATURED_SUBSCRIPTIONS.find(featured => featured.id === provider.id)?.note;
 		const keyRank = FEATURED_KEYS.indexOf(provider.id);
@@ -322,7 +326,7 @@ function catalogOf(runtime: PiModelRuntime): CatalogEntry[] {
 			...(note === undefined ? {} : { note }),
 			oauth,
 			apiKey,
-			...(subscription ? { connected: 'subscription' as const } : configured ? { connected: 'key' as const } : {}),
+			...(needsAttention ? { needsAttention: true } : subscription ? { connected: 'subscription' as const } : configured ? { connected: 'key' as const } : {}),
 			rank: oauth ? rankOf(provider.id) : (keyRank === -1 ? FEATURED_KEYS.length : keyRank),
 		});
 	}

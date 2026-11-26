@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { agentProfilesExtension } from './agent-profiles-live';
+import { agentProgressExtension } from './agent-progress-live';
+import { GENTLE_REVIEW_SETTING, hasUnmanagedGentleRuntime, prepareGentleReview } from './gentle-review-runtime';
 import * as vscode from 'vscode';
 import { withContext } from './context';
 import { currentBranch, noteTurnBranch, renameRecordedBranch, updateSessionGitStore, withTitle } from './session-git';
@@ -15,7 +17,7 @@ import { generatedImagesOf, isImageCreationTool } from './generated-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
 import { compareModels, MAX_COMPARED_MODELS, MIN_COMPARED_MODELS, renderComparison } from './compare-models';
 import { listModels } from './wizard-models';
-import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, piRuntimeRoot, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
@@ -38,6 +40,7 @@ import {
 } from './permissions';
 import { editorTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
+import { piNotice, type PiNotices } from './pi-notices';
 import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
 import { LateTurnCollector, type LateTurnEvent } from './late-turn';
 import { TODO_TOOL_NAME, TodoTracker, todoFromResult, type TodoBoard } from './agent-todo';
@@ -70,8 +73,9 @@ import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } fr
 import { settingsForFolder } from './folder-trust';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
-import { piProjectSlug } from './sessions-provider';
-import { chatSlashCommandsOf, piCommandsOfRunner, type PiCommand } from './command-registry';
+import { areaFamilySlugs, listProjectSessionFiles, piProjectSlug } from './sessions-provider';
+import { findTaskSession, TASK_ENTRY_TYPE, taskStatus, type SessionEntryLike, type TaskMark } from './agent-bridge-task';
+import { chatSlashCommandsOf, piArgumentCompletionsOf, piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 import { gentleAgents } from './gentle-agents-store';
@@ -80,7 +84,7 @@ import { isAgentModelsCommand } from './gentle-models';
 import { isExpectedHelperNotice, isStartupHousekeepingNotice } from './extension-notices';
 import { recordUsageHeaders } from './subscription-usage';
 import { CHAT_MODEL_ENV } from './subagent-model-fallback';
-import { displayedCustomText, EDITOR_COMMANDS, isListedCommand, LEARNED_TERMINAL_ONLY, panelText, parseSlash, routeSlash, sessionStatsMarkdown, type SlashContext, type UnavailableCommand } from './chat-commands';
+import { conversationExportFormat, displayedCustomText, EDITOR_COMMANDS, editorCommandDestination, isListedCommand, LEARNED_TERMINAL_ONLY, panelText, parseSlash, routeSlash, sessionStatsMarkdown, type SlashContext, type UnavailableCommand } from './chat-commands';
 import { LearnedCommands, terminalOnlyVerdict } from './learned-commands';
 import { summariseSessionUsage, type SessionUsage } from './session-usage';
 export type { SessionUsage };
@@ -215,6 +219,7 @@ export interface PiSession {
 	readonly sessionId: string;
 	readonly isStreaming: boolean;
 	readonly model?: PiModel;
+	readonly sessionManager?: { getEntries(): readonly unknown[]; getBranch?(): readonly unknown[] };
 	readonly thinkingLevel?: string;
 	/**
 	 * Send a prompt. While {@link isStreaming}, pi **requires** the queueing choice and refuses the
@@ -258,6 +263,7 @@ export interface PiSession {
 	compact?(customInstructions?: string): Promise<unknown>;
 	getSessionStats?(): PiSessionStats;
 	exportToHtml?(outputPath?: string): Promise<string>;
+	exportToJsonl?(outputPath?: string): string;
 	getLastAssistantText?(): string | undefined;
 	readonly promptTemplates?: ReadonlyArray<{ readonly name: string; readonly description?: string; readonly argumentHint?: string }>;
 	readonly resourceLoader?: { getSkills?(): { readonly skills: ReadonlyArray<{ readonly name: string }> } };
@@ -1298,7 +1304,7 @@ function showSessionProblems(turn: TurnHolder, problems: readonly SessionProblem
 	}
 }
 
-function extensionUiContext(log: (line: string) => void, turn: TurnHolder): PiExtensionUiContext {
+function extensionUiContext(log: (line: string) => void, turn: TurnHolder, chatKey?: string): PiExtensionUiContext {
 	const noop = (): void => { /* the chat owns this surface */ };
 	return {
 		confirm: async (title: string, message: string): Promise<boolean> =>
@@ -1360,7 +1366,7 @@ function extensionUiContext(log: (line: string) => void, turn: TurnHolder): PiEx
 		setHiddenThinkingLabel: noop,
 		// gentle-pi publishes its subagents' live state here, and only here; the Tasks block draws it.
 		// Every other widget is the terminal's, and the chat owns that surface.
-		setWidget: (key: string, content?: unknown): void => gentleAgents.publish(key, content),
+		setWidget: (key: string, content?: unknown): void => gentleAgents.publish(key, content, chatKey),
 		setFooter: noop,
 		setHeader: noop,
 		setTitle: noop,
@@ -1456,7 +1462,7 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * interactive confirmation". `onError` is bound so a broken extension is said and the turn
  * still runs.
  */
-export async function bindSessionExtensions(session: PiSession, log: (line: string) => void, turn: TurnHolder = turnContext): Promise<void> {
+export async function bindSessionExtensions(session: PiSession, log: (line: string) => void, turn: TurnHolder = turnContext, chatKey?: string): Promise<void> {
 	watchAgentWork(session);
 	if (typeof session.bindExtensions !== 'function') {
 		return;
@@ -1474,7 +1480,7 @@ export async function bindSessionExtensions(session: PiSession, log: (line: stri
 				// extension here observes. pi's published type is generic (`custom<T>(): Promise<T>`);
 				// the carousel has no typed widget results beyond that, so this assertion states the
 				// contract it actually honours, not pi's generic.
-				uiContext: extensionUiContext(log, turn) as unknown as OfficialUiContext,
+				uiContext: extensionUiContext(log, turn, chatKey) as unknown as OfficialUiContext,
 				mode: 'rpc',
 				onError: error => log(`extension error (${error.extensionPath ?? 'unknown'}) on ${error.event ?? 'unknown'}: ${error.error ?? 'no message'}`),
 			}),
@@ -1500,7 +1506,7 @@ export async function bindSessionExtensions(session: PiSession, log: (line: stri
  * ------------------------------------------------------------------ */
 
 /** What the session can run by name right now: its extension commands and its skills. */
-function slashContextOf(session: PiSession): SlashContext {
+function slashContextOf(session: PiSession, gentleReviewAvailable?: boolean): SlashContext {
 	let skills: readonly { readonly name: string }[] = [];
 	try {
 		skills = session.resourceLoader?.getSkills?.().skills ?? [];
@@ -1509,6 +1515,7 @@ function slashContextOf(session: PiSession): SlashContext {
 	}
 	const commands = piCommandsOfRunner(session);
 	return {
+		gentleReviewAvailable,
 		extensionCommands: new Set(commands.map(command => command.name)),
 		skills: new Set(skills.map(skill => skill.name)),
 		learnedTerminalOnly: name => {
@@ -1562,6 +1569,11 @@ function answerUnavailable(stream: vscode.ChatResponseStream, command: Unavailab
  */
 async function runEditorCommand(name: string, args: string, session: PiSession, stream: vscode.ChatResponseStream, deps: AgentDeps, cwd: string): Promise<boolean> {
 	const run = (command: string, ...commandArgs: unknown[]): Thenable<unknown> => vscode.commands.executeCommand(command, ...commandArgs);
+	const destination = editorCommandDestination(name, args);
+	if (destination !== undefined) {
+		await run(destination.command, ...destination.args);
+		return false;
+	}
 	switch (name) {
 		case 'compact': {
 			if (typeof session.compact !== 'function') {
@@ -1575,9 +1587,6 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 		}
 		case 'new':
 			await run('workbench.action.chat.newChat');
-			return false;
-		case 'model':
-			await run('workbench.action.chat.openModelPicker');
 			return false;
 		case 'thinking': {
 			const level = args.toLowerCase();
@@ -1623,8 +1632,9 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 			return false;
 		}
 		case 'export': {
-			if (typeof session.exportToHtml !== 'function') {
-				stream.markdown(vscode.l10n.t('This pi cannot save a conversation as a web page.'));
+			const jsonl = conversationExportFormat(args) === 'jsonl';
+			if (jsonl ? typeof session.exportToJsonl !== 'function' : typeof session.exportToHtml !== 'function') {
+				stream.markdown(jsonl ? vscode.l10n.t('This pi cannot export a conversation as JSONL.') : vscode.l10n.t('This pi cannot save a conversation as a web page.'));
 				return false;
 			}
 			stream.progress(vscode.l10n.t('Saving the conversation…'));
@@ -1634,10 +1644,29 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 			const target = args.length === 0
 				? `pi-session-${new Date().toISOString().replace(/[:.]/g, '-')}.html`
 				: args;
-			const file = await session.exportToHtml(path.resolve(cwd, target));
-			stream.markdown(vscode.l10n.t('📄 Conversation saved as a web page.'));
+			let file: string;
+			if (jsonl) {
+				const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'picode-export-'));
+				try {
+					const source = session.exportToJsonl!(path.join(temporary, 'session.jsonl'));
+					file = path.resolve(cwd, target);
+					fs.mkdirSync(path.dirname(file), { recursive: true });
+					fs.copyFileSync(source, file, fs.constants.COPYFILE_EXCL);
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== 'EEXIST') { throw error; }
+					stream.markdown(vscode.l10n.t('A file with that name already exists. Choose another name.'));
+					return false;
+				} finally {
+					fs.rmSync(temporary, { recursive: true, force: true });
+				}
+			} else {
+				file = await session.exportToHtml!(path.resolve(cwd, target));
+			}
+			stream.markdown(jsonl ? vscode.l10n.t('📄 Conversation saved as a JSONL file.') : vscode.l10n.t('📄 Conversation saved as a web page.'));
 			// In the editor's own browser, to read it as a page — not as a text file to edit.
-			stream.button({ command: 'workbench.action.browser.openFile', title: vscode.l10n.t('Open it'), arguments: [vscode.Uri.file(file)] });
+			if (!jsonl) {
+				stream.button({ command: 'workbench.action.browser.openFile', title: vscode.l10n.t('Open it'), arguments: [vscode.Uri.file(file)] });
+			}
 			stream.button({ command: 'revealFileInOS', title: vscode.l10n.t('Show the file'), arguments: [vscode.Uri.file(file)] });
 			return false;
 		}
@@ -1656,13 +1685,6 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 			return true;
 		case 'resume':
 			await run('agentSessions.showAgentSessionsSidebar');
-			return false;
-		case 'login':
-		case 'logout':
-			await run('workbench.action.openSettings', 'picode.providers');
-			return false;
-		case 'settings':
-			await run('workbench.action.openSettings', 'picode');
 			return false;
 		case 'gentle:models':
 			stream.markdown(await deps.chooseAgentModels?.() ?? vscode.l10n.t('No change to the agents’ models.'));
@@ -1970,6 +1992,8 @@ interface ChatPi {
 	sessionScopeKey?: string;
 	/** The profile the session was built against, so a runtime switch rebuilds it. */
 	sessionAgentDir?: string;
+	gentleReviewAvailable?: boolean;
+	gentleReviewEnabled?: boolean;
 	/** The MCP tool set the session was built with. */
 	mcpSignature: string;
 	/** The disabled tools the session was built with, so a change rebuilds it. */
@@ -2077,7 +2101,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		}
 		// The key is the session's identity: a rebuilt session reads again instead of
 		// serving another session's registry.
-		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: chatSlashCommandsOf(session, EDITOR_COMMANDS, isListedCommand) };
+		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: chatSlashCommandsOf(session, EDITOR_COMMANDS, name => isListedCommand(name, active?.gentleReviewAvailable === true)) };
 	};
 	sessionMcpProvider = () => {
 		const session = active?.session;
@@ -2108,6 +2132,76 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	 * the manager, not in the session.
 	 */
 	const chats = new Map<string, ChatPi>();
+	/** Chats another app started through the local agent bridge, by chat resource, until their session exists. */
+	const taskBindings = new Map<string, TaskMark & { readonly title: string }>();
+	// The local agent bridge (`src/vs/code/electron-main/picodeAgentBridge.ts`): the window binds a task
+	// to the chat it creates, then asks when pi has the assignment, or looks a task up after a crash.
+	context.subscriptions.push(vscode.commands.registerCommand('picode.agent.bindTask', (resource: unknown, binding: unknown) => {
+		const value = binding as Partial<TaskMark & { title: string }> | undefined;
+		if (typeof resource !== 'string' || typeof value?.taskId !== 'string' || typeof value.promptHash !== 'string') {
+			return false;
+		}
+		taskBindings.set(resource, { taskId: value.taskId, promptHash: value.promptHash, title: typeof value.title === 'string' ? value.title : value.taskId });
+		// A chat that never got its first message (the window gave up) does not keep its binding.
+		setTimeout(() => taskBindings.delete(resource), 15 * 60_000).unref?.();
+		return true;
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('picode.agent.sessionFor', async (resource: unknown, waitMs: unknown) => {
+		if (typeof resource !== 'string') {
+			return { received: false };
+		}
+		const deadline = Date.now() + (typeof waitMs === 'number' && waitMs > 0 ? Math.min(waitMs, 600_000) : 60_000);
+		for (; ;) {
+			const manager = chats.get(resource)?.sessionManager;
+			if (manager !== undefined) {
+				const entries = manager.getEntries() as readonly SessionEntryLike[];
+				const mark = entries.find(entry => entry.type === 'custom' && entry.customType === TASK_ENTRY_TYPE)?.data as TaskMark | undefined;
+				if (mark !== undefined && taskStatus(entries, mark).received) {
+					return { sessionId: manager.getSessionId(), received: true };
+				}
+			}
+			if (Date.now() >= deadline) {
+				return { sessionId: manager?.getSessionId(), received: false };
+			}
+			await new Promise(resolve => setTimeout(resolve, 200));
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('picode.agent.findTaskSession', (_folder: unknown, taskId: unknown, promptHash: unknown) => {
+		const agentDir = chatAgentDir(deps.distributionRoot);
+		if (agentDir === undefined || typeof taskId !== 'string' || typeof promptHash !== 'string') {
+			return undefined;
+		}
+		const sessionsDir = path.join(agentDir, 'sessions');
+		const areaSlug = resolveProjectScope().area?.slug;
+		const slugs = [...projectSlugsOfWindow(), ...(areaSlug === undefined ? [] : areaFamilySlugs(sessionsDir, areaSlug))];
+		const files = listProjectSessionFiles(sessionsDir, slugs);
+		return findTaskSession(files, { taskId, promptHash }, file => {
+			try {
+				return fs.readFileSync(file, 'utf8');
+			} catch {
+				return undefined;
+			}
+		});
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('picode.chat.commandArguments', async (chatKey: unknown, command: unknown, prefix: unknown) => {
+		if (typeof chatKey !== 'string' || typeof command !== 'string' || typeof prefix !== 'string' || prefix.length > 4096) {
+			return [];
+		}
+		const chat = chats.get(chatKey);
+		const session = chat?.session;
+		if (!session) { return []; }
+		const runtime = chat?.services?.modelRuntime;
+		if (runtime && command === 'model') {
+			const needle = prefix.trim().toLowerCase();
+			return runtime.getModels().filter(model => runtime.hasConfiguredAuth(model.provider) && `${model.provider}/${model.id}`.toLowerCase().includes(needle)).slice(0, 100).map(model => ({ value: `${model.provider}/${model.id}`, label: model.name ?? model.id, description: model.provider }));
+		}
+		if (runtime && (command === 'login' || command === 'logout')) {
+			const needle = prefix.trim().toLowerCase();
+			return runtime.getProviders().filter(provider => `${provider.id} ${provider.name}`.toLowerCase().includes(needle)).slice(0, 100).map(provider => ({ value: provider.id, label: provider.name, description: provider.id }));
+		}
+		const results = await piArgumentCompletionsOf(session, command, prefix);
+		return chats.get(chatKey)?.session === session ? results : [];
+	}));
 	/** The chat that spoke last: what the status view, the slash list and the MCP list read. */
 	let active: ChatPi | undefined;
 	/** Which transcript each chat writes, so a chat the editor restores goes on where it was. */
@@ -2283,6 +2377,24 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			stream.markdown(await deps.chooseAgentModels() ?? vscode.l10n.t('No change to the agents’ models.'));
 			return {};
 		}
+		const parsedCommand = parseSlash(request.prompt);
+		if (parsedCommand?.name === 'model' && parsedCommand.args) {
+			const previous = await vscode.commands.executeCommand<string | null | undefined>('picode.chat.profile.selectedModel', chat.key);
+			const result = previous === undefined ? 'unavailable' : await vscode.commands.executeCommand<string>('picode.chat.profile.syncModel', chat.key, parsedCommand.args, previous);
+			if (result === 'synced') {
+				stream.markdown(vscode.l10n.t('Model changed to {0}.', parsedCommand.args));
+			} else if (result === 'changed') {
+				stream.markdown(vscode.l10n.t('The selected model changed. Try again.'));
+			} else {
+				await vscode.commands.executeCommand('picode.providersModels.open', 'models', parsedCommand.args);
+			}
+			return {};
+		}
+		const native = parsedCommand && editorCommandDestination(parsedCommand.name, parsedCommand.args);
+		if (native) {
+			await vscode.commands.executeCommand(native.command, ...native.args);
+			return {};
+		}
 		const loaded = await loadSdk(deps.distributionRoot, deps.log);
 		if (loaded === undefined) {
 			stream.markdown(vscode.l10n.t('PiCode: this editor has no pi to talk to. [Set up PiCode](command:picode.setup) so the agent can answer.'));
@@ -2332,10 +2444,12 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			const scopeChanged = chat.sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== chat.mcpSignature;
 			const profileChanged = chat.sessionAgentDir !== agentDir;
+			const reviewEnabled = agentDir !== undefined && vscode.workspace.getConfiguration().get<boolean>(GENTLE_REVIEW_SETTING) === true;
+			const reviewChanged = chat.gentleReviewEnabled !== reviewEnabled;
 			// The disabled tools reshape the session like the MCP tools do: changing them rebuilds.
 			const disabledChanged = chat.disabledToolsKey !== settings.disabledTools.join('\u0000');
 			chat.disabledToolsKey = settings.disabledTools.join('\u0000');
-			if (chat.session === undefined || scopeChanged || toolsChanged || profileChanged || disabledChanged) {
+			if (chat.session === undefined || scopeChanged || toolsChanged || profileChanged || disabledChanged || reviewChanged) {
 				chat.session?.dispose();
 				// The agents the old session published are gone with it.
 				gentleAgents.clear();
@@ -2356,14 +2470,33 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// Before pi loads anything: the profile's declared-but-missing packages are installed here
 				// (hidden, one run for the whole list) so pi's loader finds every declaration on disk and
 				// never installs one itself — its per-package installs each flashed a console window.
-				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
+				const runtimeRoot = piRuntimeRoot(deps.distributionRoot);
+				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot, npmCli: locateNpmCli(), log: deps.log });
+				chat.gentleReviewAvailable = false;
+				let omitUnmanagedGentle = false;
+				if (agentDir !== undefined) {
+					try {
+						const prepared = prepareGentleReview(runtimeRoot, agentDir);
+						chat.gentleReviewAvailable = reviewEnabled && prepared;
+						omitUnmanagedGentle = !prepared && hasUnmanagedGentleRuntime(agentDir);
+					} catch (error) {
+						omitUnmanagedGentle = true;
+						deps.log(`Gentle AI review runtime could not be prepared: ${String(error)}`);
+					}
+				}
 				pinAgentDir(agentDir);
 				chat.services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					...settingsForFolder(loaded.sdk, cwd, agentDir),
 					resourceLoaderOptions: {
-						extensionFactories: [...loaded.builtins, permissionExtension(deps.log, chat.turn), usageHeadersExtension(), chatModelExtension(), agentProfilesExtension(chat.key) as unknown as PiInlineExtension],
+						...(omitUnmanagedGentle ? {
+							extensionsOverride: base => ({
+								...base,
+								extensions: base.extensions.filter(extension => !/[\\/]gentle-pi[\\/]extensions[\\/]gentle-ai\.ts$/i.test(extension.path)),
+							}),
+						} : {}),
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log, chat.turn), usageHeadersExtension(), chatModelExtension(), agentProfilesExtension(chat.key, agentDir) as unknown as PiInlineExtension, agentProgressExtension((agents, source) => gentleAgents.publishProgress(agents, chat.key, source), source => gentleAgents.beginProgress(chat.key, source), source => gentleAgents.endProgress(chat.key, source)) as unknown as PiInlineExtension],
 						// PiCode's own skills (`skills/`), next to the profile's; `out/` is one level down.
 						additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
 						// The editor has no terminal for git or npm to write to or ask a password in: their
@@ -2399,7 +2532,22 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					chat.sessionManager = reopen
 						? loaded.sdk.SessionManager.open(known, sessionDir, cwd)
 						: loaded.sdk.SessionManager.create(cwd, sessionDir);
-					if (!reopen && !vscode.workspace.getConfiguration('picode.sessions').get<boolean>('autoName', true)) {
+					// A chat another app started (the local agent bridge) carries its task mark in
+					// the session itself, before the assignment: pi writes the file only with the
+					// first user message, so on disk the mark and the assignment arrive together.
+					const task = reopen ? undefined : taskBindings.get(chat.key);
+					if (task !== undefined) {
+						taskBindings.delete(chat.key);
+						chat.sessionManager.appendCustomEntry(TASK_ENTRY_TYPE, { taskId: task.taskId, promptHash: task.promptHash });
+						const taskSessionId = chat.sessionManager.getSessionId();
+						await updateSessionGitStore(store => withTitle(store, taskSessionId, task.title));
+						// Test-only stop between the mark and the assignment, so the end-to-end test can
+						// close PiCode exactly there (docs/ENTRADA-LOCAL.md). Never set outside that test.
+						if (process.env['PICODE_AGENT_BRIDGE_TEST_HALT_TASK'] === task.taskId) {
+							fs.writeFileSync(path.join(os.tmpdir(), `picode-bridge-halted-${task.taskId}`), taskSessionId);
+							await new Promise<never>(() => { /* held until PiCode is closed */ });
+						}
+					} else if (!reopen && !vscode.workspace.getConfiguration('picode.sessions').get<boolean>('autoName', true)) {
 						const name = await vscode.window.showInputBox({ title: vscode.l10n.t('Name this session'), prompt: vscode.l10n.t('Leave it empty to name it after its first message again.') });
 						if (name?.trim()) {
 							await updateSessionGitStore(store => withTitle(store, chat.sessionManager!.getSessionId(), name));
@@ -2438,10 +2586,36 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// The session exists and its extensions are loaded; this is what starts them. Called
 				// before the first turn, because `session_start` is where they do their startup work.
 				watchLateTurns(chat.session, chat.key, deps.log);
-				await bindSessionExtensions(chat.session, deps.log, chat.turn);
+				// Cache maintenance can occur between chat turns, so this listener lives with the session.
+				const noticeSession = chat.session;
+				noticeSession.subscribe(event => {
+					const keys: readonly (keyof PiNotices)[] = event.type === 'entry_appended' ? ['cacheWarming']
+						: event.type === 'compaction_end' ? ['compactionCosts']
+							: event.type === 'message_end' && event.message?.role === 'assistant' ? ['cacheMisses', 'reasoningDrops'] : [];
+					if (keys.length === 0) {
+						return;
+					}
+					const config = vscode.workspace.getConfiguration('picode');
+					const manager = noticeSession.sessionManager;
+					for (const key of keys) {
+						if (config.get<boolean>(`pi.notices.${key}`, false)) {
+							const entries = key === 'reasoningDrops' ? manager?.getBranch?.() ?? manager?.getEntries()
+								: key === 'cacheMisses' ? manager?.getEntries() : undefined;
+							const notice = piNotice(event, { [key]: true }, entries ?? []);
+							if (notice) {
+								const title = noticeSession.sessionName?.trim();
+								const message = title && title.length <= 80 && !/[\\/:]/.test(title)
+									? vscode.l10n.t('{0}: {1}', title, notice) : notice;
+								void vscode.window.showInformationMessage(message);
+							}
+						}
+					}
+				});
+				await bindSessionExtensions(chat.session, deps.log, chat.turn, chat.key);
 				chat.sessionFolder = cwd;
 				chat.sessionScopeKey = scopeKey;
 				chat.sessionAgentDir = agentDir;
+				chat.gentleReviewEnabled = reviewEnabled;
 				chat.mcpSignature = signature;
 				rememberTranscript(chat.key, chat.sessionManager.getSessionFile());
 				trimLiveChats(chat);
@@ -2464,7 +2638,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// A slash command pi's session would not understand is answered here, or rewritten into the
 			// form pi does understand (a skill as `/skill:name`); see `chat-commands.ts`.
 			let prompt = request.prompt;
-			const route = isSlashCommand(prompt) ? routeSlash(prompt, slashContextOf(chat.session)) : undefined;
+			const route = isSlashCommand(prompt) ? routeSlash(prompt, slashContextOf(chat.session, chat.gentleReviewAvailable)) : undefined;
 			if (route?.kind === 'unavailable') {
 				answerUnavailable(stream, route.command);
 				return {};

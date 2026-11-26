@@ -150,10 +150,19 @@ export function toolOutputText(result: unknown): string {
 		return capped(result, MAX_OUTPUT_CHARS);
 	}
 	if (typeof result === 'object') {
-		const content = (result as Record<string, unknown>)['content'];
+		const record = result as Record<string, unknown>;
+		const content = record['content'];
 		if (Array.isArray(content)) {
 			const pieces = content.map(partText).filter((piece): piece is string => piece !== undefined);
-			return capped(pieces.join('\n'), MAX_OUTPUT_CHARS);
+			const details = record['details'];
+			const error = typeof details === 'object' && details !== null ? (details as Record<string, unknown>)['fullOutputError'] : undefined;
+			const output = pieces.join('\n');
+			const visible = capped(output, MAX_OUTPUT_CHARS);
+			if (typeof error === 'string' && error.length > 0 && !visible.includes(error)) {
+				const warning = l10n.t('Could not save the full output: {0}', error);
+				return `${capped(output, Math.max(0, MAX_OUTPUT_CHARS - warning.length - 2))}\n\n${warning}`;
+			}
+			return visible;
 		}
 	}
 	try {

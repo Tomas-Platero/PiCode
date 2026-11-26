@@ -45,6 +45,9 @@ export interface AgentTaskRow {
 	readonly turns: number;
 	readonly toolCalls: number;
 	readonly error: string | undefined;
+	readonly model?: string;
+	readonly activeTool?: string;
+	readonly usedTokens?: number;
 }
 
 /** Whether a status means the task is still going. */
@@ -155,10 +158,13 @@ export function parseAgentRecords(lines: readonly string[]): Map<string, unknown
 
 /** One listener of the store's movement. */
 type Listener = () => void;
+type AgentProgress = { model?: string; activeTool?: string; usedTokens?: number };
 
 /** The holder of the last answer, with listeners; one per window. */
 export class GentleAgentsStore {
 	private rows: readonly AgentTaskRow[] = [];
+	private owner: string | undefined;
+	private readonly progress = new Map<string | undefined, { source?: object; agents: Map<string, AgentProgress> }>();
 	private records = new Map<string, unknown>();
 	private readonly listeners = new Set<Listener>();
 
@@ -173,12 +179,12 @@ export class GentleAgentsStore {
 	}
 
 	/** Takes one `setWidget` push; anything that is not gentle-pi's activity line is ignored. */
-	publish(key: string, content: unknown): void {
+	publish(key: string, content: unknown, owner?: string): void {
 		if (key !== GENTLE_AGENTS_WIDGET_KEY) {
 			return;
 		}
 		if (content === undefined) {
-			this.clear();
+			if (this.owner === owner) { this.clear(); }
 			return;
 		}
 		if (!Array.isArray(content) || !content.every(entry => typeof entry === 'string')) {
@@ -188,13 +194,76 @@ export class GentleAgentsStore {
 		if (rows === undefined) {
 			return;
 		}
-		this.rows = rows;
+		this.owner = owner;
+		const progress = this.progress.get(owner)?.agents;
+		this.rows = rows.map(row => {
+			const next = progress?.get(row.id);
+			return next === undefined ? row : { ...row, ...next };
+		});
 		this.records = parseAgentRecords(content as string[]) ?? new Map();
 		this.fire();
 	}
 
+	/** Bind progress to this particular session, invalidating a replaced session of the same chat. */
+	beginProgress(owner: string, source: object): void {
+		this.progress.set(owner, { source, agents: new Map() });
+		this.clearVisibleProgress(owner);
+	}
+
+	/** Stop only the session that owns the retained reading. */
+	endProgress(owner: string, source: object): void {
+		if (this.progress.get(owner)?.source !== source) { return; }
+		this.progress.delete(owner);
+		this.clearVisibleProgress(owner);
+	}
+
+	private clearVisibleProgress(owner: string): void {
+		if (owner !== this.owner) { return; }
+		let changed = false;
+		this.rows = this.rows.map(row => {
+			if (row.model === undefined && row.activeTool === undefined && row.usedTokens === undefined) { return row; }
+			changed = true;
+			return { ...row, model: undefined, activeTool: undefined, usedTokens: undefined };
+		});
+		if (changed) { this.fire(); }
+	}
+
+	/** Retain only bounded, safe fields per session, even before its first widget arrives. */
+	publishProgress(agents: readonly unknown[], owner?: string, source?: object): void {
+		const existing = this.progress.get(owner);
+		if (source !== undefined && existing?.source !== source) { return; }
+		if (source === undefined && existing?.source !== undefined) { return; }
+		const progress = new Map<string, AgentProgress>();
+		for (const item of agents) {
+			if (typeof item !== 'object' || item === null) { continue; }
+			const value = item as { id?: unknown; model?: unknown; activeTool?: unknown; usage?: { total?: unknown } };
+			if (typeof value.id !== 'string') { continue; }
+			const model = typeof value.model === 'string' && /^[a-zA-Z0-9][\w./-]{0,127}$/.test(value.model) && !value.model.includes('..') ? value.model : undefined;
+			const activeTool = typeof value.activeTool === 'string' && /^[\w.-]{1,80}$/.test(value.activeTool) ? value.activeTool : undefined;
+			const total = value.usage?.total;
+			const usedTokens = typeof total === 'number' && Number.isFinite(total) && total >= 0 ? total : undefined;
+			progress.set(value.id, { model, activeTool, usedTokens });
+		}
+		this.progress.set(owner, { source, agents: progress });
+		if (owner !== this.owner) { return; }
+		let changed = false;
+		this.rows = this.rows.map(row => {
+			const next = progress.get(row.id);
+			if (next === undefined) {
+				if (row.model === undefined && row.activeTool === undefined && row.usedTokens === undefined) { return row; }
+				changed = true;
+				return { ...row, model: undefined, activeTool: undefined, usedTokens: undefined };
+			}
+			if (row.model === next.model && row.activeTool === next.activeTool && row.usedTokens === next.usedTokens) { return row; }
+			changed = true;
+			return { ...row, ...next };
+		});
+		if (changed) { this.fire(); }
+	}
+
 	/** Forgets everything: the session that published it is gone. */
 	clear(): void {
+		this.owner = undefined;
 		if (this.rows.length === 0) {
 			return;
 		}
