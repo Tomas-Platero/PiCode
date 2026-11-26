@@ -750,7 +750,9 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// A file this tool has written lands in the ledger — when the tool succeeded;
 				// a failed tool did not change the file, and the card never says it did.
 				recordToolResult(ledger, event.toolName, endArgs, event.isError, sessionCwd);
-				if (event.isError !== true && isImageCreationTool(event.toolName)) {
+				// Any tool that made an image gets the generated-image card, whatever it is called:
+				// `generatedImagesOf` decides from the tool and what it answered.
+				if (event.isError !== true) {
 					imagePreviews.push(generatedImagesOf(event.toolName, event.result));
 				}
 				// The call's own row, now with what the tool answered.
