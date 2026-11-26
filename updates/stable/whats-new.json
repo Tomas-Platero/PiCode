@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.4.14",
+			"notes": "### ✨ New\n\n- **Start pi chats from your other apps.** Turn on *Let other apps start chats* in Settings › Chat and agent, and an app you run on this computer can open a project, hand pi a task and learn which chat is working on it. Only your Windows account on this computer can connect, and each task starts just once.\n- **pi's commands take you to the right place.** `/login`, `/model` and other pi commands open their page in Settings, suggest their options as you type, and `/export` can also save a conversation as `.jsonl`.\n- **pi's notices, in the chat.** Cache, compaction and reasoning notices appear once in the chat, each with its own switch in Settings.\n- **Your recent activity at a glance.** *Usage limits* shows your recent conversations by provider.\n- **Follow your agents live.** The progress of Gentle AI's helper agents follows the chat they belong to.\n- **Gentle code review in Settings.** Turn Gentle's review on for a project or for everything. It stays off until you choose, and runs from its own copy inside PiCode.\n\n### ⬆️ Updated\n\n- **pi 1.6.1**: decision models in code mode, a new default Mistral model, and a clear message when long command output could not be saved.\n- **Gentle AI 5**, bundled with PiCode.\n\n### 🐛 Fixed\n\n- The agent profile controls follow the chat you are looking at, and each chat keeps its own profile.\n- Chats work again when no agent profile is active.\n- New texts are translated into all 13 languages, and the memory engine ships with its license."
+		},
+		{
 			"version": "2.4.12",
 			"notes": "### ✨ New\n\n- release PiCode 2.4.12 (#317)"
 		},
