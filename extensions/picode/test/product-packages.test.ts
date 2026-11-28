@@ -31,7 +31,7 @@ registerHooks({
 const { pointChildPiAtThisPi } = await import('../src/product-env.ts');
 const { DISPLACED_PACKAGE_NAMES, GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, isNewerRelease, isProductPackage, productEntry, switchedOff, withProductPackages, withProductPackageVersion } = await import('../src/product-packages.ts');
 
-const GENTLE_PI = { source: 'npm:gentle-pi@5.0.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
+const GENTLE_PI = { source: 'npm:gentle-pi@5.1.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
 
 test('the packaged review runtime matches the gentle-pi version shipped by the product', () => {
 	const pin = JSON.parse(readFileSync(new URL('../../../build/distribution/gentle-ai.json', import.meta.url), 'utf8')) as { gentlePiVersion: string; gentleAiVersion: string };
@@ -40,7 +40,7 @@ test('the packaged review runtime matches the gentle-pi version shipped by the p
 });
 
 test('the product pins gentle-pi, gentle-engram, pi-intercom and pi-web-access at exact versions', () => {
-	assert.deepEqual(PRODUCT_PACKAGES.map(pkg => `${pkg.name}@${pkg.version}`), ['gentle-pi@5.0.0', 'gentle-engram@0.8.0', 'pi-intercom@0.18.1', 'pi-web-access@0.48.0']);
+	assert.deepEqual(PRODUCT_PACKAGES.map(pkg => `${pkg.name}@${pkg.version}`), ['gentle-pi@5.1.0', 'gentle-engram@0.8.0', 'pi-intercom@0.18.1', 'pi-web-access@0.48.0']);
 	for (const pkg of PRODUCT_PACKAGES) {
 		assert.match(pkg.version, /^\d+\.\d+\.\d+$/, `${pkg.name} is pinned exactly, never a range`);
 	}
